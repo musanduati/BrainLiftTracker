@@ -22,10 +22,10 @@ USER_ACCOUNT_MAPPING = {
 
 class TweetPoster:
     def __init__(self):
-        self.api_base = "http://localhost:5555/api/v1"
-        self.api_key = "2043adb52a7468621a9245c94d702e4bed5866b0ec52772f203286f823a50bbb"
-        # self.api_base = "http://51.44.57.211/api/v1"
-        # self.api_key = "caa7bb2537d7b2e71eaaff143202a8cd50fa767fc2a65467b6bc9dafc88f4db5"
+        # self.api_base = "http://localhost:5555/api/v1"
+        # self.api_key = "2043adb52a7468621a9245c94d702e4bed5866b0ec52772f203286f823a50bbb"
+        self.api_base = "http://51.44.57.211/api/v1"
+        self.api_key = "caa7bb2537d7b2e71eaaff143202a8cd50fa767fc2a65467b6bc9dafc88f4db5"
         self.headers = {
             "X-API-Key": self.api_key,
             "Content-Type": "application/json"
@@ -282,16 +282,160 @@ class TweetPoster:
         # Consider success if we created the tweets
         return len(created_tweet_ids) > 0
 
+    def load_historical_timeline(self) -> Dict:
+        """Load complete historical timeline from all sessions."""
+        timeline_file = Path("demo/data/complete_timeline.json")
+        
+        if timeline_file.exists():
+            try:
+                with open(timeline_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, FileNotFoundError):
+                logger.warning("⚠️ Could not load historical timeline, creating new one")
+        
+        # Return empty timeline structure
+        return {
+            "timeline_version": "1.0",
+            "created_at": datetime.now().isoformat(),
+            "last_updated": datetime.now().isoformat(),
+            "sessions": [],
+            "all_tweets": [],
+            "users": {},
+            "statistics": {
+                "total_runs": 0,
+                "total_tweets": 0,
+                "total_users": 0,
+                "date_range": {
+                    "first_run": None,
+                    "last_run": None
+                },
+                "change_types": {
+                    "added": 0,
+                    "updated": 0,
+                    "deleted": 0
+                }
+            }
+        }
+
+    def update_historical_timeline(self, new_session_data: Dict, posting_results: Dict):
+        """Update the complete historical timeline with new session data."""
+        timeline = self.load_historical_timeline()
+        
+        user_name = new_session_data["session"]["user"]
+        session_id = new_session_data["session"]["id"]
+        session_tweets = new_session_data["tweets"]
+        
+        # Add session to timeline
+        session_metadata = {
+            "session_id": session_id,
+            "user": user_name,
+            "timestamp": new_session_data["session"]["timestamp"],
+            "run_number": new_session_data["session"]["run_number"],
+            "tweets_count": len(session_tweets),
+            "change_summary": new_session_data["session"]["change_summary"],
+            "posting_results": {
+                "attempted": posting_results.get("tweets_posted", 0),
+                "successful": posting_results.get("tweets_posted", 0),
+                "failed": 0,
+                "thread_id": posting_results.get("thread_posted"),
+                "status": posting_results.get("status")
+            }
+        }
+        
+        timeline["sessions"].append(session_metadata)
+        
+        # Add tweets to timeline with posting status
+        for tweet in session_tweets:
+            # Update tweet with posting information
+            if posting_results.get("status") == "success":
+                tweet["status"]["posting_session"] = session_id
+                if tweet["metadata"]["thread_id"] == posting_results.get("thread_posted"):
+                    tweet["status"]["current"] = "posted"
+                    tweet["timestamps"]["posted_at"] = datetime.now().isoformat()
+            
+            timeline["all_tweets"].append(tweet)
+        
+        # Update user statistics
+        if user_name not in timeline["users"]:
+            timeline["users"][user_name] = {
+                "username": new_session_data["user_info"]["username"],
+                "display_name": new_session_data["user_info"]["display_name"],
+                "handle": new_session_data["user_info"]["handle"],
+                "avatar": new_session_data["user_info"]["avatar"],
+                "total_tweets": 0,
+                "total_posted": 0,
+                "sessions": [],
+                "last_updated": session_id,
+                "change_breakdown": {
+                    "added": 0,
+                    "updated": 0,
+                    "deleted": 0
+                },
+                "first_seen": session_id
+            }
+        
+        user_stats = timeline["users"][user_name]
+        user_stats["total_tweets"] += len(session_tweets)
+        user_stats["sessions"].append(session_id)
+        user_stats["last_updated"] = session_id
+        
+        # Update change breakdowns
+        for change_type, count in new_session_data["session"]["change_summary"].items():
+            user_stats["change_breakdown"][change_type] += count
+            timeline["statistics"]["change_types"][change_type] += count
+        
+        if posting_results.get("status") == "success":
+            user_stats["total_posted"] += posting_results.get("tweets_posted", 0)
+        
+        # Update global statistics
+        timeline["statistics"]["total_runs"] += 1
+        timeline["statistics"]["total_tweets"] += len(session_tweets)
+        timeline["statistics"]["total_users"] = len(timeline["users"])
+        timeline["last_updated"] = datetime.now().isoformat()
+        
+        # Update date range
+        if timeline["statistics"]["date_range"]["first_run"] is None:
+            timeline["statistics"]["date_range"]["first_run"] = session_id
+        timeline["statistics"]["date_range"]["last_run"] = session_id
+        
+        # Save updated timeline
+        timeline_file = Path("demo/data/complete_timeline.json")
+        timeline_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(timeline_file, 'w', encoding='utf-8') as f:
+            json.dump(timeline, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"📊 Historical timeline updated with session {session_id}")
+        return timeline
+
+    def load_session_data(self, user_name: str) -> Optional[Dict]:
+        """Load the latest session data for a user."""
+        demo_dir = Path("demo/data")
+        if not demo_dir.exists():
+            return None
+        
+        # Find latest session file for user
+        pattern = f"session_*_{user_name}.json"
+        session_files = list(demo_dir.glob(pattern))
+        
+        if not session_files:
+            logger.warning(f"⚠️ No session data found for {user_name}")
+            return None
+        
+        # Sort by timestamp and get latest
+        session_files.sort(key=lambda x: x.name, reverse=True)
+        latest_file = session_files[0]
+        
+        try:
+            with open(latest_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError) as e:
+            logger.error(f"❌ Error loading session data from {latest_file}: {e}")
+            return None
+
     async def process_user(self, session: aiohttp.ClientSession, user_name: str) -> Dict:
         """
-        Process tweets for a specific user.
-        
-        Args:
-            session: aiohttp session
-            user_name: Name of the user to process
-            
-        Returns:
-            Dictionary with processing results
+        Process tweets for a specific user with demo data integration.
         """
         logger.info(f"\n{'='*50}")
         logger.info(f"PROCESSING USER: {user_name}")
@@ -309,23 +453,28 @@ class TweetPoster:
         
         logger.info(f"🎯 Account ID: {account_id}")
         
-        # Find latest tweet file
-        tweet_file = self.find_latest_tweet_file(user_name)
+        # Load session data (from test_workflowy.py output)
+        session_data = self.load_session_data(user_name)
         
-        if not tweet_file:
-            logger.error(f"❌ No tweet files found for user: {user_name}")
-            return {
-                'user': user_name,
-                'status': 'error',
-                'error': 'No tweet files found'
-            }
-        
-        # Get timestamp from filename
-        timestamp = self.extract_timestamp_from_filename(tweet_file)
-        logger.info(f"📅 Processing tweets from: {timestamp}")
-        
-        # Load all tweet data
-        all_tweets = self.load_tweet_data(tweet_file)
+        if not session_data:
+            # Fallback to old method
+            tweet_file = self.find_latest_tweet_file(user_name)
+            if not tweet_file:
+                logger.error(f"❌ No tweet files or session data found for user: {user_name}")
+                return {
+                    'user': user_name,
+                    'status': 'error',
+                    'error': 'No tweet files or session data found'
+                }
+            
+            # Load old format
+            all_tweets = self.load_tweet_data(tweet_file)
+            timestamp = self.extract_timestamp_from_filename(tweet_file)
+        else:
+            # Use new session data format
+            all_tweets = session_data["tweets"]
+            timestamp = session_data["session"]["timestamp"]
+            logger.info(f"📅 Processing session: {timestamp} (Run #{session_data['session']['run_number']})")
         
         if not all_tweets:
             logger.error(f"❌ No tweet data loaded for user: {user_name}")
@@ -335,9 +484,25 @@ class TweetPoster:
                 'error': 'No tweet data loaded'
             }
         
+        # Convert new format tweets to old format for compatibility
+        compatible_tweets = []
+        for tweet in all_tweets:
+            compatible_tweet = {
+                "id": tweet["id"],
+                "section": tweet["metadata"]["section"],
+                "change_type": tweet["metadata"]["change_type"],
+                "content_formatted": tweet["content"]["text"],
+                "thread_id": tweet["metadata"]["thread_id"],
+                "thread_part": tweet["metadata"]["thread_part"],
+                "similarity_score": tweet["metadata"].get("similarity_score"),
+                "change_details": tweet["metadata"].get("change_details")
+            }
+            compatible_tweets.append(compatible_tweet)
+        
+        # Continue with existing logic using compatible_tweets
         # Show content summary
-        dok4_tweets = self.filter_tweets_by_section(all_tweets, "DOK4")
-        dok3_tweets = self.filter_tweets_by_section(all_tweets, "DOK3")
+        dok4_tweets = self.filter_tweets_by_section(compatible_tweets, "DOK4")
+        dok3_tweets = self.filter_tweets_by_section(compatible_tweets, "DOK3")
         
         logger.info(f"📊 Content Summary:")
         logger.info(f"   DOK4 tweets: {len(dok4_tweets)}")
@@ -345,14 +510,14 @@ class TweetPoster:
         
         # Show change type breakdown
         change_summary = {}
-        for tweet in all_tweets:
+        for tweet in compatible_tweets:
             change_type = tweet.get("change_type", "unknown")
             change_summary[change_type] = change_summary.get(change_type, 0) + 1
         
         logger.info(f"   Change types: {change_summary}")
         
         # Group tweets by thread and prioritize
-        thread_groups = self.group_tweets_by_thread(all_tweets)
+        thread_groups = self.group_tweets_by_thread(compatible_tweets)
         
         if not thread_groups:
             logger.error(f"❌ No valid threads found for user: {user_name}")
@@ -390,16 +555,8 @@ class TweetPoster:
         
         success = await self.process_single_thread_for_user(session, top_thread_tweets, account_id)
         
-        # Save updated tweet data back to file
-        user_dir = self.users_dir / user_name
-        timestamp_str = timestamp or datetime.now().strftime("%Y%m%d-%H%M%S")
-        updated_file = user_dir / f"{user_name}_change_tweets_updated_{timestamp_str}.json"
-        
-        with open(updated_file, 'w', encoding='utf-8') as f:
-            json.dump(all_tweets, f, indent=2, ensure_ascii=False)
-        logger.info(f"💾 Updated tweet data saved to {updated_file}")
-        
-        return {
+        # Prepare results
+        results = {
             'user': user_name,
             'account_id': account_id,
             'status': 'success' if success else 'partial_success',
@@ -408,8 +565,27 @@ class TweetPoster:
             'change_type': top_tweet.get('change_type'),
             'thread_posted': top_thread_id if success else None,
             'total_available_threads': len(thread_groups),
-            'file_processed': str(tweet_file)
+            'session_id': timestamp
         }
+        
+        # Update historical timeline if we have session data
+        if session_data:
+            try:
+                self.update_historical_timeline(session_data, results)
+                logger.info(f"📊 Historical timeline updated for {user_name}")
+            except Exception as e:
+                logger.error(f"⚠️ Failed to update historical timeline: {e}")
+        
+        # Save updated tweet data back to file (maintain backward compatibility)
+        user_dir = self.users_dir / user_name
+        timestamp_str = timestamp or datetime.now().strftime("%Y%m%d-%H%M%S")
+        updated_file = user_dir / f"{user_name}_change_tweets_updated_{timestamp_str}.json"
+        
+        with open(updated_file, 'w', encoding='utf-8') as f:
+            json.dump(compatible_tweets, f, indent=2, ensure_ascii=False)
+        logger.info(f"💾 Updated tweet data saved to {updated_file}")
+        
+        return results
 
     async def run(self, target_users: Optional[List[str]] = None):
         """
@@ -579,14 +755,89 @@ def preview_what_will_be_posted(target_users: Optional[List[str]] = None):
         else:
             print(f"\n❌ No threads available for {user_name}")
 
+def run_demo_mode():
+    """Run in demo mode - simulate posting without actual API calls"""
+    print("🎬 Running in Demo Mode")
+    print("=" * 40)
+    
+    try:
+        from demo_data_manager import DemoDataManager
+        demo_manager = DemoDataManager()
+        
+        # Find all users and their latest tweet files
+        users_dir = Path("users")
+        if not users_dir.exists():
+            print("❌ No users directory found")
+            return
+        
+        total_simulated = 0
+        
+        for user_dir in users_dir.iterdir():
+            if not user_dir.is_dir():
+                continue
+                
+            user_name = user_dir.name
+            
+            # Find latest change tweets file
+            change_files = list(user_dir.glob(f"{user_name}_change_tweets_*.json"))
+            if not change_files:
+                continue
+                
+            latest_file = max(change_files, key=lambda x: x.stat().st_mtime)
+            
+            with open(latest_file, 'r') as f:
+                tweets_data = json.load(f)
+            
+            # Simulate posting each tweet
+            simulated_count = simulate_posting_for_user(tweets_data, user_name, demo_manager)
+            total_simulated += simulated_count
+            
+        print(f"\n✅ Demo simulation completed")
+        print(f"   📱 Total tweets simulated: {total_simulated}")
+        print(f"   🎬 Demo data ready for viewing")
+        
+    except Exception as e:
+        print(f"❌ Demo mode failed: {e}")
+
+def simulate_posting_for_user(tweets_data: Dict, user_name: str, demo_manager) -> int:
+    """Simulate posting tweets for a user"""
+    tweets = tweets_data.get('tweets', [])
+    simulated_count = 0
+    
+    print(f"📱 Simulating posts for {user_name}...")
+    
+    for tweet in tweets:
+        # Simulate API delay
+        time.sleep(0.1)
+        
+        # Generate fake tweet ID and status
+        tweet_id = f"demo_{int(time.time())}_{simulated_count}"
+        
+        # Update tweet with "posted" status
+        tweet.update({
+            'posted': True,
+            'tweet_id': tweet_id,
+            'posted_at': datetime.now().isoformat(),
+            'simulated': True
+        })
+        
+        simulated_count += 1
+    
+    # Update demo data
+    demo_manager.update_posted_status(tweets_data, user_name)
+    
+    print(f"   ✅ Simulated {simulated_count} tweets for {user_name}")
+    return simulated_count
+
 async def main():
     """Main function with options."""
     import sys
     
-    if len(sys.argv) > 1 and sys.argv[1] == "preview":
+    if len(sys.argv) > 1 and sys.argv[1] == "--demo-mode":
         # Preview mode
-        target_users = sys.argv[2:] if len(sys.argv) > 2 else None
-        preview_what_will_be_posted(target_users)
+        # target_users = sys.argv[2:] if len(sys.argv) > 2 else None
+        # preview_what_will_be_posted(target_users)
+        run_demo_mode()
     else:
         # Posting mode
         target_users = sys.argv[1:] if len(sys.argv) > 1 else None

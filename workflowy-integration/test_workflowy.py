@@ -1260,6 +1260,28 @@ class WorkflowyTester:
             print(f"\n🎉 URL PROCESSING COMPLETE! ({change_type})")
             print(f"📊 Generated {total_changes} change-based tweets for {user_name}")
             
+            # Generate demo data (add this before the return statement)
+            try:
+                run_number = get_next_run_number(user_name)
+                if all_change_tweets:
+                    demo_session = save_session_data(user_name, timestamp, all_change_tweets, run_number)
+                    print(f"🎬 Demo data generated for run #{run_number}")
+                    demo_data_generated = True
+                    demo_session_file = f"demo/data/session_{timestamp}_{user_name}.json"
+                else:
+                    demo_data_generated = False
+                    demo_session_file = None
+            except Exception as e:
+                print(f"⚠️ Demo data generation failed: {str(e)}")
+                run_number = 1
+                demo_data_generated = False
+                demo_session_file = None
+            
+            # if hasattr(self, 'generate_demo_output'):
+            #     timestamp = get_timestamp()
+            #     self.generate_demo_output(user_name or username, timestamp)
+
+            # Update the return statement
             return {
                 'url': url,
                 'user_name': user_name,
@@ -1268,10 +1290,13 @@ class WorkflowyTester:
                 'is_first_run': first_run,
                 'total_change_tweets': total_changes,
                 'timestamp': timestamp,
+                'run_number': run_number,
+                'demo_data_generated': demo_data_generated,
                 'files_created': {
                     'full_content': str(full_content_file),
                     'change_tweets': str(tweets_file) if tweets_file else None,
-                    'state_file': str(user_dir / "current_state.json")
+                    'state_file': str(user_dir / "current_state.json"),
+                    'demo_session': demo_session_file
                 }
             }
             
@@ -1297,6 +1322,149 @@ class WorkflowyTester:
         if self._session:
             await self._session.close()
             self._session = None
+
+# Add these functions after create_user_directory() function
+
+def create_demo_directory():
+    """Create demo directory structure if it doesn't exist."""
+    demo_dir = Path("demo")
+    demo_dir.mkdir(exist_ok=True)
+    
+    (demo_dir / "data").mkdir(exist_ok=True)
+    (demo_dir / "assets" / "avatars").mkdir(parents=True, exist_ok=True)
+    
+    return demo_dir
+
+def get_next_run_number(user_name: str) -> int:
+    """Get the next run number for a user."""
+    demo_dir = Path("demo/data")
+    if not demo_dir.exists():
+        return 1
+    
+    # Look for existing session files for this user
+    pattern = f"session_*_{user_name}.json"
+    existing_files = list(demo_dir.glob(pattern))
+    
+    if not existing_files:
+        return 1
+    
+    # Extract run numbers from existing files
+    run_numbers = []
+    for file in existing_files:
+        try:
+            with open(file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                run_num = data.get("session", {}).get("run_number", 0)
+                run_numbers.append(run_num)
+        except (json.JSONDecodeError, FileNotFoundError):
+            continue
+    
+    return max(run_numbers, default=0) + 1
+
+def generate_demo_tweet_data(tweets: List[Dict], user_name: str, section: str, timestamp: str, run_number: int) -> List[Dict]:
+    """Convert tweet data to demo-compatible format."""
+    demo_tweets = []
+    
+    for tweet in tweets:
+        # Create realistic Twitter user data
+        username = user_name.replace("_", "")
+        display_name = user_name.replace("_", " ").title()
+        
+        demo_tweet = {
+            "id": tweet.get("id", f"tweet_{len(demo_tweets)+1}"),
+            "session_id": timestamp,
+            "run_number": run_number,
+            "user": {
+                "username": username,
+                "display_name": display_name,
+                "handle": f"@{username}",
+                "avatar": f"./assets/avatars/{user_name}.jpg",
+                "verified": False
+            },
+            "content": {
+                "text": tweet.get("content_formatted", ""),
+                "raw_text": tweet.get("content_raw", ""),
+                "character_count": tweet.get("character_count", len(tweet.get("content_formatted", "")))
+            },
+            "metadata": {
+                "section": section,
+                "change_type": tweet.get("change_type", "added"),
+                "similarity_score": tweet.get("similarity_score"),
+                "change_details": tweet.get("change_details"),
+                "logical_tweet_number": tweet.get("logical_tweet_number"),
+                "thread_id": tweet.get("thread_id"),
+                "thread_part": tweet.get("thread_part", 1),
+                "total_thread_parts": tweet.get("total_thread_parts", 1),
+                "is_main_tweet": tweet.get("is_main_tweet", True),
+                "parent_tweet_id": tweet.get("parent_tweet_id")
+            },
+            "timestamps": {
+                "created_at": tweet.get("created_at", datetime.now().isoformat()),
+                "scheduled_for": tweet.get("scheduled_for"),
+                "posted_at": tweet.get("posted_at")
+            },
+            "status": {
+                "current": tweet.get("status", "pending"),
+                "twitter_id": tweet.get("twitter_id"),
+                "posting_session": None
+            },
+            "engagement": {
+                "likes": 0,
+                "retweets": 0, 
+                "replies": 0,
+                "views": 0
+            }
+        }
+        demo_tweets.append(demo_tweet)
+    
+    return demo_tweets
+
+def save_session_data(user_name: str, timestamp: str, all_change_tweets: List[Dict], run_number: int):
+    """Save session data for demo purposes."""
+    demo_dir = create_demo_directory()
+    
+    # Process tweets by section
+    dok4_tweets = [t for t in all_change_tweets if t.get("section") == "DOK4"]
+    dok3_tweets = [t for t in all_change_tweets if t.get("section") == "DOK3"]
+    
+    # Generate demo-compatible data
+    demo_dok4 = generate_demo_tweet_data(dok4_tweets, user_name, "DOK4", timestamp, run_number)
+    demo_dok3 = generate_demo_tweet_data(dok3_tweets, user_name, "DOK3", timestamp, run_number)
+    
+    all_demo_tweets = demo_dok4 + demo_dok3
+    
+    # Create session metadata
+    session_data = {
+        "session": {
+            "id": timestamp,
+            "user": user_name,
+            "timestamp": timestamp,
+            "run_number": run_number,
+            "total_tweets": len(all_demo_tweets),
+            "sections_processed": ["DOK4", "DOK3"],
+            "change_summary": {
+                "added": len([t for t in all_change_tweets if t.get("change_type") == "added"]),
+                "updated": len([t for t in all_change_tweets if t.get("change_type") == "updated"]),
+                "deleted": len([t for t in all_change_tweets if t.get("change_type") == "deleted"])
+            }
+        },
+        "tweets": all_demo_tweets,
+        "user_info": {
+            "username": user_name.replace("_", ""),
+            "display_name": user_name.replace("_", " ").title(),
+            "handle": f"@{user_name.replace('_', '')}",
+            "avatar": f"./assets/avatars/{user_name}.jpg"
+        }
+    }
+    
+    # Save session file
+    session_file = demo_dir / "data" / f"session_{timestamp}_{user_name}.json"
+    with open(session_file, 'w', encoding='utf-8') as f:
+        json.dump(session_data, f, indent=2, ensure_ascii=False)
+    
+    print(f"💾 Demo session data saved to '{session_file}'")
+    
+    return session_data
 
 # Configuration for multiple URLs
 WORKFLOWY_URLS = [
