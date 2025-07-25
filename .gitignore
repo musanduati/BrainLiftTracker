@@ -1,0 +1,149 @@
+# Environment variables
+.env
+.env.local
+.env.development
+.env.production
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+.virtualenv
+
+# Flask
+instance/
+.webassets-cache
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+twitter_manager.db
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Secrets and Keys
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+secrets/
+private/
+
+# Twitter OAuth
+oauth_state.json
+tokens.json
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+tmp/
+temp/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# Node (if using any JS tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Postman
+# *.postman_environment.json  # Commented out - environments are safe to share
+
+# Documentation build
+docs/_build/
+site/
+
+# Package files
+*.tar.gz
+*.zip
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Redis
+dump.rdb
+
+# Custom
+nul
+kill_*.ps1
+*_backup*
+*.old
+
+# Deployment guides (keep private)
+DEPLOY_LIGHTSAIL.md
+deploy/
+
+# Internal documentation
+prompt.md
+USAGE_EXAMPLES.md
+ADD_TWITTER_ACCOUNT.md
+CLAUDE.md
+SECURITY.md
+
+# Claude AI settings
+.claude/

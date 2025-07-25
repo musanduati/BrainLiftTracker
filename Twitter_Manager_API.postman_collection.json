@@ -1,0 +1,2025 @@
+{
+	"info": {
+		"_postman_id": "twitter-manager-api-v2",
+		"name": "Twitter Manager API",
+		"description": "Complete collection for Twitter Manager API with OAuth 2.0 support and real Twitter posting capabilities",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health & Testing",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Check if the API is running. No authentication required."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/health",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"health"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"status\": \"healthy\",\n    \"timestamp\": \"2025-07-22T10:00:00.000000\",\n    \"version\": \"2.0.0-simple\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Test API Key",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/test",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"test"
+							]
+						},
+						"description": "Test if your API key is valid"
+					},
+					"response": [
+						{
+							"name": "Valid API Key",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/test",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"test"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"status\": \"success\",\n    \"message\": \"API key validated!\"\n}"
+						},
+						{
+							"name": "Invalid API Key",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "invalid_key",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/test",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"test"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"Invalid API key\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "OAuth Authentication",
+			"item": [
+				{
+					"name": "Start OAuth Flow",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set(\"oauth_state\", response.state);",
+									"    console.log(\"OAuth URL: \" + response.auth_url);",
+									"    console.log(\"State saved: \" + response.state);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/auth/twitter",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"twitter"
+							]
+						},
+						"description": "Generate Twitter OAuth 2.0 authorization URL with PKCE. Open the returned auth_url in your browser to authorize."
+					},
+					"response": [
+						{
+							"name": "OAuth URL Generated",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/auth/twitter",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"auth",
+										"twitter"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"auth_url\": \"https://twitter.com/i/oauth2/authorize?response_type=code&client_id=M0tPM01sMzdJa1JkbUdSTnFkNXo6MTpjaQ&redirect_uri=http%3A%2F%2Flocalhost%3A5555%2Fauth%2Fcallback&scope=tweet.read+tweet.write+users.read+offline.access&state=secure_random_state&code_challenge=random_challenge&code_challenge_method=S256\",\n    \"state\": \"secure_random_state\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Account Management",
+			"item": [
+				{
+					"name": "List All Accounts",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.accounts && response.accounts.length > 0) {",
+									"        pm.environment.set(\"account_id\", response.accounts[0].id);",
+									"        console.log(\"First account ID saved: \" + response.accounts[0].id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts"
+							]
+						},
+						"description": "Get all Twitter accounts"
+					},
+					"response": [
+						{
+							"name": "Account List",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"accounts\": [\n        {\n            \"id\": 1,\n            \"username\": \"demo_user\",\n            \"status\": \"active\",\n            \"created_at\": \"2025-07-22T10:00:00\"\n        },\n        {\n            \"id\": 2,\n            \"username\": \"ZeroShotFlow\",\n            \"status\": \"active\",\n            \"created_at\": \"2025-07-22T12:31:51.819225\"\n        }\n    ],\n    \"total\": 2\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Specific Account",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}"
+							]
+						},
+						"description": "Get details of a specific account"
+					},
+					"response": [
+						{
+							"name": "Account Details",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/2",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"2"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"id\": 2,\n    \"username\": \"ZeroShotFlow\",\n    \"status\": \"active\",\n    \"created_at\": \"2025-07-22T12:31:51.819225\"\n}"
+						},
+						{
+							"name": "Account Not Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/999",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"999"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"Account not found\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Tweet Management",
+			"item": [
+				{
+					"name": "Create Tweet (Pending)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set(\"tweet_id\", response.tweet_id);",
+									"    console.log(\"Tweet ID saved: \" + response.tweet_id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"text\": \"Hello from Twitter Manager API! Testing at {{$timestamp}}\",\n    \"account_id\": {{account_id}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/tweet",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tweet"
+							]
+						},
+						"description": "Create a new tweet with 'pending' status"
+					},
+					"response": [
+						{
+							"name": "Tweet Created",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"text\": \"Hello from Twitter Manager API!\",\n    \"account_id\": 2\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/tweet",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweet"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Tweet created successfully\",\n    \"tweet_id\": 6\n}"
+						},
+						{
+							"name": "Missing Parameters",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"text\": \"Hello from Twitter Manager API!\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/tweet",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweet"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"Missing text or account_id\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Post Single Tweet to Twitter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/tweet/post/{{tweet_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tweet",
+								"post",
+								"{{tweet_id}}"
+							]
+						},
+						"description": "Post a pending tweet to Twitter"
+					},
+					"response": [
+						{
+							"name": "Tweet Posted Successfully",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/tweet/post/6",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweet",
+										"post",
+										"6"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Tweet posted successfully\",\n    \"tweet_id\": 6,\n    \"twitter_id\": \"1947673926596731295\"\n}"
+						},
+						{
+							"name": "Tweet Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/tweet/post/999",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweet",
+										"post",
+										"999"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"Tweet not found or already posted\"\n}"
+						},
+						{
+							"name": "Twitter API Error",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/tweet/post/7",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweet",
+										"post",
+										"7"
+									]
+								}
+							},
+							"status": "Internal Server Error",
+							"code": 500,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"Failed to post tweet\",\n    \"reason\": \"Twitter API error (status 401): Unauthorized\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Post All Pending Tweets",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/tweets/post-pending",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tweets",
+								"post-pending"
+							]
+						},
+						"description": "Post all tweets with 'pending' status to Twitter"
+					},
+					"response": [
+						{
+							"name": "Batch Posting Results",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/tweets/post-pending",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweets",
+										"post-pending"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"total\": 3,\n    \"posted\": 2,\n    \"failed\": 1,\n    \"details\": [\n        {\n            \"tweet_id\": 7,\n            \"status\": \"posted\",\n            \"twitter_id\": \"1947673926596731296\"\n        },\n        {\n            \"tweet_id\": 8,\n            \"status\": \"posted\",\n            \"twitter_id\": \"1947673926596731297\"\n        },\n        {\n            \"tweet_id\": 9,\n            \"status\": \"failed\",\n            \"error\": \"Twitter API error (status 401): Unauthorized\"\n        }\n    ]\n}"
+						},
+						{
+							"name": "No Pending Tweets",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/tweets/post-pending",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweets",
+										"post-pending"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"total\": 0,\n    \"posted\": 0,\n    \"failed\": 0,\n    \"details\": []\n}"
+						}
+					]
+				},
+				{
+					"name": "List All Tweets",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/tweets",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tweets"
+							]
+						},
+						"description": "Get all tweets (max 50)"
+					},
+					"response": [
+						{
+							"name": "Tweet List",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/tweets",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweets"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"tweets\": [\n        {\n            \"id\": 5,\n            \"text\": \"Hello from Twitter Manager API and Postman!\",\n            \"status\": \"posted\",\n            \"created_at\": \"2025-07-22T15:01:57.848184\",\n            \"username\": \"ZeroShotFlow\"\n        },\n        {\n            \"id\": 4,\n            \"text\": \"Hello from Twitter Manager API! Testing real posting functionality.\",\n            \"status\": \"failed\",\n            \"created_at\": \"2025-07-22T14:46:00.111614\",\n            \"username\": \"ZeroShotFlow\"\n        },\n        {\n            \"id\": 3,\n            \"text\": \"Testing Twitter API integration from Python! #APITest\",\n            \"status\": \"posted\",\n            \"created_at\": \"2025-07-22T14:43:43.751848\",\n            \"username\": \"ZeroShotFlow\"\n        }\n    ],\n    \"total\": 5\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Statistics & Monitoring",
+			"item": [
+				{
+					"name": "Get Statistics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/stats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"stats"
+							]
+						},
+						"description": "Get overall statistics"
+					},
+					"response": [
+						{
+							"name": "Statistics",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/stats",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"stats"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"accounts\": {\n        \"total\": 2,\n        \"active\": 2\n    },\n    \"tweets\": {\n        \"total\": 5,\n        \"pending\": 0,\n        \"posted\": 3,\n        \"failed\": 2\n    }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Mock Mode",
+			"item": [
+				{
+					"name": "Check Mock Mode Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/mock-mode",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mock-mode"
+							]
+						},
+						"description": "Check if mock mode is enabled"
+					},
+					"response": [
+						{
+							"name": "Mock Mode Status",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/mock-mode",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"mock-mode"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"mock_mode\": false\n}"
+						}
+					]
+				},
+				{
+					"name": "Enable Mock Mode",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"enabled\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/mock-mode",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mock-mode"
+							]
+						},
+						"description": "Enable mock mode (no real Twitter posts)"
+					},
+					"response": [
+						{
+							"name": "Mock Mode Enabled",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"enabled\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/mock-mode",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"mock-mode"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Mock mode enabled\",\n    \"mock_mode\": true\n}"
+						}
+					]
+				},
+				{
+					"name": "Disable Mock Mode",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"enabled\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/mock-mode",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mock-mode"
+							]
+						},
+						"description": "Disable mock mode (enable real Twitter posts)"
+					},
+					"response": [
+						{
+							"name": "Mock Mode Disabled",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"enabled\": false\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/mock-mode",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"mock-mode"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Mock mode disabled\",\n    \"mock_mode\": false\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Cleanup Operations",
+			"item": [
+				{
+					"name": "Delete Account",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}"
+							]
+						},
+						"description": "Delete a specific account and all its associated tweets"
+					},
+					"response": [
+						{
+							"name": "Account Deleted",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/2",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"2"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Account @ZeroShotFlow deleted successfully\",\n    \"deleted_tweets\": 5\n}"
+						}
+					]
+				},
+				{
+					"name": "Cleanup Inactive Accounts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"statuses\": [\"failed\", \"suspended\", \"inactive\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/accounts/cleanup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"cleanup"
+							]
+						},
+						"description": "Delete all accounts with specified statuses and their tweets"
+					},
+					"response": [
+						{
+							"name": "Cleanup Results",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"statuses\": [\"failed\", \"suspended\"]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/cleanup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"cleanup"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Cleaned up 2 inactive accounts\",\n    \"results\": {\n        \"deleted_accounts\": [\n            {\n                \"id\": 3,\n                \"username\": \"failed_account\",\n                \"status\": \"failed\",\n                \"deleted_tweets\": 10\n            },\n            {\n                \"id\": 4,\n                \"username\": \"suspended_account\",\n                \"status\": \"suspended\",\n                \"deleted_tweets\": 5\n            }\n        ],\n        \"deleted_tweets_total\": 15\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Delete Tweet",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/tweets/{{tweet_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tweets",
+								"{{tweet_id}}"
+							]
+						},
+						"description": "Delete a specific tweet"
+					},
+					"response": [
+						{
+							"name": "Tweet Deleted",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/tweets/5",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweets",
+										"5"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Tweet deleted successfully\",\n    \"tweet\": {\n        \"id\": 5,\n        \"content\": \"Hello from Twitter Manager API and Postman!\",\n        \"status\": \"posted\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Cleanup Tweets by Status",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"statuses\": [\"failed\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/tweets/cleanup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tweets",
+								"cleanup"
+							]
+						},
+						"description": "Delete all failed tweets"
+					},
+					"response": [
+						{
+							"name": "Cleanup by Status",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"statuses\": [\"failed\"]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/tweets/cleanup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweets",
+										"cleanup"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Deleted 3 tweets\",\n    \"criteria\": {\n        \"statuses\": [\"failed\"],\n        \"days_old\": null,\n        \"account_id\": null\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Cleanup Old Tweets",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"days_old\": 30\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/tweets/cleanup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tweets",
+								"cleanup"
+							]
+						},
+						"description": "Delete tweets older than 30 days"
+					},
+					"response": [
+						{
+							"name": "Cleanup by Age",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"days_old\": 30\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/tweets/cleanup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweets",
+										"cleanup"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Deleted 15 tweets\",\n    \"criteria\": {\n        \"statuses\": [],\n        \"days_old\": 30,\n        \"account_id\": null\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Cleanup Tweets Combined",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"statuses\": [\"posted\"],\n    \"days_old\": 7,\n    \"account_id\": {{account_id}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/tweets/cleanup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tweets",
+								"cleanup"
+							]
+						},
+						"description": "Delete posted tweets older than 7 days from specific account"
+					},
+					"response": [
+						{
+							"name": "Cleanup Combined Criteria",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"statuses\": [\"posted\"],\n    \"days_old\": 7,\n    \"account_id\": 2\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/tweets/cleanup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"tweets",
+										"cleanup"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Deleted 5 tweets\",\n    \"criteria\": {\n        \"statuses\": [\"posted\"],\n        \"days_old\": 7,\n        \"account_id\": 2\n    }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "List Management",
+			"item": [
+				{
+					"name": "Set Account Type",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"account_type\": \"list_owner\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/set-type",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"set-type"
+							]
+						},
+						"description": "Set an account as 'list_owner' or 'managed'"
+					},
+					"response": []
+				},
+				{
+					"name": "Get List Owner Accounts",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts?type=list_owner",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts"
+							],
+							"query": [
+								{
+									"key": "type",
+									"value": "list_owner"
+								}
+							]
+						},
+						"description": "Get all accounts that can manage lists"
+					},
+					"response": []
+				},
+				{
+					"name": "Create List",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Tech Influencers\",\n    \"description\": \"Top technology voices on Twitter\",\n    \"mode\": \"public\",\n    \"owner_account_id\": {{account_id}}\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/lists",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists"
+							]
+						},
+						"description": "Create a new Twitter list. Owner account must be of type 'list_owner'"
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Lists",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/lists",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists"
+							]
+						},
+						"description": "Get all lists"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Lists by Owner",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/lists?owner_account_id={{account_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists"
+							],
+							"query": [
+								{
+									"key": "owner_account_id",
+									"value": "{{account_id}}"
+								}
+							]
+						},
+						"description": "Get lists owned by specific account"
+					},
+					"response": []
+				},
+				{
+					"name": "Get List Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/lists/{{list_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists",
+								"{{list_id}}"
+							]
+						},
+						"description": "Get list details including members"
+					},
+					"response": []
+				},
+				{
+					"name": "Update List",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated List Name\",\n    \"description\": \"Updated description\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/lists/{{list_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists",
+								"{{list_id}}"
+							]
+						},
+						"description": "Update list name and/or description"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete List",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/lists/{{list_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists",
+								"{{list_id}}"
+							]
+						},
+						"description": "Delete a list from Twitter and database"
+					},
+					"response": []
+				},
+				{
+					"name": "Add Members to List",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"account_ids\": [2, 3, 4, 5]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/lists/{{list_id}}/members",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists",
+								"{{list_id}}",
+								"members"
+							]
+						},
+						"description": "Add multiple accounts to a list"
+					},
+					"response": []
+				},
+				{
+					"name": "Get List Members",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/lists/{{list_id}}/members",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists",
+								"{{list_id}}",
+								"members"
+							]
+						},
+						"description": "Get all members of a list"
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Member from List",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/lists/{{list_id}}/members/{{member_account_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists",
+								"{{list_id}}",
+								"members",
+								"{{member_account_id}}"
+							]
+						},
+						"description": "Remove an account from a list"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5555/api/v1",
+			"type": "string"
+		},
+		{
+			"key": "api_key",
+			"value": "2043adb52a7468621a9245c94d702e4bed5866b0ec52772f203286f823a50bbb",
+			"type": "string"
+		},
+		{
+			"key": "account_id",
+			"value": "2",
+			"type": "string"
+		},
+		{
+			"key": "tweet_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "oauth_state",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "list_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "member_account_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
