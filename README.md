@@ -480,6 +480,56 @@ Delete tweets by:
 
 All parameters are optional but at least one of `statuses` or `days_old` is required.
 
+#### Delete Thread
+```http
+DELETE /api/v1/thread/{thread_id}
+X-API-Key: your-api-key
+```
+
+Deletes a specific thread and all its tweets. Returns:
+```json
+{
+    "message": "Thread deleted successfully",
+    "thread_id": "550e8400-e29b-41d4-a716-446655440000",
+    "deleted_tweets": 3,
+    "posted_tweets_deleted": 3
+}
+```
+
+#### Cleanup Threads
+```http
+POST /api/v1/threads/cleanup
+X-API-Key: your-api-key
+Content-Type: application/json
+
+{
+    "statuses": ["posted", "failed"],
+    "days_old": 7,
+    "account_id": 1
+}
+```
+
+Delete threads by:
+- `statuses`: Delete threads where ALL tweets have the specified status
+- `days_old`: Threads older than X days
+- `account_id`: Only threads from specific account
+
+All parameters are optional but at least one of `statuses` or `days_old` is required.
+
+Returns:
+```json
+{
+    "message": "Successfully deleted 2 threads",
+    "deleted_threads": 2,
+    "deleted_tweets": 6,
+    "criteria": {
+        "statuses": ["posted"],
+        "days_old": 7,
+        "account_id": 1
+    }
+}
+```
+
 #### List Tweets
 ```http
 GET /api/v1/tweets?status=posted&account_id=1&page=1
@@ -605,6 +655,8 @@ Error responses include a JSON body:
 | `/api/v1/threads` | GET | Yes | List all threads |
 | `/api/v1/thread/{id}` | GET | Yes | Get thread details |
 | `/api/v1/thread/post/{id}` | POST | Yes | Post thread to Twitter |
+| `/api/v1/thread/{id}` | DELETE | Yes | Delete specific thread |
+| `/api/v1/threads/cleanup` | POST | Yes | Delete threads by criteria |
 | `/api/v1/auth/twitter` | GET | Yes | Start OAuth flow |
 | `/auth/callback` | GET | No | OAuth callback (automatic) |
 | `/api/v1/lists` | POST | Yes | Create new list |

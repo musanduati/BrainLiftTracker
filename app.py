@@ -1795,6 +1795,134 @@ def delete_tweet(tweet_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/v1/threads/cleanup', methods=['POST'])
+def cleanup_threads():
+    """Delete threads based on criteria"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        data = request.get_json() or {}
+        statuses = data.get('statuses', [])
+        days_old = data.get('days_old')
+        account_id = data.get('account_id')
+        
+        if not statuses and not days_old:
+            return jsonify({'error': 'At least one of statuses or days_old is required'}), 400
+        
+        conn = get_db()
+        
+        # Build the query
+        conditions = []
+        params = []
+        
+        # First, get thread IDs that match our criteria
+        thread_query = '''
+            SELECT DISTINCT thread_id 
+            FROM tweet 
+            WHERE thread_id IS NOT NULL
+        '''
+        
+        if statuses:
+            # Thread with all tweets matching the status filter
+            placeholders = ','.join('?' * len(statuses))
+            conditions.append(f'''thread_id IN (
+                SELECT thread_id 
+                FROM tweet 
+                WHERE thread_id IS NOT NULL 
+                GROUP BY thread_id 
+                HAVING COUNT(CASE WHEN status IN ({placeholders}) THEN 1 END) = COUNT(*)
+            )''')
+            params.extend(statuses)
+        
+        if days_old:
+            conditions.append("thread_id IN (SELECT DISTINCT thread_id FROM tweet WHERE created_at < datetime('now', ? || ' days'))")
+            params.append(f'-{days_old}')
+        
+        if account_id:
+            conditions.append('thread_id IN (SELECT DISTINCT thread_id FROM tweet WHERE twitter_account_id = ?)')
+            params.append(account_id)
+        
+        if conditions:
+            thread_query += ' AND ' + ' AND '.join(conditions)
+        
+        # Get threads to delete
+        threads = conn.execute(thread_query, params).fetchall()
+        thread_ids = [t['thread_id'] for t in threads]
+        
+        if not thread_ids:
+            conn.close()
+            return jsonify({
+                'message': 'No threads found matching criteria',
+                'deleted_count': 0
+            })
+        
+        # Get counts before deletion
+        tweets_count = conn.execute(
+            'SELECT COUNT(*) as count FROM tweet WHERE thread_id IN ({})'.format(','.join('?' * len(thread_ids))),
+            thread_ids
+        ).fetchone()['count']
+        
+        # Delete all tweets in these threads
+        conn.execute(
+            'DELETE FROM tweet WHERE thread_id IN ({})'.format(','.join('?' * len(thread_ids))),
+            thread_ids
+        )
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': f'Successfully deleted {len(thread_ids)} threads',
+            'deleted_threads': len(thread_ids),
+            'deleted_tweets': tweets_count,
+            'criteria': {
+                'statuses': statuses if statuses else None,
+                'days_old': days_old if days_old else None,
+                'account_id': account_id if account_id else None
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/thread/<thread_id>', methods=['DELETE'])
+def delete_thread(thread_id):
+    """Delete a specific thread and all its tweets"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Check if thread exists and get tweet count
+        thread_info = conn.execute(
+            '''SELECT COUNT(*) as tweet_count,
+                      SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) as posted_count
+               FROM tweet 
+               WHERE thread_id = ?''',
+            (thread_id,)
+        ).fetchone()
+        
+        if thread_info['tweet_count'] == 0:
+            conn.close()
+            return jsonify({'error': 'Thread not found'}), 404
+        
+        # Delete all tweets in the thread
+        conn.execute('DELETE FROM tweet WHERE thread_id = ?', (thread_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': 'Thread deleted successfully',
+            'thread_id': thread_id,
+            'deleted_tweets': thread_info['tweet_count'],
+            'posted_tweets_deleted': thread_info['posted_count']
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # Add route at Twitter's expected callback URL
 @app.route('/auth/callback', methods=['GET'])
 def auth_callback_redirect():
