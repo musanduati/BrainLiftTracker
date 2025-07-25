@@ -356,9 +356,9 @@ def create_thread():
         created_tweets = []
         for i, tweet_text in enumerate(tweets):
             cursor = conn.execute(
-                '''INSERT INTO tweet (twitter_account_id, content, thread_id, thread_position) 
-                   VALUES (?, ?, ?, ?)''',
-                (account_id, tweet_text, thread_id, i)
+                '''INSERT INTO tweet (twitter_account_id, content, thread_id, thread_position, status) 
+                   VALUES (?, ?, ?, ?, ?)''',
+                (account_id, tweet_text, thread_id, i, 'pending')
             )
             tweet_id = cursor.lastrowid
             created_tweets.append({
@@ -388,6 +388,33 @@ def post_thread(thread_id):
     try:
         conn = get_db()
         
+        # First check if thread exists at all
+        thread_check = conn.execute(
+            '''SELECT COUNT(*) as total,
+                      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                      SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) as posted,
+                      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+               FROM tweet 
+               WHERE thread_id = ?''',
+            (thread_id,)
+        ).fetchone()
+        
+        if thread_check['total'] == 0:
+            conn.close()
+            return jsonify({'error': f'Thread {thread_id} not found'}), 404
+        
+        if thread_check['posted'] > 0:
+            conn.close()
+            return jsonify({
+                'error': 'Thread already posted',
+                'stats': {
+                    'total': thread_check['total'],
+                    'posted': thread_check['posted'],
+                    'pending': thread_check['pending'],
+                    'failed': thread_check['failed']
+                }
+            }), 400
+        
         # Get all tweets in the thread ordered by position
         tweets = conn.execute(
             '''SELECT id, twitter_account_id, content, thread_position 
@@ -399,7 +426,15 @@ def post_thread(thread_id):
         
         if not tweets:
             conn.close()
-            return jsonify({'error': 'No pending tweets found in thread'}), 404
+            return jsonify({
+                'error': 'No pending tweets found in thread',
+                'stats': {
+                    'total': thread_check['total'],
+                    'posted': thread_check['posted'],
+                    'pending': thread_check['pending'],
+                    'failed': thread_check['failed']
+                }
+            }), 404
         
         # Post tweets sequentially, each replying to the previous
         posted_tweets = []
@@ -558,6 +593,48 @@ def get_thread(thread_id):
                 'position': tweet['thread_position'],
                 'created_at': tweet['created_at'],
                 'posted_at': tweet['posted_at']
+            })
+        
+        conn.close()
+        return jsonify(result)
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/thread/<thread_id>/debug', methods=['GET'])
+def debug_thread(thread_id):
+    """Debug endpoint to check thread status"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get all tweets in the thread
+        tweets = conn.execute('''
+            SELECT id, content, status, thread_position, created_at
+            FROM tweet 
+            WHERE thread_id = ?
+            ORDER BY thread_position
+        ''', (thread_id,)).fetchall()
+        
+        if not tweets:
+            conn.close()
+            return jsonify({'error': 'Thread not found'}), 404
+        
+        result = {
+            'thread_id': thread_id,
+            'tweet_count': len(tweets),
+            'tweets': []
+        }
+        
+        for tweet in tweets:
+            result['tweets'].append({
+                'id': tweet['id'],
+                'content': tweet['content'][:50] + '...' if len(tweet['content']) > 50 else tweet['content'],
+                'status': tweet['status'],
+                'position': tweet['thread_position'],
+                'created_at': tweet['created_at']
             })
         
         conn.close()
