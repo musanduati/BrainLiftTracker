@@ -1,0 +1,23 @@
+[Unit]
+Description=Twitter Manager Gunicorn Service
+After=network.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/twitter-manager
+Environment="PATH=/home/ubuntu/twitter-manager/venv/bin"
+ExecStart=/home/ubuntu/twitter-manager/venv/bin/gunicorn \
+    --workers 3 \
+    --bind unix:twitter-manager.sock \
+    --timeout 120 \
+    --access-logfile /home/ubuntu/twitter-manager/logs/gunicorn-access.log \
+    --error-logfile /home/ubuntu/twitter-manager/logs/gunicorn-error.log \
+    --log-level info \
+    app:app
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

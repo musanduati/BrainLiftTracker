@@ -136,7 +136,6 @@ kill_*.ps1
 
 # Deployment guides (keep private)
 DEPLOY_LIGHTSAIL.md
-deploy/
 
 # Internal documentation
 prompt.md
