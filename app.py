@@ -582,7 +582,7 @@ def post_tweet(tweet_id):
         if success:
             # Update tweet status to posted
             conn.execute(
-                'UPDATE tweet SET status = ?, twitter_id = ?, posted_at = ? WHERE id = ?',
+                'UPDATE tweet SET status = ?, tweet_id = ?, posted_time = ? WHERE id = ?',
                 ('posted', result, datetime.utcnow().isoformat(), tweet_id)
             )
             conn.commit()
@@ -591,7 +591,7 @@ def post_tweet(tweet_id):
             return jsonify({
                 'message': 'Tweet posted successfully',
                 'tweet_id': tweet_id,
-                'twitter_id': result
+                'twitter_tweet_id': result
             })
         else:
             # Update tweet status to failed
@@ -637,14 +637,14 @@ def post_pending_tweets():
             if success:
                 # Update to posted
                 conn.execute(
-                    'UPDATE tweet SET status = ?, twitter_id = ?, posted_at = ? WHERE id = ?',
+                    'UPDATE tweet SET status = ?, tweet_id = ?, posted_time = ? WHERE id = ?',
                     ('posted', result, datetime.utcnow().isoformat(), tweet['id'])
                 )
                 results['posted'] += 1
                 results['details'].append({
                     'tweet_id': tweet['id'],
                     'status': 'posted',
-                    'twitter_id': result
+                    'twitter_tweet_id': result
                 })
             else:
                 # Update to failed
