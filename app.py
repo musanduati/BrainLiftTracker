@@ -14,6 +14,7 @@ import secrets
 import base64
 import urllib.parse
 from cryptography.fernet import Fernet
+import uuid
 
 app = Flask(__name__)
 
@@ -82,8 +83,14 @@ def decrypt_token(encrypted_token):
     except:
         return encrypted_token  # Return as-is if decryption fails
 
-def post_to_twitter(account_id, tweet_text):
-    """Post a tweet to Twitter using the account's credentials"""
+def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None):
+    """Post a tweet to Twitter using the account's credentials
+    
+    Args:
+        account_id: The database ID of the Twitter account
+        tweet_text: The text content of the tweet
+        reply_to_tweet_id: Optional Twitter ID of the tweet to reply to (for threads)
+    """
     conn = get_db()
     
     # Get account credentials
@@ -124,6 +131,12 @@ def post_to_twitter(account_id, tweet_text):
             }
             
             data = {'text': tweet_text}
+            
+            # Add reply parameter if this is part of a thread
+            if reply_to_tweet_id:
+                data['reply'] = {
+                    'in_reply_to_tweet_id': reply_to_tweet_id
+                }
             
             response = requests.post(
                 'https://api.twitter.com/2/tweets',
@@ -305,6 +318,250 @@ def create_tweet():
             'message': 'Tweet created successfully',
             'tweet_id': tweet_id
         }), 201
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/thread', methods=['POST'])
+def create_thread():
+    """Create a Twitter thread (multiple connected tweets)"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        data = request.get_json()
+        account_id = data.get('account_id')
+        tweets = data.get('tweets', [])
+        thread_id = data.get('thread_id', str(uuid.uuid4()))
+        
+        if not account_id or not tweets:
+            return jsonify({'error': 'account_id and tweets array are required'}), 400
+        
+        if len(tweets) < 2:
+            return jsonify({'error': 'A thread must contain at least 2 tweets'}), 400
+        
+        conn = get_db()
+        
+        # Verify account exists
+        account = conn.execute(
+            'SELECT * FROM twitter_account WHERE id = ?', 
+            (account_id,)
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'Account not found'}), 404
+        
+        # Create all tweets in the thread as pending
+        created_tweets = []
+        for i, tweet_text in enumerate(tweets):
+            cursor = conn.execute(
+                '''INSERT INTO tweet (twitter_account_id, content, thread_id, thread_position) 
+                   VALUES (?, ?, ?, ?)''',
+                (account_id, tweet_text, thread_id, i)
+            )
+            tweet_id = cursor.lastrowid
+            created_tweets.append({
+                'id': tweet_id,
+                'position': i,
+                'content': tweet_text
+            })
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': f'Thread created with {len(tweets)} tweets',
+            'thread_id': thread_id,
+            'tweets': created_tweets
+        }), 201
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/thread/post/<thread_id>', methods=['POST'])
+def post_thread(thread_id):
+    """Post all tweets in a thread to Twitter"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get all tweets in the thread ordered by position
+        tweets = conn.execute(
+            '''SELECT id, twitter_account_id, content, thread_position 
+               FROM tweet 
+               WHERE thread_id = ? AND status = 'pending'
+               ORDER BY thread_position''',
+            (thread_id,)
+        ).fetchall()
+        
+        if not tweets:
+            conn.close()
+            return jsonify({'error': 'No pending tweets found in thread'}), 404
+        
+        # Post tweets sequentially, each replying to the previous
+        posted_tweets = []
+        previous_tweet_id = None
+        
+        for tweet in tweets:
+            success, result = post_to_twitter(
+                tweet['twitter_account_id'], 
+                tweet['content'],
+                reply_to_tweet_id=previous_tweet_id
+            )
+            
+            if success:
+                # Update tweet status and twitter_id
+                conn.execute(
+                    '''UPDATE tweet 
+                       SET status = ?, twitter_id = ?, posted_at = ?, reply_to_tweet_id = ?
+                       WHERE id = ?''',
+                    ('posted', result, datetime.utcnow().isoformat(), previous_tweet_id, tweet['id'])
+                )
+                conn.commit()
+                
+                posted_tweets.append({
+                    'tweet_id': tweet['id'],
+                    'twitter_id': result,
+                    'position': tweet['thread_position'],
+                    'status': 'posted'
+                })
+                
+                # Set this tweet as the one to reply to for the next tweet
+                previous_tweet_id = result
+            else:
+                # If posting fails, stop the thread
+                conn.execute(
+                    'UPDATE tweet SET status = ? WHERE id = ?',
+                    ('failed', tweet['id'])
+                )
+                conn.commit()
+                
+                posted_tweets.append({
+                    'tweet_id': tweet['id'],
+                    'position': tweet['thread_position'],
+                    'status': 'failed',
+                    'error': result
+                })
+                break
+        
+        conn.close()
+        
+        return jsonify({
+            'message': f'Thread posting completed',
+            'thread_id': thread_id,
+            'posted': len([t for t in posted_tweets if t['status'] == 'posted']),
+            'failed': len([t for t in posted_tweets if t['status'] == 'failed']),
+            'tweets': posted_tweets
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/threads', methods=['GET'])
+def get_threads():
+    """Get all threads"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get unique threads with their tweet count
+        threads = conn.execute('''
+            SELECT 
+                thread_id,
+                twitter_account_id,
+                COUNT(*) as tweet_count,
+                MIN(created_at) as created_at,
+                SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) as posted_count,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count
+            FROM tweet
+            WHERE thread_id IS NOT NULL
+            GROUP BY thread_id, twitter_account_id
+            ORDER BY created_at DESC
+        ''').fetchall()
+        
+        result = []
+        for thread in threads:
+            # Get account info
+            account = conn.execute(
+                'SELECT username FROM twitter_account WHERE id = ?',
+                (thread['twitter_account_id'],)
+            ).fetchone()
+            
+            result.append({
+                'thread_id': thread['thread_id'],
+                'account_id': thread['twitter_account_id'],
+                'account_username': account['username'] if account else 'Unknown',
+                'tweet_count': thread['tweet_count'],
+                'posted_count': thread['posted_count'],
+                'pending_count': thread['pending_count'],
+                'failed_count': thread['failed_count'],
+                'created_at': thread['created_at']
+            })
+        
+        conn.close()
+        return jsonify({'threads': result})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/thread/<thread_id>', methods=['GET'])
+def get_thread(thread_id):
+    """Get details of a specific thread"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get all tweets in the thread
+        tweets = conn.execute('''
+            SELECT 
+                t.id,
+                t.content,
+                t.status,
+                t.twitter_id,
+                t.reply_to_tweet_id,
+                t.thread_position,
+                t.created_at,
+                t.posted_at,
+                a.username
+            FROM tweet t
+            JOIN twitter_account a ON t.twitter_account_id = a.id
+            WHERE t.thread_id = ?
+            ORDER BY t.thread_position
+        ''', (thread_id,)).fetchall()
+        
+        if not tweets:
+            conn.close()
+            return jsonify({'error': 'Thread not found'}), 404
+        
+        result = {
+            'thread_id': thread_id,
+            'account_username': tweets[0]['username'],
+            'tweet_count': len(tweets),
+            'tweets': []
+        }
+        
+        for tweet in tweets:
+            result['tweets'].append({
+                'id': tweet['id'],
+                'content': tweet['content'],
+                'status': tweet['status'],
+                'twitter_id': tweet['twitter_id'],
+                'reply_to_tweet_id': tweet['reply_to_tweet_id'],
+                'position': tweet['thread_position'],
+                'created_at': tweet['created_at'],
+                'posted_at': tweet['posted_at']
+            })
+        
+        conn.close()
+        return jsonify(result)
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1680,6 +1937,9 @@ def init_database():
                 content TEXT NOT NULL,
                 status TEXT DEFAULT 'pending',
                 twitter_id TEXT,
+                thread_id TEXT,
+                reply_to_tweet_id TEXT,
+                thread_position INTEGER,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 posted_at DATETIME,
                 FOREIGN KEY (twitter_account_id) REFERENCES twitter_account (id)
@@ -1713,6 +1973,25 @@ def init_database():
         try:
             conn.execute("ALTER TABLE twitter_account ADD COLUMN account_type TEXT DEFAULT 'managed'")
             print("Added account_type column to twitter_account table")
+        except:
+            pass  # Column already exists
+        
+        # Add thread support columns to tweet table if they don't exist
+        try:
+            conn.execute('ALTER TABLE tweet ADD COLUMN thread_id TEXT')
+            print("Added thread_id column to tweet table")
+        except:
+            pass  # Column already exists
+        
+        try:
+            conn.execute('ALTER TABLE tweet ADD COLUMN reply_to_tweet_id TEXT')
+            print("Added reply_to_tweet_id column to tweet table")
+        except:
+            pass  # Column already exists
+        
+        try:
+            conn.execute('ALTER TABLE tweet ADD COLUMN thread_position INTEGER')
+            print("Added thread_position column to tweet table")
         except:
             pass  # Column already exists
         

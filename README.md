@@ -9,6 +9,7 @@ A Flask-based RESTful API for managing multiple Twitter accounts and posting con
 - **Multi-Account Management**: Add and manage multiple Twitter accounts
 - **OAuth 2.0 Authentication**: Secure Twitter authentication flow with PKCE
 - **Real-Time Tweet Posting**: Post tweets directly to Twitter/X
+- **Twitter Threads**: Create and post multi-tweet threads with automatic reply chaining
 - **Batch Operations**: Post all pending tweets at once
 - **Twitter Lists**: Create and manage Twitter lists with multiple main accounts
 - **List Membership**: Add/remove accounts to/from lists with bulk operations
@@ -187,6 +188,134 @@ Content-Type: application/json
 ```
 
 Toggle mock mode for testing without real Twitter posts.
+
+### Twitter Threads
+
+#### Create a Thread
+```http
+POST /api/v1/thread
+X-API-Key: your-api-key
+Content-Type: application/json
+
+{
+    "account_id": 1,
+    "tweets": [
+        "🧵 1/3 Here's an important update about our product launch...",
+        "2/3 We've been working hard on new features including...",
+        "3/3 Sign up for early access at our website! Thanks for your support!"
+    ]
+}
+```
+
+Creates a thread of connected tweets. Returns:
+```json
+{
+    "message": "Thread created with 3 tweets",
+    "thread_id": "550e8400-e29b-41d4-a716-446655440000",
+    "tweets": [
+        {"id": 1, "position": 0, "content": "🧵 1/3 Here's an important update..."},
+        {"id": 2, "position": 1, "content": "2/3 We've been working hard..."},
+        {"id": 3, "position": 2, "content": "3/3 Sign up for early access..."}
+    ]
+}
+```
+
+#### Post a Thread to Twitter
+```http
+POST /api/v1/thread/post/{thread_id}
+X-API-Key: your-api-key
+```
+
+Posts all pending tweets in a thread to Twitter, with each tweet replying to the previous one. Returns:
+```json
+{
+    "message": "Thread posting completed",
+    "thread_id": "550e8400-e29b-41d4-a716-446655440000",
+    "posted": 3,
+    "failed": 0,
+    "tweets": [
+        {
+            "tweet_id": 1,
+            "twitter_id": "1234567890123456789",
+            "position": 0,
+            "status": "posted"
+        },
+        {
+            "tweet_id": 2,
+            "twitter_id": "1234567890123456790",
+            "position": 1,
+            "status": "posted"
+        },
+        {
+            "tweet_id": 3,
+            "twitter_id": "1234567890123456791",
+            "position": 2,
+            "status": "posted"
+        }
+    ]
+}
+```
+
+#### Get All Threads
+```http
+GET /api/v1/threads
+X-API-Key: your-api-key
+```
+
+Returns a list of all threads with their status:
+```json
+{
+    "threads": [
+        {
+            "thread_id": "550e8400-e29b-41d4-a716-446655440000",
+            "account_id": 1,
+            "account_username": "@myaccount",
+            "tweet_count": 3,
+            "posted_count": 3,
+            "pending_count": 0,
+            "failed_count": 0,
+            "created_at": "2025-01-25T10:30:00"
+        }
+    ]
+}
+```
+
+#### Get Thread Details
+```http
+GET /api/v1/thread/{thread_id}
+X-API-Key: your-api-key
+```
+
+Returns detailed information about a specific thread:
+```json
+{
+    "thread_id": "550e8400-e29b-41d4-a716-446655440000",
+    "account_username": "@myaccount",
+    "tweet_count": 3,
+    "tweets": [
+        {
+            "id": 1,
+            "content": "🧵 1/3 Here's an important update...",
+            "status": "posted",
+            "twitter_id": "1234567890123456789",
+            "reply_to_tweet_id": null,
+            "position": 0,
+            "created_at": "2025-01-25T10:30:00",
+            "posted_at": "2025-01-25T10:31:00"
+        },
+        {
+            "id": 2,
+            "content": "2/3 We've been working hard...",
+            "status": "posted",
+            "twitter_id": "1234567890123456790",
+            "reply_to_tweet_id": "1234567890123456789",
+            "position": 1,
+            "created_at": "2025-01-25T10:30:00",
+            "posted_at": "2025-01-25T10:31:05"
+        }
+    ]
+}
+```
 
 ### Account Type Management
 
@@ -472,6 +601,10 @@ Error responses include a JSON body:
 | `/api/v1/tweets` | GET | Yes | List all tweets |
 | `/api/v1/tweet/post/{id}` | POST | Yes | Post tweet to Twitter |
 | `/api/v1/tweets/post-pending` | POST | Yes | Post all pending tweets |
+| `/api/v1/thread` | POST | Yes | Create new thread |
+| `/api/v1/threads` | GET | Yes | List all threads |
+| `/api/v1/thread/{id}` | GET | Yes | Get thread details |
+| `/api/v1/thread/post/{id}` | POST | Yes | Post thread to Twitter |
 | `/api/v1/auth/twitter` | GET | Yes | Start OAuth flow |
 | `/auth/callback` | GET | No | OAuth callback (automatic) |
 | `/api/v1/lists` | POST | Yes | Create new list |
