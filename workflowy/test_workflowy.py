@@ -13,30 +13,43 @@ from typing import Any, Optional, List, Dict
 from datetime import datetime
 
 import aiohttp
-from pydantic import BaseModel
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 import diff_match_patch as dmp_module
 
+# Add AWS storage import
+from aws_storage import AWSStorage
+
 logger = logging.getLogger("workflowy_test")
 
-class AuxiliaryProject(BaseModel):
-    shareId: str
+# Replace with these simple classes:
+class AuxiliaryProject:
+    def __init__(self, shareId: str):
+        self.shareId = shareId
 
-class ProjectTreeData(BaseModel):
-    auxiliaryProjectTreeInfos: list[AuxiliaryProject]
+class ProjectTreeData:
+    def __init__(self, auxiliaryProjectTreeInfos: list):
+        self.auxiliaryProjectTreeInfos = [
+            AuxiliaryProject(info.get('shareId', '')) if isinstance(info, dict) else 
+            AuxiliaryProject(info.shareId) if hasattr(info, 'shareId') else
+            info 
+            for info in auxiliaryProjectTreeInfos
+        ]
 
-class InitializationData(BaseModel):
-    projectTreeData: ProjectTreeData
+class InitializationData:
+    def __init__(self, projectTreeData: dict):
+        self.projectTreeData = ProjectTreeData(
+            projectTreeData.get('auxiliaryProjectTreeInfos', [])
+        )
 
     def transform(self) -> list[str]:
         return [info.shareId for info in self.projectTreeData.auxiliaryProjectTreeInfos]
 
-class WorkflowyNode(BaseModel):
-    node_id: str
-    node_name: str
-    content: str
-    timestamp: float | None = None
+class WorkflowyNode:
+    def __init__(self, node_id: str, node_name: str, content: str, timestamp: float = None):
+        self.node_id = node_id
+        self.node_name = node_name
+        self.content = content
+        self.timestamp = timestamp
 
 def get_regex_matching_pattern(node_names: list[str] | str) -> re.Pattern:
     if isinstance(node_names, str):
@@ -879,6 +892,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 "change_details": change_details,
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -907,6 +921,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 "change_type": "deleted",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -920,6 +935,8 @@ class WorkflowyTester:
     def __init__(self):
         self._session: aiohttp.ClientSession | None = None
         self._default_timeout = aiohttp.ClientTimeout(total=10, connect=10, sock_connect=10, sock_read=10)
+        # Add AWS storage
+        self.storage = AWSStorage()
 
     async def get_session(self) -> aiohttp.ClientSession:
         """Get or create an aiohttp ClientSession."""
@@ -927,11 +944,11 @@ class WorkflowyTester:
             self._session = aiohttp.ClientSession(timeout=self._default_timeout)
         return self._session
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(),
-        retry=retry_if_exception_type(aiohttp.ClientError),
-    )
+    # @retry(
+    #     stop=stop_after_attempt(3),
+    #     wait=wait_exponential(),
+    #     retry=retry_if_exception_type(aiohttp.ClientError),
+    # )
     async def make_request(self, method: str, url: str, **kwargs) -> aiohttp.ClientResponse:
         """Makes an async HTTP request with retry logic."""
         timeout = kwargs.pop("timeout", None)
@@ -1150,37 +1167,32 @@ class WorkflowyTester:
 
     async def process_single_url(self, url_config: Dict, exclude_node_names: list[str] | None = None):
         """
-        Process a single URL and generate all associated files in user directory.
-        Supports change detection and tracking between runs.
+        Modified to use AWS storage instead of local files
         """
         url = url_config['url']
         custom_name = url_config.get('name')
         
-        # Generate user directory name
         if custom_name:
             user_name = custom_name
         else:
             user_name = extract_url_identifier(url)
         
-        # Create user directory
-        user_dir = create_user_directory(user_name)
-        
-        # Check if this is first run
-        first_run = is_first_run() or not (user_dir / "current_state.json").exists()
+        # Check if this is first run using AWS
+        first_run = self.storage.is_first_run(user_name)
         timestamp = get_timestamp()
         
         print(f"\n{'='*60}")
         print(f"PROCESSING: {url}")
-        print(f"USER DIRECTORY: {user_dir}")
+        print(f"USER: {user_name}")
         print(f"FIRST RUN: {first_run}")
         print(f"TIMESTAMP: {timestamp}")
         print(f"{'='*60}")
         
         try:
-            # Load previous state for comparison
-            previous_state = load_previous_state(user_dir) if not first_run else {"dok4": [], "dok3": []}
+            # Load previous state from DynamoDB
+            previous_state = self.storage.load_previous_state(user_name) if not first_run else {"dok4": [], "dok3": []}
             
-            # Scrape content
+            # Scrape content (unchanged)
             result = await self.scrape_workflowy(url, exclude_node_names)
             
             print(f"\n📄 SCRAPING RESULTS:")
@@ -1188,39 +1200,34 @@ class WorkflowyTester:
             print(f"Node Name: {result.node_name}")
             print(f"Total Content Length: {len(result.content)} characters")
             
-            # Save full content with timestamp
-            full_content_file = user_dir / f"{user_name}_scraped_workflowy_{timestamp}.txt"
-            with open(full_content_file, "w", encoding="utf-8") as f:
-                f.write(result.content)
-            print(f"✅ Full content saved to '{full_content_file}'")
+            # Save full content to S3 instead of local file
+            content_s3_url = self.storage.save_scraped_content(user_name, result.content, timestamp)
+            print(f"✅ Full content saved to S3: {content_s3_url}")
             
-            # Process DOK sections
+            # Process DOK sections (logic unchanged)
             print(f"\n📋 PROCESSING DOK SECTIONS:")
             
             current_state = {"dok4": [], "dok3": []}
             all_change_tweets = []
             
-            # Process DOK4
+            # DOK4 processing (unchanged logic)
             dok4_content = extract_single_dok_section(result.content, "DOK4")
             if dok4_content.strip():
                 dok4_points = parse_dok_points(dok4_content, "DOK4")
                 current_state["dok4"] = create_dok_state_from_points(dok4_points)
                 
                 if first_run:
-                    # First run - all content is "added"
                     changes = {"added": current_state["dok4"], "updated": [], "deleted": []}
                 else:
-                    # Compare with previous state
                     changes = advanced_compare_dok_states(previous_state["dok4"], current_state["dok4"])
                 
-                # Generate change-based tweets
                 dok4_tweets = generate_advanced_change_tweets(changes, "DOK4", first_run)
                 all_change_tweets.extend(dok4_tweets)
                 
                 stats = changes.get("stats", {})
                 print(f"DOK4 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
             
-            # Process DOK3
+            # DOK3 processing (unchanged logic)
             dok3_content = extract_single_dok_section(result.content, "DOK3")
             if dok3_content.strip():
                 dok3_points = parse_dok_points(dok3_content, "DOK3")
@@ -1237,22 +1244,19 @@ class WorkflowyTester:
                 stats = changes.get("stats", {})
                 print(f"DOK3 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
             
-            # Save change-based tweets
-            tweets_file = None
+            # Save tweets to S3 instead of local file
+            tweets_s3_url = None
             if all_change_tweets:
-                tweets_file = user_dir / f"{user_name}_change_tweets_{timestamp}.json"
-                with open(tweets_file, "w", encoding="utf-8") as f:
-                    json.dump(all_change_tweets, f, indent=2, ensure_ascii=False)
-                print(f"✅ Change tweets saved to '{tweets_file}' ({len(all_change_tweets)} tweets)")
+                tweets_s3_url = self.storage.save_change_tweets(user_name, all_change_tweets, timestamp)
+                print(f"✅ Change tweets saved to S3: {tweets_s3_url} ({len(all_change_tweets)} tweets)")
                 
-                # Show preview
                 if all_change_tweets:
                     first_tweet = all_change_tweets[0]
                     print(f"   Preview: {first_tweet['content_formatted'][:100]}...")
             
-            # Save current state for next run
-            save_current_state(user_dir, current_state)
-            print(f"✅ Current state saved for next comparison")
+            # Save current state to DynamoDB
+            self.storage.save_current_state(user_name, current_state)
+            print(f"✅ Current state saved to DynamoDB")
             
             # Summary
             total_changes = len(all_change_tweets)
@@ -1260,19 +1264,17 @@ class WorkflowyTester:
             print(f"\n🎉 URL PROCESSING COMPLETE! ({change_type})")
             print(f"📊 Generated {total_changes} change-based tweets for {user_name}")
 
-            # Update the return statement
             return {
                 'url': url,
                 'user_name': user_name,
-                'user_dir': str(user_dir),
                 'status': 'success',
                 'is_first_run': first_run,
                 'total_change_tweets': total_changes,
                 'timestamp': timestamp,
                 'files_created': {
-                    'full_content': str(full_content_file),
-                    'change_tweets': str(tweets_file) if tweets_file else None,
-                    'state_file': str(user_dir / "current_state.json"),
+                    'full_content': content_s3_url,
+                    'change_tweets': tweets_s3_url,
+                    'state_location': f"DynamoDB:{self.storage.state_table_name}",
                 }
             }
             
@@ -1283,7 +1285,6 @@ class WorkflowyTester:
             return {
                 'url': url,
                 'user_name': user_name,
-                'user_dir': str(user_dir) if 'user_dir' in locals() else 'unknown',
                 'status': 'error',
                 'error': str(e)
             }
@@ -1460,6 +1461,10 @@ WORKFLOWY_URLS = [
     #     'url': 'https://workflowy.com/s/education-motivation/qigeXHtSSY5wwDC7',
     #     'name': 'education_motivation'
     # },
+    # {
+    #     'url': 'https://workflowy.com/s/new-pk-2-reading-cou/bjSyw1MzswiIsciE',
+    #     'name': 'new_pk_2_reading_course'
+    # }
 ]
 
 async def test_multiple_workflowy_urls():

@@ -7,6 +7,8 @@ import logging
 import re
 from datetime import datetime
 
+from aws_storage import AWSStorage
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,8 +20,9 @@ USER_ACCOUNT_MAPPING = {
     # "yuki_tanaka": 3,
     # "elijah_johnson": 5,
     # Add more users as needed
-    "agentic_frameworks": 2,
-    "education_motivation": 3,
+    # "agentic_frameworks": 2,
+    # "new_pk_2_reading_course": 2,
+    "new_pk_2_reading_course": 3,
 }
 
 class TweetPoster:
@@ -39,7 +42,10 @@ class TweetPoster:
             "Content-Type": "application/json"
         }
         self.users_dir = Path("users")
-        self.posting_mode = posting_mode  # Add this line
+        self.posting_mode = posting_mode
+        
+        # Add AWS storage for loading tweet data
+        self.storage = AWSStorage()
         
         # Validate posting mode
         if posting_mode not in ["single", "all"]:
@@ -958,6 +964,54 @@ class TweetPoster:
             logger.info(f"\n🎉 GRAND TOTAL: {total_tweets} tweets posted (1 priority thread per account)!")
         else:
             logger.info(f"\n🎉 GRAND TOTAL: {total_tweets} tweets in {total_threads} threads posted!")
+    
+    def load_latest_tweets_from_aws(self, user_name: str) -> List[Dict]:
+        """
+        Load latest tweets from S3 instead of local files
+        """
+        try:
+            # List objects in S3 to find latest file
+            response = self.storage.s3.list_objects_v2(
+                Bucket=self.storage.bucket_name,
+                Prefix=f"change_tweets/{user_name}/",
+                MaxKeys=1000
+            )
+            
+            if 'Contents' not in response:
+                print(f"📄 No tweet files found in S3 for {user_name}")
+                return []
+            
+            # Sort by last modified and get latest
+            latest_object = max(response['Contents'], key=lambda x: x['LastModified'])
+            
+            # Get the latest tweets file
+            obj = self.storage.s3.get_object(
+                Bucket=self.storage.bucket_name,
+                Key=latest_object['Key']
+            )
+            
+            tweets_data = json.loads(obj['Body'].read())
+            print(f"📄 Loaded {len(tweets_data)} tweets from S3: {latest_object['Key']}")
+            return tweets_data
+            
+        except Exception as e:
+            print(f"❌ Error loading tweets from AWS for {user_name}: {e}")
+            return []
+
+    def save_updated_tweets_to_aws(self, user_name: str, tweets: List[Dict]):
+        """
+        Save updated tweet data back to S3 after posting
+        """
+        try:
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            
+            # Save with updated status
+            updated_url = self.storage.save_change_tweets(user_name, tweets, f"{timestamp}_updated")
+            print(f"📄 Updated tweet statuses saved to S3: {updated_url}")
+            
+        except Exception as e:
+            print(f"❌ Error saving updated tweets to AWS for {user_name}: {e}")
 
 def preview_what_will_be_posted(target_users: Optional[List[str]] = None, posting_mode: str = "single"):
     """Preview which tweets will be posted without actually posting them."""
