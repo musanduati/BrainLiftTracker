@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twitter Automation Tools - Instructions</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f7f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1da1f2;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .tool-section {
+            background: #f8f9fa;
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #1da1f2;
+        }
+        .tool-section.approver {
+            border-left-color: #1da1f2;
+        }
+        .tool-section.follower {
+            border-left-color: #17bf63;
+        }
+        .tool-section h2 {
+            margin-top: 0;
+            color: #1da1f2;
+        }
+        .tool-section.follower h2 {
+            color: #17bf63;
+        }
+        .step {
+            background: white;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            border: 1px solid #e9ecef;
+        }
+        .step-number {
+            background: #1da1f2;
+            color: white;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .step-number.follower {
+            background: #17bf63;
+        }
+        .code {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        .copy-button {
+            background: #1da1f2;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        .copy-button.follower {
+            background: #17bf63;
+        }
+        .copy-button:hover {
+            background: #1991db;
+        }
+        .copy-button.follower:hover {
+            background: #15a052;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            background: #e9ecef;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .tab.active {
+            background: #1da1f2;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .tool-description {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .tool-description.follower {
+            background: #e8f5e8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐦 Twitter Automation Tools</h1>
+        
+        <div class="warning">
+            <strong>⚠️ Important:</strong> These tools are for educational purposes only. Please ensure you comply with Twitter's Terms of Service and use responsibly.
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('approver')">✅ Auto Approver</button>
+            <button class="tab" onclick="showTab('follower')">👥 List Follower</button>
+        </div>
+
+        <div id="approver" class="tab-content active">
+            <div class="tool-section approver">
+                <h2>✅ Auto Approver</h2>
+                <div class="tool-description">
+                    <strong>Purpose:</strong> Automatically approve follow requests on your private Twitter account.<br>
+                    <strong>Use Case:</strong> When you have many pending follow requests and want to approve them quickly.
+                </div>
+                
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <strong>Copy the bookmarklet code:</strong>
+                    <button class="copy-button" onclick="copyApproverBookmarklet()">📋 Copy Auto Approver Bookmarklet</button>
+                    <div class="code" id="approverBookmarkletCode">
+                        javascript:(function(){if(window.twitterAutoApprover){if(window.twitterAutoApprover.isRunning){window.twitterAutoApprover.stop();alert('Auto approval stopped!');}else{window.twitterAutoApprover.approveRequests();alert('Auto approval started!');}return;}function TwitterAutoApprover(config){this.config={delay:2000,maxApprovals:50,autoScroll:true};if(config){if(config.delay){this.config.delay=config.delay;}if(config.maxApprovals){this.config.maxApprovals=config.maxApprovals;}if(config.autoScroll!==undefined){this.config.autoScroll=config.autoScroll;}}this.approvedCount=0;this.isRunning=false;}TwitterAutoApprover.prototype.sleep=function(ms){var self=this;return new Promise(function(resolve){setTimeout(resolve,ms);});};TwitterAutoApprover.prototype.isOnFollowRequestsPage=function(){var url=window.location.href;var isTwitterPage=url.indexOf('twitter.com')!==-1||url.indexOf('x.com')!==-1;var popupModal=this.findFollowRequestsModal();return isTwitterPage&&popupModal!==null;};TwitterAutoApprover.prototype.findFollowRequestsModal=function(){var modalSelectors=['[data-testid="followRequestsModal"]','[data-testid="followerRequestsModal"]','[role="dialog"]','.modal','[aria-modal="true"]','div[style*="position: fixed"]','div[style*="z-index"]'];for(var i=0;i<modalSelectors.length;i++){var modal=document.querySelector(modalSelectors[i]);if(modal&&this.isFollowRequestsModal(modal)){return modal;}}var allModals=document.querySelectorAll('[role="dialog"], .modal, div[style*="position: fixed"]');for(var j=0;j<allModals.length;j++){if(this.isFollowRequestsModal(allModals[j])){return allModals[j];}}return null;};TwitterAutoApprover.prototype.isFollowRequestsModal=function(modal){var text=modal.textContent.toLowerCase();return text.indexOf('follower request')!==-1||text.indexOf('follow request')!==-1||(text.indexOf('accept')!==-1&&text.indexOf('decline')!==-1);};TwitterAutoApprover.prototype.findFollowRequestButtons=function(){var modal=this.findFollowRequestsModal();if(!modal){console.log('No follow requests modal found');return[];}var selectors=['button[data-testid*="accept"]','button[data-testid*="Accept"]','button[aria-label*="Accept"]','button[aria-label*="Approve"]','div[role="button"][data-testid*="accept"]'];var buttons=[];for(var i=0;i<selectors.length;i++){var found=modal.querySelectorAll(selectors[i]);if(found.length>0){buttons=Array.prototype.slice.call(found);break;}}if(buttons.length===0){var allButtons=modal.querySelectorAll('button, div[role="button"]');buttons=Array.prototype.slice.call(allButtons).filter(function(button){var text=button.textContent.toLowerCase();return text.indexOf('accept')!==-1||text.indexOf('approve')!==-1;});}console.log('Found '+buttons.length+' accept buttons in modal');return buttons;};TwitterAutoApprover.prototype.clickButton=function(button){var self=this;return this.sleep(500).then(function(){try{button.scrollIntoView({behavior:'smooth',block:'center'});return self.sleep(500);}catch(e){return self.sleep(500);}}).then(function(){try{if(button.click){button.click();}else if(button.dispatchEvent){var clickEvent=new MouseEvent('click',{bubbles:true,cancelable:true,view:window});button.dispatchEvent(clickEvent);}return true;}catch(error){console.error('Failed to click button:',error);return false;}});};TwitterAutoApprover.prototype.scrollForMoreRequests=function(){var self=this;if(!this.config.autoScroll){return Promise.resolve();}var modal=this.findFollowRequestsModal();if(!modal){return Promise.resolve();}var scrollableContainer=modal.querySelector('[data-testid="scrollContainer"]');if(!scrollableContainer){scrollableContainer=modal.querySelector('.scroll-container');}if(!scrollableContainer){scrollableContainer=modal;}if(scrollableContainer){var scrollHeight=scrollableContainer.scrollHeight;scrollableContainer.scrollTo(0,scrollHeight);return this.sleep(1000);}return Promise.resolve();};TwitterAutoApprover.prototype.approveRequests=function(){var self=this;if(!this.isOnFollowRequestsPage()){alert('Please open the follower requests popup first!');return Promise.resolve();}this.isRunning=true;console.log('Starting Twitter Auto Approver (Popup Mode)...');return this.processRequests();};TwitterAutoApprover.prototype.processRequests=function(){var self=this;if(!this.isRunning||this.approvedCount>=this.config.maxApprovals){if(!this.isRunning){console.log('Auto approval completed! Approved '+this.approvedCount+' requests.');}this.isRunning=false;return Promise.resolve();}var buttons=this.findFollowRequestButtons();if(buttons.length===0){console.log('No more follow request buttons found. Scrolling for more...');return this.scrollForMoreRequests().then(function(){return self.sleep(self.config.delay);}).then(function(){if(!self.findFollowRequestsModal()){console.log('Modal closed. Stopping auto approval.');self.isRunning=false;return;}return self.processRequests();});}console.log('Found '+buttons.length+' follow request buttons');return this.processButtons(buttons,0);};TwitterAutoApprover.prototype.processButtons=function(buttons,index){var self=this;if(index>=buttons.length||!this.isRunning||this.approvedCount>=this.config.maxApprovals){return this.scrollForMoreRequests().then(function(){return self.sleep(self.config.delay);}).then(function(){return self.processRequests();});}if(!this.findFollowRequestsModal()){console.log('Modal closed. Stopping auto approval.');this.isRunning=false;return Promise.resolve();}return this.clickButton(buttons[index]).then(function(success){if(success){self.approvedCount++;console.log('Approved follow request #'+self.approvedCount);}return self.sleep(self.config.delay);}).then(function(){return self.processButtons(buttons,index+1);});};TwitterAutoApprover.prototype.stop=function(){this.isRunning=false;console.log('Auto approval stopped.');};TwitterAutoApprover.prototype.getStatus=function(){return{isRunning:this.isRunning,approvedCount:this.approvedCount,maxApprovals:this.config.maxApprovals};};window.twitterAutoApprover=new TwitterAutoApprover();window.twitterAutoApprover.approveRequests();var statusDiv=document.createElement('div');statusDiv.id='auto-approver-status';statusDiv.style.cssText='position:fixed;top:10px;right:10px;background:#1da1f2;color:white;padding:10px;border-radius:5px;z-index:10000;font-family:Arial,sans-serif;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,0.3);';statusDiv.innerHTML='Auto Approver Running...';document.body.appendChild(statusDiv);var updateStatus=function(){if(window.twitterAutoApprover){var status=window.twitterAutoApprover.getStatus();if(status.isRunning){statusDiv.innerHTML='Running: '+status.approvedCount+'/'+status.maxApprovals+' approved';}else{statusDiv.innerHTML='Completed: '+status.approvedCount+' approved';setTimeout(function(){if(statusDiv.parentNode){statusDiv.parentNode.removeChild(statusDiv);}},5000);}}};setInterval(updateStatus,2000);updateStatus();alert('Twitter Auto Approver started! Click the bookmark again to stop.');})();
+                    </div>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <strong>Create a bookmark:</strong>
+                    <ul>
+                        <li>Right-click on your bookmarks bar</li>
+                        <li>Select <span class="highlight">"Add page"</span> or <span class="highlight">"Add bookmark"</span></li>
+                        <li>Name: <span class="highlight">Twitter Auto Approver</span></li>
+                        <li>URL: Paste the copied code from step 1</li>
+                        <li>Click <span class="highlight">"Save"</span></li>
+                    </ul>
+                </div>
+
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <strong>Use the bookmarklet:</strong>
+                    <ul>
+                        <li>Go to Twitter/X</li>
+                        <li>Open the <span class="highlight">follower requests popup</span></li>
+                        <li>Click your <span class="highlight">"Twitter Auto Approver"</span> bookmark</li>
+                        <li>Watch it automatically approve requests!</li>
+                        <li>Click the bookmark again to stop</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div id="follower" class="tab-content">
+            <div class="tool-section follower">
+                <h2>👥 List Follower</h2>
+                <div class="tool-description follower">
+                    <strong>Purpose:</strong> Automatically follow all members in a Twitter list.<br>
+                    <strong>Use Case:</strong> When you want to follow everyone in a curated list (e.g., industry experts, influencers, etc.).
+                </div>
+                
+                <div class="step">
+                    <span class="step-number follower">1</span>
+                    <strong>Copy the bookmarklet code:</strong>
+                    <button class="copy-button follower" onclick="copyFollowerBookmarklet()">📋 Copy List Follower Bookmarklet</button>
+                    <div class="code" id="followerBookmarkletCode">
+                        javascript:(function(){if(window.twitterListFollower){if(window.twitterListFollower.isRunning){window.twitterListFollower.stop();alert('List following stopped!');}else{window.twitterListFollower.followMembers();alert('List following started!');}return;}function TwitterListFollower(config){this.config={delay:3000,maxFollows:50,autoScroll:true};if(config){if(config.delay){this.config.delay=config.delay;}if(config.maxFollows){this.config.maxFollows=config.maxFollows;}if(config.autoScroll!==undefined){this.config.autoScroll=config.autoScroll;}}this.followedCount=0;this.isRunning=false;}TwitterListFollower.prototype.sleep=function(ms){var self=this;return new Promise(function(resolve){setTimeout(resolve,ms);});};TwitterListFollower.prototype.isOnListMembersPage=function(){var url=window.location.href;return(url.indexOf('twitter.com')!==-1||url.indexOf('x.com')!==-1)&&(url.indexOf('/lists/')!==-1&&url.indexOf('/members')!==-1||url.indexOf('/i/lists/')!==-1&&url.indexOf('/members')!==-1);};TwitterListFollower.prototype.findFollowButtons=function(){var selectors=['button[data-testid="follow"]','button[data-testid="unfollow"]','div[data-testid="follow"]','div[data-testid="unfollow"]','button[aria-label*="Follow"]','button[aria-label*="Unfollow"]','div[role="button"][data-testid*="follow"]','div[role="button"][aria-label*="Follow"]'];var buttons=[];for(var i=0;i<selectors.length;i++){var found=document.querySelectorAll(selectors[i]);if(found.length>0){buttons=Array.prototype.slice.call(found);break;}}if(buttons.length===0){var allButtons=document.querySelectorAll('button, div[role="button"]');buttons=Array.prototype.slice.call(allButtons).filter(function(button){var text=button.textContent.toLowerCase();var ariaLabel=button.getAttribute('aria-label')||'';return text.indexOf('follow')!==-1&&text.indexOf('unfollow')===-1||ariaLabel.indexOf('follow')!==-1&&ariaLabel.indexOf('unfollow')===-1;});}buttons=buttons.filter(function(button){var text=button.textContent.toLowerCase();var ariaLabel=button.getAttribute('aria-label')||'';return text.indexOf('following')===-1&&text.indexOf('unfollow')===-1&&ariaLabel.indexOf('following')===-1&&ariaLabel.indexOf('unfollow')===-1;});console.log('Found '+buttons.length+' follow buttons');return buttons;};TwitterListFollower.prototype.clickFollowButton=function(button){var self=this;return this.sleep(500).then(function(){try{button.scrollIntoView({behavior:'smooth',block:'center'});return self.sleep(500);}catch(e){return self.sleep(500);}}).then(function(){try{if(button.click){button.click();}else if(button.dispatchEvent){var clickEvent=new MouseEvent('click',{bubbles:true,cancelable:true,view:window});button.dispatchEvent(clickEvent);}return true;}catch(error){console.error('Failed to click follow button:',error);return false;}});};TwitterListFollower.prototype.scrollForMoreMembers=function(){var self=this;if(!this.config.autoScroll){return Promise.resolve();}var scrollHeight=document.documentElement.scrollHeight;window.scrollTo(0,scrollHeight);return this.sleep(2000);};TwitterListFollower.prototype.followMembers=function(){var self=this;if(!this.isOnListMembersPage()){alert('Please navigate to a Twitter list members page first!');return Promise.resolve();}this.isRunning=true;console.log('Starting Twitter List Follower...');return this.processFollows();};TwitterListFollower.prototype.processFollows=function(){var self=this;if(!this.isRunning||this.followedCount>=this.config.maxFollows){if(!this.isRunning){console.log('List following completed! Followed '+this.followedCount+' members.');}this.isRunning=false;return Promise.resolve();}var buttons=this.findFollowButtons();if(buttons.length===0){console.log('No more follow buttons found. Scrolling for more...');return this.scrollForMoreMembers().then(function(){return self.sleep(self.config.delay);}).then(function(){return self.processFollows();});}console.log('Found '+buttons.length+' follow buttons');return this.processButtons(buttons,0);};TwitterListFollower.prototype.processButtons=function(buttons,index){var self=this;if(index>=buttons.length||!this.isRunning||this.followedCount>=this.config.maxFollows){return this.scrollForMoreMembers().then(function(){return self.sleep(self.config.delay);}).then(function(){return self.processFollows();});}return this.clickFollowButton(buttons[index]).then(function(success){if(success){self.followedCount++;console.log('Followed member #'+self.followedCount);}return self.sleep(self.config.delay);}).then(function(){return self.processButtons(buttons,index+1);});};TwitterListFollower.prototype.stop=function(){this.isRunning=false;console.log('List following stopped.');};TwitterListFollower.prototype.getStatus=function(){return{isRunning:this.isRunning,followedCount:this.followedCount,maxFollows:this.config.maxFollows};};window.twitterListFollower=new TwitterListFollower();window.twitterListFollower.followMembers();var statusDiv=document.createElement('div');statusDiv.id='list-follower-status';statusDiv.style.cssText='position:fixed;top:10px;right:10px;background:#17bf63;color:white;padding:10px;border-radius:5px;z-index:10000;font-family:Arial,sans-serif;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,0.3);';statusDiv.innerHTML='List Follower Running...';document.body.appendChild(statusDiv);var updateStatus=function(){if(window.twitterListFollower){var status=window.twitterListFollower.getStatus();if(status.isRunning){statusDiv.innerHTML='Running: '+status.followedCount+'/'+status.maxFollows+' followed';}else{statusDiv.innerHTML='Completed: '+status.followedCount+' followed';setTimeout(function(){if(statusDiv.parentNode){statusDiv.parentNode.removeChild(statusDiv);}},5000);}}};setInterval(updateStatus,2000);updateStatus();alert('Twitter List Follower started! Click the bookmark again to stop.');})();
+                    </div>
+                </div>
+
+                <div class="step">
+                    <span class="step-number follower">2</span>
+                    <strong>Create a bookmark:</strong>
+                    <ul>
+                        <li>Right-click on your bookmarks bar</li>
+                        <li>Select <span class="highlight">"Add page"</span> or <span class="highlight">"Add bookmark"</span></li>
+                        <li>Name: <span class="highlight">Twitter List Follower</span></li>
+                        <li>URL: Paste the copied code from step 1</li>
+                        <li>Click <span class="highlight">"Save"</span></li>
+                    </ul>
+                </div>
+
+                <div class="step">
+                    <span class="step-number follower">3</span>
+                    <strong>Use the bookmarklet:</strong>
+                    <ul>
+                        <li>Go to a <span class="highlight">Twitter list members page</span></li>
+                        <li>URL should look like: <code>https://twitter.com/i/lists/123456789/members</code></li>
+                        <li>Click your <span class="highlight">"Twitter List Follower"</span> bookmark</li>
+                        <li>Watch it automatically follow list members!</li>
+                        <li>Click the bookmark again to stop</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="success">
+            <strong>✅ Ready to use!</strong> Choose your preferred tool above. Both scripts work with Twitter's current interface.
+        </div>
+
+        <div class="tool-section">
+            <h2>🎯 How They Work</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <h3>✅ Auto Approver</h3>
+                    <ul>
+                        <li><strong>Detects</strong> the follower requests popup automatically</li>
+                        <li><strong>Finds</strong> "Accept" buttons within the popup</li>
+                        <li><strong>Clicks</strong> each button safely with delays</li>
+                        <li><strong>Scrolls</strong> within the popup to load more requests</li>
+                        <li><strong>Stops</strong> if the popup is closed</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3>👥 List Follower</h3>
+                    <ul>
+                        <li><strong>Detects</strong> list members page automatically</li>
+                        <li><strong>Finds</strong> "Follow" buttons for each member</li>
+                        <li><strong>Skips</strong> already followed users</li>
+                        <li><strong>Scrolls</strong> to load more list members</li>
+                        <li><strong>Shows</strong> progress in real-time</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="tool-section">
+            <h2>⚙️ Configuration Options</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <h3>Auto Approver Settings</h3>
+                    <div class="code">
+{
+    delay: 2000,           // Delay between approvals (ms)
+    maxApprovals: 50,      // Maximum approvals per session
+    autoScroll: true       // Auto-scroll for more requests
+}
+                    </div>
+                </div>
+                <div>
+                    <h3>List Follower Settings</h3>
+                    <div class="code">
+{
+    delay: 3000,           // Delay between follows (ms)
+    maxFollows: 50,        // Maximum follows per session
+    autoScroll: true       // Auto-scroll for more members
+}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => content.classList.remove('active'));
+            
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+        }
+
+        function copyApproverBookmarklet() {
+            const code = document.getElementById('approverBookmarkletCode').textContent;
+            copyToClipboard(code, 'Auto Approver bookmarklet copied!');
+        }
+
+        function copyFollowerBookmarklet() {
+            const code = document.getElementById('followerBookmarkletCode').textContent;
+            copyToClipboard(code, 'List Follower bookmarklet copied!');
+        }
+
+        function copyToClipboard(text, message) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert(message);
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert(message);
+            });
+        }
+    </script>
+</body>
+</html> 
