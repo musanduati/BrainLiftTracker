@@ -542,6 +542,7 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                 "change_type": "added",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -570,6 +571,7 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                 "change_type": "updated",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -597,6 +599,7 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                 "change_type": "deleted",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -850,6 +853,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 "change_type": "added",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -1189,8 +1193,18 @@ class WorkflowyTester:
         print(f"{'='*60}")
         
         try:
-            # Load previous state from DynamoDB
-            previous_state = self.storage.load_previous_state(user_name) if not first_run else {"dok4": [], "dok3": []}
+            # Load previous state from DynamoDB with validation
+            if not first_run:
+                previous_state = self.storage.load_previous_state(user_name)
+                # Ensure previous_state has the expected structure
+                if not isinstance(previous_state, dict):
+                    previous_state = {"dok4": [], "dok3": []}
+                if "dok4" not in previous_state:
+                    previous_state["dok4"] = []
+                if "dok3" not in previous_state:
+                    previous_state["dok3"] = []
+            else:
+                previous_state = {"dok4": [], "dok3": []}
             
             # Scrape content (unchanged)
             result = await self.scrape_workflowy(url, exclude_node_names)

@@ -48,7 +48,21 @@ class AWSStorage:
                 Key={'user_name': user_name}
             )
             item = response.get('Item', {})
-            return item.get('state', {"dok4": [], "dok3": []})
+            state = item.get('state', {"dok4": [], "dok3": []})
+            
+            # Ensure the state has the expected structure
+            if not isinstance(state, dict):
+                print(f"Warning: Invalid state format for {user_name}, resetting to default")
+                return {"dok4": [], "dok3": []}
+            
+            # Ensure both keys exist
+            if "dok4" not in state:
+                state["dok4"] = []
+            if "dok3" not in state:
+                state["dok3"] = []
+                
+            return state
+            
         except Exception as e:
             print(f"Error loading state for {user_name}: {e}")
             return {"dok4": [], "dok3": []}
