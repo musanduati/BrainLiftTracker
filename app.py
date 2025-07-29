@@ -888,8 +888,6 @@ def twitter_auth():
 @app.route('/api/v1/auth/callback', methods=['GET', 'POST'])
 def auth_callback():
     """Handle OAuth callback from Twitter (API endpoint version)"""
-    print("DEBUG: OAuth callback triggered!")
-    
     # For API endpoint, require API key
     if not check_api_key():
         return jsonify({'error': 'Invalid API key'}), 401
@@ -949,27 +947,6 @@ def auth_callback():
         }), 400
     
     tokens = response.json()
-    
-    # DEBUG: Log to file to ensure we capture it
-    import json
-    debug_info = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "has_refresh_token": "refresh_token" in tokens,
-        "token_keys": list(tokens.keys()),
-        "scope": tokens.get("scope", "NOT PROVIDED"),
-        "expires_in": tokens.get("expires_in", "NOT PROVIDED")
-    }
-    
-    # Write to log file
-    with open("logs/oauth_debug.log", "a") as f:
-        f.write(f"\n=== OAuth Debug {debug_info['timestamp']} ===\n")
-        f.write(json.dumps(debug_info, indent=2))
-        f.write(f"\nFull response: {json.dumps(tokens, indent=2)}\n")
-        f.write("="*50 + "\n")
-    
-    print(f"DEBUG: Token response logged to logs/oauth_debug.log")
-    print(f"DEBUG: Has refresh_token: {'refresh_token' in tokens}")
-    
     access_token = tokens['access_token']
     refresh_token = tokens.get('refresh_token')
     expires_in = tokens.get('expires_in', 7200)  # Default 2 hours
@@ -2397,22 +2374,6 @@ def auth_callback_redirect():
         return f"<h1>Token Exchange Failed</h1><p>Status: {response.status_code}</p><pre>{response.text}</pre>", 400
     
     tokens = response.json()
-    
-    # DEBUG: Log what Twitter returned
-    print(f"=== OAuth Token Response (Public Callback) ===")
-    print(f"Has refresh_token: {'refresh_token' in tokens}")
-    print(f"Token keys: {list(tokens.keys())}")
-    print(f"Scope: {tokens.get('scope', 'NOT PROVIDED')}")
-    print("=" * 40)
-    
-    # Also log to file
-    with open("logs/oauth_debug.log", "a") as f:
-        f.write(f"\n=== OAuth Debug (Public Callback) {datetime.utcnow().isoformat()} ===\n")
-        f.write(f"Has refresh_token: {'refresh_token' in tokens}\n")
-        f.write(f"Token keys: {list(tokens.keys())}\n")
-        f.write(f"Full response: {json.dumps(tokens, indent=2)}\n")
-        f.write("="*50 + "\n")
-    
     access_token = tokens['access_token']
     refresh_token = tokens.get('refresh_token')
     expires_in = tokens.get('expires_in', 7200)  # Default 2 hours
