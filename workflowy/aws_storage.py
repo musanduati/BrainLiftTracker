@@ -4,6 +4,9 @@ import json
 from typing import Dict, List, Optional
 from datetime import datetime
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class AWSStorage:
     def __init__(self):
@@ -11,13 +14,16 @@ class AWSStorage:
         self.dynamodb = boto3.resource('dynamodb')
         
         # Get from environment variables (set these manually in Lambda/EC2)
-        self.bucket_name = os.environ.get('WORKFLOWY_BUCKET', 'your-workflowy-bucket')
-        self.state_table_name = os.environ.get('STATE_TABLE', 'workflowy-state')
+        self.bucket_name = os.environ.get('WORKFLOWY_BUCKET', 'workflowy-content-test')
+        self.state_table_name = os.environ.get('STATE_TABLE', 'workflowy-state-table-test')
         self.state_table = self.dynamodb.Table(self.state_table_name)
     
     def save_scraped_content(self, user_name: str, content: str, timestamp: str) -> str:
         """Replace: user_dir / f"{user_name}_scraped_workflowy_{timestamp}.txt" """
-        key = f"scraped_content/{user_name}/{user_name}_scraped_workflowy_{timestamp}.txt"
+        # OLD: key = f"scraped_content/{user_name}/{user_name}_scraped_workflowy_{timestamp}.txt"
+        key = f"{user_name}/scraped_content/{user_name}_scraped_workflowy_{timestamp}.txt"
+
+        print("Bucket name: ", self.bucket_name)
         
         self.s3.put_object(
             Bucket=self.bucket_name,
@@ -30,7 +36,8 @@ class AWSStorage:
     
     def save_change_tweets(self, user_name: str, tweets: List[Dict], timestamp: str) -> str:
         """Replace: user_dir / f"{user_name}_change_tweets_{timestamp}.json" """
-        key = f"change_tweets/{user_name}/{user_name}_change_tweets_{timestamp}.json"
+        # OLD: key = f"change_tweets/{user_name}/{user_name}_change_tweets_{timestamp}.json"
+        key = f"{user_name}/change_tweets/{user_name}_change_tweets_{timestamp}.json"
         
         self.s3.put_object(
             Bucket=self.bucket_name,

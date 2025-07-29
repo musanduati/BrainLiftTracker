@@ -15,23 +15,18 @@ logger = logging.getLogger(__name__)
 
 # User to Account ID mapping
 USER_ACCOUNT_MAPPING = {
-    # "sanket_ghia": 2,
-    # "musa_nduati": 3,
-    # "yuki_tanaka": 3,
-    # "elijah_johnson": 5,
-    # Add more users as needed
     # "agentic_frameworks": 2,
     # "new_pk_2_reading_course": 2,
     "new_pk_2_reading_course": 3,
 }
 
 class TweetPoster:
-    def __init__(self, posting_mode: str = "single"):
+    def __init__(self, posting_mode: str = "all"):
         """
         Initialize TweetPoster.
         
         Args:
-            posting_mode: Either "single" (post only top priority thread) or "all" (post all threads)
+            posting_mode: Either "single" (for backward compatibility) or "all" - both now post all threads
         """
         # self.api_base = "http://localhost:5555/api/v1"
         # self.api_key = "2043adb52a7468621a9245c94d702e4bed5866b0ec52772f203286f823a50bbb"
@@ -47,7 +42,7 @@ class TweetPoster:
         # Add AWS storage for loading tweet data
         self.storage = AWSStorage()
         
-        # Validate posting mode
+        # Note: Both modes now post all threads - kept for backward compatibility
         if posting_mode not in ["single", "all"]:
             raise ValueError("posting_mode must be either 'single' or 'all'")
 
@@ -56,16 +51,49 @@ class TweetPoster:
         return USER_ACCOUNT_MAPPING.get(user_name)
 
     def get_available_users(self) -> List[str]:
-        """Get list of available users from the users directory."""
-        if not self.users_dir.exists():
-            return []
-        
-        users = []
-        for user_dir in self.users_dir.iterdir():
-            if user_dir.is_dir() and user_dir.name in USER_ACCOUNT_MAPPING:
-                users.append(user_dir.name)
-        
-        return sorted(users)
+        """Get list of available users by checking S3 for user data."""
+        try:
+            # List all prefixes in S3 to find users with data
+            response = self.storage.s3.list_objects_v2(
+                Bucket=self.storage.bucket_name,
+                Delimiter='/',  # This will give us top-level "directories" (prefixes)
+                MaxKeys=1000
+            )
+            
+            users = []
+            
+            # Get user names from S3 prefixes
+            if 'CommonPrefixes' in response:
+                for prefix_info in response['CommonPrefixes']:
+                    prefix = prefix_info['Prefix']
+                    # Extract user name (remove trailing slash)
+                    user_name = prefix.rstrip('/')
+                    
+                    # Check if user has valid account mapping and has tweet data
+                    if user_name in USER_ACCOUNT_MAPPING:
+                        # Verify the user has change_tweets data
+                        if self.user_has_tweet_data(user_name):
+                            users.append(user_name)
+            
+            logger.info(f"Found {len(users)} users with valid mappings and tweet data in S3")
+            return sorted(users)
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking S3 for available users: {e}")
+            # Fallback to users in mapping (if S3 fails, we can still try the mapped users)
+            return list(USER_ACCOUNT_MAPPING.keys())
+
+    def user_has_tweet_data(self, user_name: str) -> bool:
+        """Check if a user has tweet data in S3."""
+        try:
+            response = self.storage.s3.list_objects_v2(
+                Bucket=self.storage.bucket_name,
+                Prefix=f"{user_name}/change_tweets/",
+                MaxKeys=1
+            )
+            return 'Contents' in response and len(response['Contents']) > 0
+        except Exception:
+            return False
 
     def find_latest_tweet_file(self, user_name: str) -> Optional[Path]:
         """
@@ -238,13 +266,19 @@ class TweetPoster:
             tweet_id if successful, None if failed
         """
         url = f"{self.api_base}/tweet"
+        print("Creating tweet: ", text)
+        print("Account ID: ", account_id)
+
         payload = {
             "text": text,
             "account_id": account_id
         }
         logger.info("Tweet payload: ", payload)
+        print("Payload: ", payload)
         
         try:
+            print("URL: ", url)
+            print("Headers: ", self.headers)
             async with session.post(url, headers=self.headers, json=payload) as response:
                 if response.status == 201:
                     data = await response.json()
@@ -276,6 +310,10 @@ class TweetPoster:
             True if successful, False if failed
         """
         url = f"{self.api_base}/tweet/post/{tweet_id}"
+
+        print("Posting tweet: ", tweet_id)
+        print("URL: ", url)
+        print("Headers: ", self.headers)
         
         try:
             async with session.post(url, headers=self.headers) as response:
@@ -329,31 +367,6 @@ class TweetPoster:
             thread_groups[thread_id].sort(key=lambda x: x.get("thread_part", 1))
         
         return thread_groups
-
-    def prioritize_tweets(self, tweets: List[Dict]) -> List[Dict]:
-        """
-        Prioritize tweets for posting:
-        1. DOK4 over DOK3
-        2. ADDED over UPDATED over DELETED
-        3. Higher similarity scores for UPDATED tweets
-        """
-        def priority_score(tweet):
-            section_score = 100 if tweet.get("section") == "DOK4" else 50
-            
-            change_type = tweet.get("change_type", "added")
-            if change_type == "added":
-                type_score = 30
-            elif change_type == "updated":
-                type_score = 20
-                # Add similarity bonus for updates
-                similarity = tweet.get("similarity_score", 0)
-                type_score += similarity * 10
-            else:  # deleted
-                type_score = 10
-            
-            return section_score + type_score
-        
-        return sorted(tweets, key=priority_score, reverse=True)
 
     async def process_single_thread_for_user(self, session: aiohttp.ClientSession, 
                                            thread_tweets: List[Dict], 
@@ -639,7 +652,8 @@ class TweetPoster:
 
     async def process_user(self, session: aiohttp.ClientSession, user_name: str) -> Dict:
         """
-        Process tweets for a specific user with demo data integration.
+        Process tweets for a specific user with AWS data integration.
+        Now posts ALL detected changes without prioritization.
         """
         logger.info(f"{'='*50}")
         logger.info(f"PROCESSING USER: {user_name}")
@@ -657,36 +671,20 @@ class TweetPoster:
         
         logger.info(f"🎯 Account ID: {account_id}")
         
-        # Load session data (from test_workflowy.py output)
-        session_data = self.load_session_data(user_name)
-        
-        if not session_data:
-            # Fallback to old method
-            tweet_file = self.find_latest_tweet_file(user_name)
-            if not tweet_file:
-                logger.error(f"❌ No tweet files or session data found for user: {user_name}")
-                return {
-                    'user': user_name,
-                    'status': 'error',
-                    'error': 'No tweet files or session data found'
-                }
-            
-            # Load old format
-            all_tweets = self.load_tweet_data(tweet_file)
-            timestamp = self.extract_timestamp_from_filename(tweet_file)
-        else:
-            # Use new session data format
-            all_tweets = session_data["tweets"]
-            timestamp = session_data["session"]["timestamp"]
-            logger.info(f"📅 Processing session: {timestamp} (Run #{session_data['session']['run_number']})")
+        # Load tweet data from AWS S3 instead of local files
+        all_tweets = self.load_latest_tweets_from_aws(user_name)
         
         if not all_tweets:
-            logger.error(f"❌ No tweet data loaded for user: {user_name}")
+            logger.error(f"❌ No tweet data found in AWS S3 for user: {user_name}")
             return {
                 'user': user_name,
                 'status': 'error',
-                'error': 'No tweet data loaded'
+                'error': 'No tweet data found in AWS S3'
             }
+        
+        # Extract timestamp from the latest data (we'll use current time if not available)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        logger.info(f"📅 Processing AWS data for {user_name}, loaded {len(all_tweets)} tweets")
         
         # Check data format and convert if necessary
         compatible_tweets = []
@@ -731,7 +729,7 @@ class TweetPoster:
         
         logger.info(f"   Change types: {change_summary}")
         
-        # Group tweets by thread and prioritize
+        # Group tweets by thread
         thread_groups = self.group_tweets_by_thread(compatible_tweets)
         
         if not thread_groups:
@@ -742,140 +740,88 @@ class TweetPoster:
                 'error': 'No valid threads found'
             }
         
-        # Get all main tweets (first part of each thread) and prioritize them
-        main_tweets = []
-        for thread_id, thread_tweets in thread_groups.items():
-            if thread_tweets:
-                main_tweets.append(thread_tweets[0])  # First part of thread
+        # Post ALL threads without prioritization
+        logger.info(f"🚀 POSTING ALL CHANGES: Processing {len(thread_groups)} threads")
         
-        prioritized_main_tweets = self.prioritize_tweets(main_tweets)
+        successful_threads = []
+        failed_threads = []
+        total_tweets_posted = 0
         
-        if not prioritized_main_tweets:
-            logger.error(f"❌ No tweets to post for user: {user_name}")
-            return {
-                'user': user_name,
-                'status': 'error',
-                'error': 'No tweets to post'
-            }
+        # Process all threads in order (no prioritization)
+        for i, (thread_id, thread_tweets) in enumerate(thread_groups.items(), 1):
+            main_tweet = thread_tweets[0] if thread_tweets else {}
+            
+            logger.info(f"🧵 Thread {i}/{len(thread_groups)}: {thread_id}")
+            logger.info(f"   Section: {main_tweet.get('section')}")
+            logger.info(f"   Change type: {main_tweet.get('change_type')}")
+            logger.info(f"   Parts: {len(thread_tweets)}")
+            
+            if main_tweet.get('change_type') == 'updated':
+                similarity = main_tweet.get('similarity_score', 0)
+                logger.info(f"   Similarity: {similarity:.0%}")
+            
+            success = await self.process_single_thread_for_user(session, thread_tweets, account_id)
+            
+            if success:
+                successful_threads.append(thread_id)
+                total_tweets_posted += len(thread_tweets)
+                logger.info(f"   ✅ Thread {thread_id} posted successfully")
+            else:
+                failed_threads.append(thread_id)
+                logger.warning(f"   ❌ Thread {thread_id} failed to post")
+            
+            # Add delay between threads (except for the last one)
+            if i < len(thread_groups):
+                logger.info(f"   ⏱️ Waiting 5 seconds before next thread...")
+                await asyncio.sleep(5)
         
-        if self.posting_mode == "single":
-            # Post only the highest priority thread (current behavior)
-            top_tweet = prioritized_main_tweets[0]
-            top_thread_id = top_tweet.get("thread_id")
-            top_thread_tweets = thread_groups[top_thread_id]
-            
-            logger.info(f"🎯 SINGLE MODE: Selected thread: {top_thread_id}")
-            logger.info(f"   Section: {top_tweet.get('section')}")
-            logger.info(f"   Change type: {top_tweet.get('change_type')}")
-            logger.info(f"   Parts: {len(top_thread_tweets)}")
-            
-            success = await self.process_single_thread_for_user(session, top_thread_tweets, account_id)
-            
-            # Prepare results for single mode
-            results = {
-                'user': user_name,
-                'account_id': account_id,
-                'status': 'success' if success else 'partial_success',
-                'tweets_posted': len(top_thread_tweets) if success else 0,
-                'threads_posted': 1 if success else 0,
-                'section_used': top_tweet.get('section'),
-                'change_type': top_tweet.get('change_type'),
-                'thread_posted': top_thread_id if success else None,
-                'total_available_threads': len(thread_groups),
-                'session_id': timestamp,
-                'posting_mode': 'single'
-            }
-            
-        else:  # posting_mode == "all"
-            # Post all threads
-            logger.info(f"🚀 ALL MODE: Processing {len(prioritized_main_tweets)} threads")
-            
-            successful_threads = []
-            failed_threads = []
-            total_tweets_posted = 0
-            
-            for i, main_tweet in enumerate(prioritized_main_tweets, 1):
-                thread_id = main_tweet.get("thread_id")
-                thread_tweets = thread_groups[thread_id]
-                
-                logger.info(f"      🧵 Thread {i}/{len(prioritized_main_tweets)}: {thread_id}")
-                logger.info(f"      Section: {main_tweet.get('section')}")
-                logger.info(f"      Change type: {main_tweet.get('change_type')}")
-                logger.info(f"      Parts: {len(thread_tweets)}")
-                
-                if main_tweet.get('change_type') == 'updated':
-                    similarity = main_tweet.get('similarity_score', 0)
-                    logger.info(f"      Similarity: {similarity:.0%}")
-                
-                success = await self.process_single_thread_for_user(session, thread_tweets, account_id)
-                
-                if success:
-                    successful_threads.append(thread_id)
-                    total_tweets_posted += len(thread_tweets)
-                    logger.info(f"      ✅ Thread {thread_id} posted successfully")
-                else:
-                    failed_threads.append(thread_id)
-                    logger.warning(f"      ❌ Thread {thread_id} failed to post")
-                
-                # Add delay between threads (except for the last one)
-                if i < len(prioritized_main_tweets):
-                    logger.info(f"      ⏱️ Waiting 5 seconds before next thread...")
-                    await asyncio.sleep(5)
-            
-            # Prepare results for all mode
-            all_success = len(failed_threads) == 0
-            partial_success = len(successful_threads) > 0 and len(failed_threads) > 0
-            
-            results = {
-                'user': user_name,
-                'account_id': account_id,
-                'status': 'success' if all_success else ('partial_success' if partial_success else 'error'),
-                'tweets_posted': total_tweets_posted,
-                'threads_posted': len(successful_threads),
-                'threads_failed': len(failed_threads),
-                'successful_threads': successful_threads,
-                'failed_threads': failed_threads,
-                'total_available_threads': len(thread_groups),
-                'session_id': timestamp,
-                'posting_mode': 'all'
-            }
-            
-            logger.info(f"\n📊 ALL MODE SUMMARY for {user_name}:")
-            logger.info(f"   ✅ Successful threads: {len(successful_threads)}")
-            logger.info(f"   ❌ Failed threads: {len(failed_threads)}")
-            logger.info(f"   📝 Total tweets posted: {total_tweets_posted}")
+        # Prepare results
+        all_success = len(failed_threads) == 0
+        partial_success = len(successful_threads) > 0 and len(failed_threads) > 0
         
-        # Update historical timeline if we have session data
-        if session_data:
-            try:
-                self.update_historical_timeline(session_data, results)
-                logger.info(f"📊 Historical timeline updated for {user_name}")
-            except Exception as e:
-                logger.error(f"⚠️ Failed to update historical timeline: {e}")
+        results = {
+            'user': user_name,
+            'account_id': account_id,
+            'status': 'success' if all_success else ('partial_success' if partial_success else 'error'),
+            'tweets_posted': total_tweets_posted,
+            'threads_posted': len(successful_threads),
+            'threads_failed': len(failed_threads),
+            'successful_threads': successful_threads,
+            'failed_threads': failed_threads,
+            'total_available_threads': len(thread_groups),
+            'session_id': timestamp,
+            'posting_mode': 'all_changes'
+        }
         
-        # Save updated tweet data back to file (maintain backward compatibility)
-        # user_dir = self.users_dir / user_name
-        # timestamp_str = timestamp or datetime.now().strftime("%Y%m%d-%H%M%S")
-        # updated_file = user_dir / f"{user_name}_change_tweets_updated_{timestamp_str}.json"
+        logger.info(f"\n📊 POSTING SUMMARY for {user_name}:")
+        logger.info(f"   ✅ Successful threads: {len(successful_threads)}")
+        logger.info(f"   ❌ Failed threads: {len(failed_threads)}")
+        logger.info(f"   📝 Total tweets posted: {total_tweets_posted}")
         
-        # with open(updated_file, 'w', encoding='utf-8') as f:
-        #     json.dump(compatible_tweets, f, indent=2, ensure_ascii=False)
-        # logger.info(f"💾 Updated tweet data saved to {updated_file}")
+        # Historical timeline update removed since we're using AWS storage directly
+        # The main functionality (tweet posting) works without this tracking feature
+        
+        # Save updated tweet data back to S3 after posting
+        try:
+            self.save_updated_tweets_to_aws(user_name, compatible_tweets)
+            logger.info(f"💾 Updated tweet data saved to AWS S3 for {user_name}")
+        except Exception as e:
+            logger.error(f"⚠️ Failed to save updated tweet data to AWS: {e}")
         
         return results
 
     async def run(self, target_users: Optional[List[str]] = None, posting_mode: str = None):
         """
-        Main execution function.
+        Main execution function. Now posts ALL detected changes without prioritization.
         
         Args:
             target_users: List of specific users to process. If None, process all available users.
-            posting_mode: Override the instance posting mode if provided.
+            posting_mode: Kept for backward compatibility - all modes now post all changes.
         """
         # Use provided posting_mode or fall back to instance mode
         effective_mode = posting_mode or self.posting_mode
         
-        logger.info(f"🎬 Starting Tweet Posting Process (Change-based) - Mode: {effective_mode.upper()}")
+        logger.info(f"🎬 Starting Tweet Posting Process - POSTING ALL CHANGES")
         logger.info("=" * 50)
         
         # Determine which users to process
@@ -913,7 +859,7 @@ class TweetPoster:
                     await asyncio.sleep(3)
         
         # Final summary
-        logger.info("\n" + "=" * 50)
+        logger.info("=" * 50)
         logger.info("🏁 FINAL SUMMARY")
         logger.info("=" * 50)
         
@@ -928,20 +874,11 @@ class TweetPoster:
         if successful:
             logger.info(f"\n📊 SUCCESS DETAILS:")
             for result in successful:
-                mode = result.get('posting_mode', 'unknown')
-                if mode == 'single':
-                    section = result.get('section_used', 'unknown')
-                    change_type = result.get('change_type', 'unknown')
-                    tweets_posted = result.get('tweets_posted', 0)
-                    total_threads = result.get('total_available_threads', 0)
-                    logger.info(f"  {result['user']} (Account {result['account_id']}): {tweets_posted} tweets posted")
-                    logger.info(f"    SINGLE MODE: {section} {change_type} thread (1/{total_threads} available)")
-                else:  # all mode
-                    threads_posted = result.get('threads_posted', 0)
-                    tweets_posted = result.get('tweets_posted', 0)
-                    total_threads = result.get('total_available_threads', 0)
-                    logger.info(f"  {result['user']} (Account {result['account_id']}): {tweets_posted} tweets in {threads_posted} threads")
-                    logger.info(f"    ALL MODE: {threads_posted}/{total_threads} threads posted successfully")
+                threads_posted = result.get('threads_posted', 0)
+                tweets_posted = result.get('tweets_posted', 0)
+                total_threads = result.get('total_available_threads', 0)
+                logger.info(f"  {result['user']} (Account {result['account_id']}): {tweets_posted} tweets in {threads_posted} threads")
+                logger.info(f"    ALL CHANGES POSTED: {threads_posted}/{total_threads} threads posted successfully")
         
         if partial:
             logger.info(f"\n⚠️ PARTIAL SUCCESS DETAILS:")
@@ -960,10 +897,8 @@ class TweetPoster:
         total_tweets = sum(r.get('tweets_posted', 0) for r in successful + partial)
         total_threads = sum(r.get('threads_posted', 0) for r in successful + partial)
         
-        if self.posting_mode == "single":
-            logger.info(f"\n🎉 GRAND TOTAL: {total_tweets} tweets posted (1 priority thread per account)!")
-        else:
-            logger.info(f"\n🎉 GRAND TOTAL: {total_tweets} tweets in {total_threads} threads posted!")
+        logger.info(f"\n🎉 GRAND TOTAL: {total_tweets} tweets in {total_threads} threads posted!")
+        logger.info("📝 ALL DETECTED CHANGES HAVE BEEN POSTED!")
     
     def load_latest_tweets_from_aws(self, user_name: str) -> List[Dict]:
         """
@@ -973,7 +908,8 @@ class TweetPoster:
             # List objects in S3 to find latest file
             response = self.storage.s3.list_objects_v2(
                 Bucket=self.storage.bucket_name,
-                Prefix=f"change_tweets/{user_name}/",
+                # OLD: Prefix=f"change_tweets/{user_name}/",
+                Prefix=f"{user_name}/change_tweets/",
                 MaxKeys=1000
             )
             
@@ -1013,12 +949,11 @@ class TweetPoster:
         except Exception as e:
             print(f"❌ Error saving updated tweets to AWS for {user_name}: {e}")
 
-def preview_what_will_be_posted(target_users: Optional[List[str]] = None, posting_mode: str = "single"):
+def preview_what_will_be_posted(target_users: Optional[List[str]] = None, posting_mode: str = "all"):
     """Preview which tweets will be posted without actually posting them."""
     poster = TweetPoster(posting_mode=posting_mode)
     
-    mode_desc = "1 priority thread per account" if posting_mode == "single" else "ALL threads per account"
-    print(f"👀 PREVIEW: What will be posted ({mode_desc}) - Mode: {posting_mode.upper()}")
+    print(f"👀 PREVIEW: What will be posted (ALL CHANGES)")
     print("=" * 50)
     
     available_users = poster.get_available_users()
@@ -1074,38 +1009,25 @@ def preview_what_will_be_posted(target_users: Optional[List[str]] = None, postin
         thread_groups = poster.group_tweets_by_thread(all_tweets)
         
         if thread_groups:
-            # Get prioritized threads
-            main_tweets = []
-            for thread_id, thread_tweets in thread_groups.items():
-                if thread_tweets:
-                    main_tweets.append(thread_tweets[0])
+            print(f"\n🚀 Will post ALL {len(thread_groups)} threads:")
             
-            prioritized_main_tweets = poster.prioritize_tweets(main_tweets)
-            
-            if prioritized_main_tweets:
-                top_tweet = prioritized_main_tweets[0]
-                top_thread_id = top_tweet.get("thread_id")
-                top_thread_tweets = thread_groups[top_thread_id]
+            for i, (thread_id, thread_tweets) in enumerate(thread_groups.items(), 1):
+                main_tweet = thread_tweets[0] if thread_tweets else {}
                 
-                print(f"\n🎯 Will post TOP PRIORITY thread:")
-                print(f"   Thread ID: {top_thread_id}")
-                print(f"   Section: {top_tweet.get('section')}")
-                print(f"   Change type: {top_tweet.get('change_type')}")
-                print(f"   Parts: {len(top_thread_tweets)}")
+                print(f"\n   Thread {i}: {thread_id}")
+                print(f"      Section: {main_tweet.get('section')}")
+                print(f"      Change type: {main_tweet.get('change_type')}")
+                print(f"      Parts: {len(thread_tweets)}")
                 
-                if top_tweet.get('change_type') == 'updated':
-                    similarity = top_tweet.get('similarity_score', 0)
-                    print(f"   Similarity: {similarity:.0%}")
+                if main_tweet.get('change_type') == 'updated':
+                    similarity = main_tweet.get('similarity_score', 0)
+                    print(f"      Similarity: {similarity:.0%}")
                 
-                print(f"\n   Content preview:")
-                for i, tweet in enumerate(top_thread_tweets, 1):
+                print(f"\n      Content preview:")
+                for j, tweet in enumerate(thread_tweets, 1):
                     content = tweet.get("content_formatted", "")
-                    print(f"      Part {i}: {content[:80]}...")
-                    print(f"               Characters: {len(content)}")
-                
-                print(f"\n   Available threads: {len(thread_groups)} total")
-            else:
-                print(f"\n❌ No valid threads found for {user_name}")
+                    print(f"         Part {j}: {content[:80]}...")
+                    print(f"                  Characters: {len(content)}")
         else:
             print(f"\n❌ No threads available for {user_name}")
 
@@ -1114,7 +1036,7 @@ async def main():
     import sys
     
     args = sys.argv[1:]
-    posting_mode = "single"  # default
+    posting_mode = "all"  # default, now always posts all
     target_users = []
     
     # Parse command line arguments
@@ -1143,16 +1065,11 @@ async def main():
 if __name__ == "__main__":
     print("Tweet Poster for DOK Content (Change Detection)")
     print("Usage:")
-    print("  python post_tweets.py --mode single [user1] [user2]     # Post 1 priority thread per account (default)")
-    print("  python post_tweets.py --mode all [user1] [user2]        # Post all threads for each account")
-    print("  python post_tweets.py preview --mode single [user1]     # Preview single mode")
-    print("  python post_tweets.py preview --mode all [user1]        # Preview all mode")
-    print("  python post_tweets.py [user1] [user2]                   # Default to single mode")
-    print("  python post_tweets.py                                   # Process all users in single mode")
+    print("  python post_tweets.py [user1] [user2]                   # Post all changes for specified users")
+    print("  python post_tweets.py                                   # Post all changes for all users")
+    print("  python post_tweets.py preview [user1]                   # Preview what will be posted")
     print()
-    print("Posting Modes:")
-    print("  single: Post only the highest priority thread per user (current behavior)")
-    print("  all:    Post all available threads per user with 5-second delays")
+    print("NOTE: All detected changes will be posted (no prioritization)")
     print()
     print("Available users and account IDs:")
     for user, account_id in USER_ACCOUNT_MAPPING.items():
