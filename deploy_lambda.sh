@@ -12,7 +12,7 @@ mkdir package/
 
 # Install dependencies
 echo "📦 Installing dependencies..."
-pip install --target package/ aiohttp boto3 tenacity diff-match-patch
+pip install --target package/ aiohttp boto3 tenacity diff-match-patch dotenv
 
 # Copy your code files (they're directly in workflowy/ directory)
 echo "📄 Copying code files..."
