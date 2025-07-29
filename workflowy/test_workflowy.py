@@ -13,30 +13,43 @@ from typing import Any, Optional, List, Dict
 from datetime import datetime
 
 import aiohttp
-from pydantic import BaseModel
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 import diff_match_patch as dmp_module
 
+# Add AWS storage import
+from aws_storage import AWSStorage
+
 logger = logging.getLogger("workflowy_test")
 
-class AuxiliaryProject(BaseModel):
-    shareId: str
+# Replace with these simple classes:
+class AuxiliaryProject:
+    def __init__(self, shareId: str):
+        self.shareId = shareId
 
-class ProjectTreeData(BaseModel):
-    auxiliaryProjectTreeInfos: list[AuxiliaryProject]
+class ProjectTreeData:
+    def __init__(self, auxiliaryProjectTreeInfos: list):
+        self.auxiliaryProjectTreeInfos = [
+            AuxiliaryProject(info.get('shareId', '')) if isinstance(info, dict) else 
+            AuxiliaryProject(info.shareId) if hasattr(info, 'shareId') else
+            info 
+            for info in auxiliaryProjectTreeInfos
+        ]
 
-class InitializationData(BaseModel):
-    projectTreeData: ProjectTreeData
+class InitializationData:
+    def __init__(self, projectTreeData: dict):
+        self.projectTreeData = ProjectTreeData(
+            projectTreeData.get('auxiliaryProjectTreeInfos', [])
+        )
 
     def transform(self) -> list[str]:
         return [info.shareId for info in self.projectTreeData.auxiliaryProjectTreeInfos]
 
-class WorkflowyNode(BaseModel):
-    node_id: str
-    node_name: str
-    content: str
-    timestamp: float | None = None
+class WorkflowyNode:
+    def __init__(self, node_id: str, node_name: str, content: str, timestamp: float = None):
+        self.node_id = node_id
+        self.node_name = node_name
+        self.content = content
+        self.timestamp = timestamp
 
 def get_regex_matching_pattern(node_names: list[str] | str) -> re.Pattern:
     if isinstance(node_names, str):
@@ -189,7 +202,7 @@ def create_combined_content(main_content: str, sub_points: List[str]) -> str:
     
     return combined.strip()
 
-def split_content_for_twitter(content: str, max_chars: int = 240) -> List[str]:
+def split_content_for_twitter(content: str, max_chars: int = 25000) -> List[str]:
     """
     Split content into Twitter-sized chunks at sentence boundaries.
     Leaves room for thread indicators and formatting.
@@ -529,6 +542,7 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                 "change_type": "added",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -557,6 +571,7 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                 "change_type": "updated",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -584,6 +599,7 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                 "change_type": "deleted",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -837,6 +853,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 "change_type": "added",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -879,6 +896,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 "change_details": change_details,
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -907,6 +925,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 "change_type": "deleted",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "status": "pending",
                 "created_at": timestamp
             })
         tweet_counter += 1
@@ -920,6 +939,8 @@ class WorkflowyTester:
     def __init__(self):
         self._session: aiohttp.ClientSession | None = None
         self._default_timeout = aiohttp.ClientTimeout(total=10, connect=10, sock_connect=10, sock_read=10)
+        # Add AWS storage
+        self.storage = AWSStorage()
 
     async def get_session(self) -> aiohttp.ClientSession:
         """Get or create an aiohttp ClientSession."""
@@ -927,11 +948,11 @@ class WorkflowyTester:
             self._session = aiohttp.ClientSession(timeout=self._default_timeout)
         return self._session
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(),
-        retry=retry_if_exception_type(aiohttp.ClientError),
-    )
+    # @retry(
+    #     stop=stop_after_attempt(3),
+    #     wait=wait_exponential(),
+    #     retry=retry_if_exception_type(aiohttp.ClientError),
+    # )
     async def make_request(self, method: str, url: str, **kwargs) -> aiohttp.ClientResponse:
         """Makes an async HTTP request with retry logic."""
         timeout = kwargs.pop("timeout", None)
@@ -1150,37 +1171,42 @@ class WorkflowyTester:
 
     async def process_single_url(self, url_config: Dict, exclude_node_names: list[str] | None = None):
         """
-        Process a single URL and generate all associated files in user directory.
-        Supports change detection and tracking between runs.
+        Modified to use AWS storage instead of local files
         """
         url = url_config['url']
         custom_name = url_config.get('name')
         
-        # Generate user directory name
         if custom_name:
             user_name = custom_name
         else:
             user_name = extract_url_identifier(url)
         
-        # Create user directory
-        user_dir = create_user_directory(user_name)
-        
-        # Check if this is first run
-        first_run = is_first_run() or not (user_dir / "current_state.json").exists()
+        # Check if this is first run using AWS
+        first_run = self.storage.is_first_run(user_name)
         timestamp = get_timestamp()
         
         print(f"\n{'='*60}")
         print(f"PROCESSING: {url}")
-        print(f"USER DIRECTORY: {user_dir}")
+        print(f"USER: {user_name}")
         print(f"FIRST RUN: {first_run}")
         print(f"TIMESTAMP: {timestamp}")
         print(f"{'='*60}")
         
         try:
-            # Load previous state for comparison
-            previous_state = load_previous_state(user_dir) if not first_run else {"dok4": [], "dok3": []}
+            # Load previous state from DynamoDB with validation
+            if not first_run:
+                previous_state = self.storage.load_previous_state(user_name)
+                # Ensure previous_state has the expected structure
+                if not isinstance(previous_state, dict):
+                    previous_state = {"dok4": [], "dok3": []}
+                if "dok4" not in previous_state:
+                    previous_state["dok4"] = []
+                if "dok3" not in previous_state:
+                    previous_state["dok3"] = []
+            else:
+                previous_state = {"dok4": [], "dok3": []}
             
-            # Scrape content
+            # Scrape content (unchanged)
             result = await self.scrape_workflowy(url, exclude_node_names)
             
             print(f"\n📄 SCRAPING RESULTS:")
@@ -1188,11 +1214,9 @@ class WorkflowyTester:
             print(f"Node Name: {result.node_name}")
             print(f"Total Content Length: {len(result.content)} characters")
             
-            # Save full content with timestamp
-            full_content_file = user_dir / f"{user_name}_scraped_workflowy_{timestamp}.txt"
-            with open(full_content_file, "w", encoding="utf-8") as f:
-                f.write(result.content)
-            print(f"✅ Full content saved to '{full_content_file}'")
+            # Save full content to S3 instead of local file
+            content_s3_url = self.storage.save_scraped_content(user_name, result.content, timestamp)
+            print(f"✅ Full content saved to S3: {content_s3_url}")
             
             # Process DOK sections
             print(f"\n📋 PROCESSING DOK SECTIONS:")
@@ -1200,79 +1224,82 @@ class WorkflowyTester:
             current_state = {"dok4": [], "dok3": []}
             all_change_tweets = []
             
-            # Process DOK4
+            # DOK4 processing
             dok4_content = extract_single_dok_section(result.content, "DOK4")
             if dok4_content.strip():
                 dok4_points = parse_dok_points(dok4_content, "DOK4")
                 current_state["dok4"] = create_dok_state_from_points(dok4_points)
                 
                 if first_run:
-                    # First run - all content is "added"
-                    changes = {"added": current_state["dok4"], "updated": [], "deleted": []}
+                    # First run: just establish baseline, no tweets
+                    print(f"DOK4 Baseline: {len(current_state['dok4'])} points established (no tweets generated)")
                 else:
-                    # Compare with previous state
+                    # Subsequent runs: generate tweets for changes
                     changes = advanced_compare_dok_states(previous_state["dok4"], current_state["dok4"])
-                
-                # Generate change-based tweets
-                dok4_tweets = generate_advanced_change_tweets(changes, "DOK4", first_run)
-                all_change_tweets.extend(dok4_tweets)
-                
-                stats = changes.get("stats", {})
-                print(f"DOK4 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
+                    dok4_tweets = generate_advanced_change_tweets(changes, "DOK4", first_run)
+                    all_change_tweets.extend(dok4_tweets)
+                    
+                    stats = changes.get("stats", {})
+                    print(f"DOK4 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
             
-            # Process DOK3
+            # DOK3 processing
             dok3_content = extract_single_dok_section(result.content, "DOK3")
             if dok3_content.strip():
                 dok3_points = parse_dok_points(dok3_content, "DOK3")
                 current_state["dok3"] = create_dok_state_from_points(dok3_points)
                 
                 if first_run:
-                    changes = {"added": current_state["dok3"], "updated": [], "deleted": []}
+                    # First run: just establish baseline, no tweets
+                    print(f"DOK3 Baseline: {len(current_state['dok3'])} points established (no tweets generated)")
                 else:
+                    # Subsequent runs: generate tweets for changes
                     changes = advanced_compare_dok_states(previous_state["dok3"], current_state["dok3"])
-                
-                dok3_tweets = generate_advanced_change_tweets(changes, "DOK3", first_run)
-                all_change_tweets.extend(dok3_tweets)
-                
-                stats = changes.get("stats", {})
-                print(f"DOK3 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
+                    dok3_tweets = generate_advanced_change_tweets(changes, "DOK3", first_run)
+                    all_change_tweets.extend(dok3_tweets)
+                    
+                    stats = changes.get("stats", {})
+                    print(f"DOK3 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
             
-            # Save change-based tweets
-            tweets_file = None
+            # Save tweets to S3 only if there are tweets to save
+            tweets_s3_url = None
             if all_change_tweets:
-                tweets_file = user_dir / f"{user_name}_change_tweets_{timestamp}.json"
-                with open(tweets_file, "w", encoding="utf-8") as f:
-                    json.dump(all_change_tweets, f, indent=2, ensure_ascii=False)
-                print(f"✅ Change tweets saved to '{tweets_file}' ({len(all_change_tweets)} tweets)")
+                tweets_s3_url = self.storage.save_change_tweets(user_name, all_change_tweets, timestamp)
+                print(f"✅ Change tweets saved to S3: {tweets_s3_url} ({len(all_change_tweets)} tweets)")
                 
-                # Show preview
-                if all_change_tweets:
-                    first_tweet = all_change_tweets[0]
-                    print(f"   Preview: {first_tweet['content_formatted'][:100]}...")
+                first_tweet = all_change_tweets[0]
+                print(f"   Preview: {first_tweet['content_formatted'][:100]}...")
+            elif first_run:
+                print(f"ℹ️ First run: No tweets generated (baseline established)")
+            else:
+                print(f"ℹ️ No changes detected: No tweets generated")
             
-            # Save current state for next run
-            save_current_state(user_dir, current_state)
-            print(f"✅ Current state saved for next comparison")
+            # Save current state to DynamoDB
+            self.storage.save_current_state(user_name, current_state)
+            print(f"✅ Current state saved to DynamoDB")
             
             # Summary
             total_changes = len(all_change_tweets)
-            change_type = "FIRST RUN" if first_run else "INCREMENTAL UPDATE"
-            print(f"\n🎉 URL PROCESSING COMPLETE! ({change_type})")
-            print(f"📊 Generated {total_changes} change-based tweets for {user_name}")
+            if first_run:
+                change_type = "FIRST RUN (BASELINE ESTABLISHED)"
+                print(f"\n🎉 URL PROCESSING COMPLETE! ({change_type})")
+                print(f"📊 Baseline established for {user_name} - no tweets generated")
+                print(f"🔄 Future runs will detect and post changes to Twitter")
+            else:
+                change_type = "INCREMENTAL UPDATE"
+                print(f"\n🎉 URL PROCESSING COMPLETE! ({change_type})")
+                print(f"📊 Generated {total_changes} change-based tweets for {user_name}")
 
-            # Update the return statement
             return {
                 'url': url,
                 'user_name': user_name,
-                'user_dir': str(user_dir),
                 'status': 'success',
                 'is_first_run': first_run,
                 'total_change_tweets': total_changes,
                 'timestamp': timestamp,
                 'files_created': {
-                    'full_content': str(full_content_file),
-                    'change_tweets': str(tweets_file) if tweets_file else None,
-                    'state_file': str(user_dir / "current_state.json"),
+                    'full_content': content_s3_url,
+                    'change_tweets': tweets_s3_url,
+                    'state_location': f"DynamoDB:{self.storage.state_table_name}",
                 }
             }
             
@@ -1283,7 +1310,6 @@ class WorkflowyTester:
             return {
                 'url': url,
                 'user_name': user_name,
-                'user_dir': str(user_dir) if 'user_dir' in locals() else 'unknown',
                 'status': 'error',
                 'error': str(e)
             }
@@ -1337,144 +1363,40 @@ def get_next_run_number(user_name: str) -> int:
     
     return max(run_numbers, default=0) + 1
 
-def generate_demo_tweet_data(tweets: List[Dict], user_name: str, section: str, timestamp: str, run_number: int) -> List[Dict]:
-    """Convert tweet data to demo-compatible format."""
-    demo_tweets = []
-    
-    for tweet in tweets:
-        # Create realistic Twitter user data
-        username = user_name.replace("_", "")
-        display_name = user_name.replace("_", " ").title()
-        
-        demo_tweet = {
-            "id": tweet.get("id", f"tweet_{len(demo_tweets)+1}"),
-            "session_id": timestamp,
-            "run_number": run_number,
-            "user": {
-                "username": username,
-                "display_name": display_name,
-                "handle": f"@{username}",
-                "avatar": f"./assets/avatars/{user_name}.jpg",
-                "verified": False
-            },
-            "content": {
-                "text": tweet.get("content_formatted", ""),
-                "raw_text": tweet.get("content_raw", ""),
-                "character_count": tweet.get("character_count", len(tweet.get("content_formatted", "")))
-            },
-            "metadata": {
-                "section": section,
-                "change_type": tweet.get("change_type", "added"),
-                "similarity_score": tweet.get("similarity_score"),
-                "change_details": tweet.get("change_details"),
-                "logical_tweet_number": tweet.get("logical_tweet_number"),
-                "thread_id": tweet.get("thread_id"),
-                "thread_part": tweet.get("thread_part", 1),
-                "total_thread_parts": tweet.get("total_thread_parts", 1),
-                "is_main_tweet": tweet.get("is_main_tweet", True),
-                "parent_tweet_id": tweet.get("parent_tweet_id")
-            },
-            "timestamps": {
-                "created_at": tweet.get("created_at", datetime.now().isoformat()),
-                "scheduled_for": tweet.get("scheduled_for"),
-                "posted_at": tweet.get("posted_at")
-            },
-            "status": {
-                "current": tweet.get("status", "pending"),
-                "twitter_id": tweet.get("twitter_id"),
-                "posting_session": None
-            },
-            "engagement": {
-                "likes": 0,
-                "retweets": 0, 
-                "replies": 0,
-                "views": 0
-            }
-        }
-        demo_tweets.append(demo_tweet)
-    
-    return demo_tweets
-
-def save_session_data(user_name: str, timestamp: str, all_change_tweets: List[Dict], run_number: int):
-    """Save session data for demo purposes."""
-    demo_dir = create_demo_directory()
-    
-    # Process tweets by section
-    dok4_tweets = [t for t in all_change_tweets if t.get("section") == "DOK4"]
-    dok3_tweets = [t for t in all_change_tweets if t.get("section") == "DOK3"]
-    
-    # Generate demo-compatible data
-    demo_dok4 = generate_demo_tweet_data(dok4_tweets, user_name, "DOK4", timestamp, run_number)
-    demo_dok3 = generate_demo_tweet_data(dok3_tweets, user_name, "DOK3", timestamp, run_number)
-    
-    all_demo_tweets = demo_dok4 + demo_dok3
-    
-    # Create session metadata
-    session_data = {
-        "session": {
-            "id": timestamp,
-            "user": user_name,
-            "timestamp": timestamp,
-            "run_number": run_number,
-            "total_tweets": len(all_demo_tweets),
-            "sections_processed": ["DOK4", "DOK3"],
-            "change_summary": {
-                "added": len([t for t in all_change_tweets if t.get("change_type") == "added"]),
-                "updated": len([t for t in all_change_tweets if t.get("change_type") == "updated"]),
-                "deleted": len([t for t in all_change_tweets if t.get("change_type") == "deleted"])
-            }
-        },
-        "tweets": all_demo_tweets,
-        "user_info": {
-            "username": user_name.replace("_", ""),
-            "display_name": user_name.replace("_", " ").title(),
-            "handle": f"@{user_name.replace('_', '')}",
-            "avatar": f"./assets/avatars/{user_name}.jpg"
-        }
-    }
-    
-    # Save session file
-    session_file = demo_dir / "data" / f"session_{timestamp}_{user_name}.json"
-    with open(session_file, 'w', encoding='utf-8') as f:
-        json.dump(session_data, f, indent=2, ensure_ascii=False)
-    
-    print(f"💾 Demo session data saved to '{session_file}'")
-    
-    return session_data
-
 # Configuration for multiple URLs
-WORKFLOWY_URLS = [
-    # {
-    #     'url': 'https://workflowy.com/s/sanket-ghia/ehJL5sj6EXqV4LJR',
-    #     'name': 'sanket_ghia'
-    # },
-    # {
-    #     'url': 'https://workflowy.com/s/musa-nduati/m65mhjMinJVpppGF',
-    #     'name': 'musa_nduati'
-    # },
-    {
-        'url': 'https://workflowy.com/s/agentic-frameworks-i/5VJixY76Ppm2BXvk',
-        'name': 'agentic_frameworks'
-    },
-    # {
-    #     'url': 'https://workflowy.com/s/education-motivation/qigeXHtSSY5wwDC7',
-    #     'name': 'education_motivation'
-    # },
-]
+# WORKFLOWY_URLS = [
+#     {
+#         'url': 'https://workflowy.com/s/new-pk-2-reading-cou/bjSyw1MzswiIsciE',
+#         'name': 'new_pk_2_reading_course'
+#     }
+# ]
 
 async def test_multiple_workflowy_urls():
     """Test multiple Workflowy URLs and generate separate files for each."""
     
     print("🚀 MULTI-URL WORKFLOWY SCRAPER")
     print("="*60)
-    print(f"Processing {len(WORKFLOWY_URLS)} URL(s)")
+    
+    # Load URLs from DynamoDB instead of hardcoded constant
+    storage = AWSStorage()
+    workflowy_urls = storage.get_workflowy_urls()
+    
+    if not workflowy_urls:
+        print("❌ No active Workflowy URLs found in DynamoDB!")
+        print("💡 Use storage.setup_initial_configuration() to set up initial data")
+        return
+    
+    print(f"📋 Found {len(workflowy_urls)} active URL(s) from DynamoDB:")
+    for url_config in workflowy_urls:
+        print(f"  • {url_config['name']}: {url_config['url']}")
+    
     print(f"Output directory structure: users/{{user_name}}/")
     
     results = []
     
     async with WorkflowyTester() as tester:
-        for i, url_config in enumerate(WORKFLOWY_URLS, 1):
-            print(f"\n🔄 PROCESSING URL {i}/{len(WORKFLOWY_URLS)}")
+        for i, url_config in enumerate(workflowy_urls, 1):
+            print(f"\n🔄 PROCESSING URL {i}/{len(workflowy_urls)}")
             
             result = await tester.process_single_url(
                 url_config,
@@ -1483,7 +1405,7 @@ async def test_multiple_workflowy_urls():
             results.append(result)
             
             # Add delay between URLs to be respectful
-            if i < len(WORKFLOWY_URLS):
+            if i < len(workflowy_urls):
                 print(f"⏱️ Waiting 2 seconds before next URL...")
                 await asyncio.sleep(2)
     
@@ -1499,13 +1421,20 @@ async def test_multiple_workflowy_urls():
     print(f"❌ Failed: {len(failed)}/{len(results)}")
     
     if successful:
-        print(f"\n📁 DIRECTORY STRUCTURE CREATED:")
+        print(f"\n📁 AWS STORAGE STRUCTURE CREATED:")
         for result in successful:
-            print(f"\n  📂 {result['user_dir']}/ ({result['total_change_tweets']} tweets)")
+            print(f"\n  👤 {result['user_name']} ({result['total_change_tweets']} tweets)")
             for file_type, filepath in result['files_created'].items():
                 if filepath:
-                    filename = Path(filepath).name
-                    print(f"    - {filename}")
+                    if file_type == 'state_location':
+                        print(f"    - State: {filepath}")
+                    else:
+                        # Extract just the key from S3 URL for display
+                        if filepath.startswith('s3://'):
+                            key = filepath.split('/', 3)[-1] if '/' in filepath else filepath
+                            print(f"    - {file_type}: s3://.../.../{key.split('/')[-1]}")
+                        else:
+                            print(f"    - {file_type}: {filepath}")
     
     if failed:
         print(f"\n❌ FAILED URLS:")
@@ -1514,12 +1443,15 @@ async def test_multiple_workflowy_urls():
     
     total_tweets = sum(r.get('total_change_tweets', 0) for r in successful)
     print(f"\n🎉 GRAND TOTAL: {total_tweets} tweets generated!")
-    print(f"📂 Check the 'users/' directory for all generated files")
+    print(f"☁️ Check your S3 bucket and DynamoDB table for all generated content")
 
 async def test_single_url():
     """Test with a single URL (for compatibility)."""
-    if WORKFLOWY_URLS:
-        url_config = WORKFLOWY_URLS[0]
+    storage = AWSStorage()
+    workflowy_urls = storage.get_workflowy_urls()
+    
+    if workflowy_urls:
+        url_config = workflowy_urls[0]
         
         async with WorkflowyTester() as tester:
             await tester.process_single_url(
@@ -1527,7 +1459,8 @@ async def test_single_url():
                 exclude_node_names=["SpikyPOVs", "Private Notes"]
             )
     else:
-        print("❌ No URLs configured in WORKFLOWY_URLS")
+        print("❌ No URLs configured in DynamoDB")
+        print("💡 Use storage.setup_initial_configuration() to set up initial data")
 
 if __name__ == "__main__":
     print("Workflowy Scraper Test")

@@ -6,3 +6,4 @@ aiohttp==3.11.10
 pydantic==2.10.6
 tenacity==8.2.3
 diff-match-patch==20241021
+boto3==1.39.15
