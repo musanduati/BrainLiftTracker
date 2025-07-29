@@ -2376,6 +2376,10 @@ def auth_callback_redirect():
     tokens = response.json()
     access_token = tokens['access_token']
     refresh_token = tokens.get('refresh_token')
+    expires_in = tokens.get('expires_in', 7200)  # Default 2 hours
+    
+    # Calculate token expiry time (with 5 minute buffer)
+    token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in - 300)
     
     # Get user info
     user_response = requests.get(
@@ -2401,19 +2405,46 @@ def auth_callback_redirect():
     ).fetchone()
     
     if existing:
-        # Update existing account
-        conn.execute(
-            'UPDATE twitter_account SET access_token = ?, refresh_token = ?, status = ?, updated_at = ? WHERE username = ?',
-            (encrypted_access_token, encrypted_refresh_token, 'active', datetime.utcnow().isoformat(), username)
-        )
+        # Update existing account with token metadata
+        conn.execute('''
+            UPDATE twitter_account 
+            SET access_token = ?, 
+                refresh_token = ?, 
+                status = ?, 
+                token_expires_at = ?,
+                last_token_refresh = ?,
+                refresh_failure_count = 0,
+                updated_at = ? 
+            WHERE username = ?
+        ''', (
+            encrypted_access_token, 
+            encrypted_refresh_token, 
+            'active', 
+            token_expires_at.isoformat(),
+            datetime.utcnow().isoformat(),
+            datetime.utcnow().isoformat(), 
+            username
+        ))
         account_id = existing['id']
         message = f"Account @{username} has been re-authorized successfully!"
     else:
-        # Create new account
-        cursor = conn.execute(
-            'INSERT INTO twitter_account (username, access_token, access_token_secret, refresh_token, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            (username, encrypted_access_token, None, encrypted_refresh_token, 'active', datetime.utcnow().isoformat())
-        )
+        # Create new account with token metadata
+        cursor = conn.execute('''
+            INSERT INTO twitter_account 
+            (username, access_token, access_token_secret, refresh_token, status, 
+             token_expires_at, last_token_refresh, refresh_failure_count, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            username, 
+            encrypted_access_token, 
+            None, 
+            encrypted_refresh_token, 
+            'active',
+            token_expires_at.isoformat(),
+            datetime.utcnow().isoformat(),
+            0,
+            datetime.utcnow().isoformat()
+        ))
         account_id = cursor.lastrowid
         message = f"Account @{username} has been authorized successfully!"
     

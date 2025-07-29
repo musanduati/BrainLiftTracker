@@ -1186,6 +1186,143 @@
 							"body": "{\n    \"accounts\": {\n        \"total\": 2,\n        \"active\": 2\n    },\n    \"tweets\": {\n        \"total\": 5,\n        \"pending\": 0,\n        \"posted\": 3,\n        \"failed\": 2\n    }\n}"
 						}
 					]
+				},
+				{
+					"name": "Check Token Health",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/token-health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"token-health"
+							]
+						},
+						"description": "Check health status of all account tokens"
+					},
+					"response": [
+						{
+							"name": "Token Health Status",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/token-health",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"token-health"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"summary\": {\n        \"total_accounts\": 5,\n        \"healthy\": 3,\n        \"expiring_soon\": 1,\n        \"expired\": 1,\n        \"refresh_failures\": 0\n    },\n    \"details\": {\n        \"healthy\": [],\n        \"expiring_soon\": [],\n        \"expired\": [],\n        \"refresh_failures\": [],\n        \"no_refresh_token\": []\n    },\n    \"timestamp\": \"2024-01-20T13:45:00\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Refresh Token (Manual)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/refresh-token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"refresh-token"
+							]
+						},
+						"description": "Manually refresh token for a specific account"
+					},
+					"response": []
+				},
+				{
+					"name": "Batch Refresh Tokens",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/refresh-tokens",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"refresh-tokens"
+							]
+						},
+						"description": "Refresh all tokens expiring within the next hour"
+					},
+					"response": []
+				},
+				{
+					"name": "Clear Refresh Failures",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/clear-failures",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"clear-failures"
+							]
+						},
+						"description": "Clear refresh failure count for an account"
+					},
+					"response": []
 				}
 			]
 		},
