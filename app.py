@@ -6,7 +6,12 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+# For backward compatibility with older Python versions
+try:
+    from datetime import UTC
+except ImportError:
+    UTC = timezone.utc
 import json
 import requests
 # tweepy import moved to where it's used for Python 3.13 compatibility
@@ -155,7 +160,7 @@ def refresh_twitter_token(account_id, retry_count=0):
             encrypted_refresh_token = fernet.encrypt(new_refresh_token.encode()).decode()
             
             # Calculate token expiry time (with 5 minute buffer)
-            token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in - 300)
+            token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in - 300)
             
             # Update account with new tokens and reset failure count
             conn.execute('''
@@ -171,8 +176,8 @@ def refresh_twitter_token(account_id, retry_count=0):
                 encrypted_access_token, 
                 encrypted_refresh_token, 
                 token_expires_at.isoformat(),
-                datetime.utcnow().isoformat(),
-                datetime.utcnow().isoformat(),
+                datetime.now(UTC).isoformat(),
+                datetime.now(UTC).isoformat(),
                 account_id
             ))
             
@@ -198,7 +203,7 @@ def refresh_twitter_token(account_id, retry_count=0):
                 SET refresh_failure_count = refresh_failure_count + 1,
                     updated_at = ?
                 WHERE id = ?
-            ''', (datetime.utcnow().isoformat(), account_id))
+            ''', (datetime.now(UTC).isoformat(), account_id))
             
             conn.commit()
             conn.close()
@@ -240,10 +245,10 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_
         print(f"[MOCK MODE] Would post tweet for {account['username']}: {tweet_text}")
         return True, mock_tweet_id
     
-    # Check if token needs proactive refresh (within 10 minutes of expiry)
+    # Check if token needs proactive refresh (within 15 minutes of expiry)
     if account['token_expires_at']:
         token_expires = datetime.fromisoformat(account['token_expires_at'])
-        if datetime.utcnow() >= token_expires - timedelta(minutes=10):
+        if datetime.now(UTC) >= token_expires - timedelta(minutes=15):
             print(f"Token for {account['username']} expires soon, refreshing proactively...")
             conn.close()
             success, result = refresh_twitter_token(account_id)
@@ -329,7 +334,7 @@ def health():
     """Health check - no auth required"""
     return jsonify({
         'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(UTC).isoformat(),
         'version': '2.0.0-simple'
     })
 
@@ -438,7 +443,7 @@ def set_account_type(account_id):
         # Update account type
         conn.execute(
             'UPDATE twitter_account SET account_type = ?, updated_at = ? WHERE id = ?',
-            (account_type, datetime.utcnow().isoformat(), account_id)
+            (account_type, datetime.now(UTC).isoformat(), account_id)
         )
         
         conn.commit()
@@ -468,7 +473,7 @@ def create_tweet():
         conn = get_db()
         cursor = conn.execute(
             'INSERT INTO tweet (twitter_account_id, content, status, created_at) VALUES (?, ?, ?, ?)',
-            (data['account_id'], data['text'], 'pending', datetime.utcnow().isoformat())
+            (data['account_id'], data['text'], 'pending', datetime.now(UTC).isoformat())
         )
         tweet_id = cursor.lastrowid
         conn.commit()
@@ -613,7 +618,7 @@ def post_thread(thread_id):
                     '''UPDATE tweet 
                        SET status = ?, twitter_id = ?, posted_at = ?, reply_to_tweet_id = ?
                        WHERE id = ?''',
-                    ('posted', result, datetime.utcnow().isoformat(), previous_tweet_id, tweet['id'])
+                    ('posted', result, datetime.now(UTC).isoformat(), previous_tweet_id, tweet['id'])
                 )
                 conn.commit()
                 
@@ -862,7 +867,7 @@ def twitter_auth():
     conn = get_db()
     conn.execute(
         'INSERT INTO oauth_state (state, code_verifier, created_at) VALUES (?, ?, ?)',
-        (state, code_verifier, datetime.utcnow().isoformat())
+        (state, code_verifier, datetime.now(UTC).isoformat())
     )
     conn.commit()
     conn.close()
@@ -968,8 +973,8 @@ def auth_callback():
     encrypted_access_token = fernet.encrypt(access_token.encode()).decode()
     encrypted_refresh_token = fernet.encrypt(refresh_token.encode()).decode() if refresh_token else None
     
-    # Calculate token expiry time (with 5 minute buffer)
-    token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in - 300)
+    # Calculate token expiry time (store actual expiry, no buffer)
+    token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
     
     # Check if account exists
     existing = conn.execute(
@@ -994,8 +999,8 @@ def auth_callback():
             encrypted_refresh_token, 
             'active', 
             token_expires_at.isoformat(),
-            datetime.utcnow().isoformat(),
-            datetime.utcnow().isoformat(), 
+            datetime.now(UTC).isoformat(),
+            datetime.now(UTC).isoformat(), 
             username
         ))
         account_id = existing['id']
@@ -1013,9 +1018,9 @@ def auth_callback():
             encrypted_refresh_token, 
             'active',
             token_expires_at.isoformat(),
-            datetime.utcnow().isoformat(),
+            datetime.now(UTC).isoformat(),
             0,
-            datetime.utcnow().isoformat()
+            datetime.now(UTC).isoformat()
         ))
         account_id = cursor.lastrowid
     
@@ -1099,7 +1104,7 @@ def check_token_health():
             ORDER BY username
         ''').fetchall()
         
-        current_time = datetime.utcnow()
+        current_time = datetime.now(UTC)
         health_report = {
             'healthy': [],
             'expiring_soon': [],
@@ -1197,7 +1202,7 @@ def refresh_all_expiring_tokens():
         conn = get_db()
         
         # Get accounts with tokens expiring in the next hour
-        current_time = datetime.utcnow()
+        current_time = datetime.now(UTC)
         threshold_time = current_time + timedelta(hours=1)
         
         accounts = conn.execute('''
@@ -1271,7 +1276,7 @@ def clear_refresh_failures(account_id):
             SET refresh_failure_count = 0,
                 updated_at = ?
             WHERE id = ?
-        ''', (datetime.utcnow().isoformat(), account_id))
+        ''', (datetime.now(UTC).isoformat(), account_id))
         
         conn.commit()
         conn.close()
@@ -1311,7 +1316,7 @@ def post_tweet(tweet_id):
             # Update tweet status to posted
             conn.execute(
                 'UPDATE tweet SET status = ?, twitter_id = ?, posted_at = ? WHERE id = ?',
-                ('posted', result, datetime.utcnow().isoformat(), tweet_id)
+                ('posted', result, datetime.now(UTC).isoformat(), tweet_id)
             )
             conn.commit()
             conn.close()
@@ -1366,7 +1371,7 @@ def post_pending_tweets():
                 # Update to posted
                 conn.execute(
                     'UPDATE tweet SET status = ?, twitter_id = ?, posted_at = ? WHERE id = ?',
-                    ('posted', result, datetime.utcnow().isoformat(), tweet['id'])
+                    ('posted', result, datetime.now(UTC).isoformat(), tweet['id'])
                 )
                 results['posted'] += 1
                 results['details'].append({
@@ -1669,12 +1674,12 @@ def update_list(list_id):
         if 'name' in data:
             conn.execute(
                 'UPDATE twitter_list SET name = ?, updated_at = ? WHERE id = ?',
-                (data['name'], datetime.utcnow().isoformat(), list_id)
+                (data['name'], datetime.now(UTC).isoformat(), list_id)
             )
         if 'description' in data:
             conn.execute(
                 'UPDATE twitter_list SET description = ?, updated_at = ? WHERE id = ?',
-                (data['description'], datetime.utcnow().isoformat(), list_id)
+                (data['description'], datetime.now(UTC).isoformat(), list_id)
             )
         
         conn.commit()
@@ -2124,7 +2129,7 @@ def cleanup_tweets():
             params.extend(statuses)
         
         if days_old:
-            cutoff_date = (datetime.utcnow() - timedelta(days=days_old)).isoformat()
+            cutoff_date = (datetime.now(UTC) - timedelta(days=days_old)).isoformat()
             query += ' AND created_at < ?'
             params.append(cutoff_date)
         
@@ -2378,8 +2383,8 @@ def auth_callback_redirect():
     refresh_token = tokens.get('refresh_token')
     expires_in = tokens.get('expires_in', 7200)  # Default 2 hours
     
-    # Calculate token expiry time (with 5 minute buffer)
-    token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in - 300)
+    # Calculate token expiry time (store actual expiry, no buffer)
+    token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
     
     # Get user info
     user_response = requests.get(
@@ -2421,8 +2426,8 @@ def auth_callback_redirect():
             encrypted_refresh_token, 
             'active', 
             token_expires_at.isoformat(),
-            datetime.utcnow().isoformat(),
-            datetime.utcnow().isoformat(), 
+            datetime.now(UTC).isoformat(),
+            datetime.now(UTC).isoformat(), 
             username
         ))
         account_id = existing['id']
@@ -2441,9 +2446,9 @@ def auth_callback_redirect():
             encrypted_refresh_token, 
             'active',
             token_expires_at.isoformat(),
-            datetime.utcnow().isoformat(),
+            datetime.now(UTC).isoformat(),
             0,
-            datetime.utcnow().isoformat()
+            datetime.now(UTC).isoformat()
         ))
         account_id = cursor.lastrowid
         message = f"Account @{username} has been authorized successfully!"
