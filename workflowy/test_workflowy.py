@@ -1364,26 +1364,39 @@ def get_next_run_number(user_name: str) -> int:
     return max(run_numbers, default=0) + 1
 
 # Configuration for multiple URLs
-WORKFLOWY_URLS = [
-    {
-        'url': 'https://workflowy.com/s/new-pk-2-reading-cou/bjSyw1MzswiIsciE',
-        'name': 'new_pk_2_reading_course'
-    }
-]
+# WORKFLOWY_URLS = [
+#     {
+#         'url': 'https://workflowy.com/s/new-pk-2-reading-cou/bjSyw1MzswiIsciE',
+#         'name': 'new_pk_2_reading_course'
+#     }
+# ]
 
 async def test_multiple_workflowy_urls():
     """Test multiple Workflowy URLs and generate separate files for each."""
     
     print("🚀 MULTI-URL WORKFLOWY SCRAPER")
     print("="*60)
-    print(f"Processing {len(WORKFLOWY_URLS)} URL(s)")
+    
+    # Load URLs from DynamoDB instead of hardcoded constant
+    storage = AWSStorage()
+    workflowy_urls = storage.get_workflowy_urls()
+    
+    if not workflowy_urls:
+        print("❌ No active Workflowy URLs found in DynamoDB!")
+        print("💡 Use storage.setup_initial_configuration() to set up initial data")
+        return
+    
+    print(f"📋 Found {len(workflowy_urls)} active URL(s) from DynamoDB:")
+    for url_config in workflowy_urls:
+        print(f"  • {url_config['name']}: {url_config['url']}")
+    
     print(f"Output directory structure: users/{{user_name}}/")
     
     results = []
     
     async with WorkflowyTester() as tester:
-        for i, url_config in enumerate(WORKFLOWY_URLS, 1):
-            print(f"\n🔄 PROCESSING URL {i}/{len(WORKFLOWY_URLS)}")
+        for i, url_config in enumerate(workflowy_urls, 1):
+            print(f"\n🔄 PROCESSING URL {i}/{len(workflowy_urls)}")
             
             result = await tester.process_single_url(
                 url_config,
@@ -1392,7 +1405,7 @@ async def test_multiple_workflowy_urls():
             results.append(result)
             
             # Add delay between URLs to be respectful
-            if i < len(WORKFLOWY_URLS):
+            if i < len(workflowy_urls):
                 print(f"⏱️ Waiting 2 seconds before next URL...")
                 await asyncio.sleep(2)
     
@@ -1434,8 +1447,11 @@ async def test_multiple_workflowy_urls():
 
 async def test_single_url():
     """Test with a single URL (for compatibility)."""
-    if WORKFLOWY_URLS:
-        url_config = WORKFLOWY_URLS[0]
+    storage = AWSStorage()
+    workflowy_urls = storage.get_workflowy_urls()
+    
+    if workflowy_urls:
+        url_config = workflowy_urls[0]
         
         async with WorkflowyTester() as tester:
             await tester.process_single_url(
@@ -1443,7 +1459,8 @@ async def test_single_url():
                 exclude_node_names=["SpikyPOVs", "Private Notes"]
             )
     else:
-        print("❌ No URLs configured in WORKFLOWY_URLS")
+        print("❌ No URLs configured in DynamoDB")
+        print("💡 Use storage.setup_initial_configuration() to set up initial data")
 
 if __name__ == "__main__":
     print("Workflowy Scraper Test")

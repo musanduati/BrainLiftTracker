@@ -1,18 +1,10 @@
-# workflowy/lambda_handler.py - Updated to include tweet posting
+# workflowy/lambda_handler.py - Updated to use DynamoDB configuration
 import json
 import asyncio
 from test_workflowy import WorkflowyTester
 from post_tweets import TweetPoster
+from aws_storage import AWSStorage
 import os
-
-# URLs configuration - you can move this to Parameter Store later
-WORKFLOWY_URLS = [
-    {
-        'url': 'https://workflowy.com/s/new-pk-2-reading-cou/bjSyw1MzswiIsciE',
-        'name': 'new_pk_2_reading_course'
-    },
-    # Add more URLs as needed
-]
 
 def lambda_handler(event, context):
     """
@@ -55,13 +47,32 @@ def lambda_handler(event, context):
 async def process_and_post():
     """Process all URLs and then post tweets"""
     
-    # Step 1: Scrape Workflowy content
-    print("📊 STEP 1: Scraping Workflowy content...")
+    # Step 1: Get URLs from DynamoDB
+    print("📊 STEP 1: Loading configuration from DynamoDB...")
+    storage = AWSStorage()
+    workflowy_urls = storage.get_workflowy_urls()
+    
+    if not workflowy_urls:
+        print("❌ No active Workflowy URLs found in DynamoDB!")
+        return {
+            'scraping_results': [{
+                'status': 'error',
+                'error': 'No active Workflowy URLs configured in DynamoDB'
+            }],
+            'posting_results': []
+        }
+    
+    print(f"📋 Found {len(workflowy_urls)} active URL(s) to process")
+    for url_config in workflowy_urls:
+        print(f"  • {url_config['name']}: {url_config['url']}")
+    
+    # Step 2: Scrape Workflowy content
+    print("\n📊 STEP 2: Scraping Workflowy content...")
     scraping_results = []
     
     async with WorkflowyTester() as tester:
-        for i, url_config in enumerate(WORKFLOWY_URLS, 1):
-            print(f"\n🔄 SCRAPING URL {i}/{len(WORKFLOWY_URLS)}: {url_config['name']}")
+        for i, url_config in enumerate(workflowy_urls, 1):
+            print(f"\n🔄 SCRAPING URL {i}/{len(workflowy_urls)}: {url_config['name']}")
             
             result = await tester.process_single_url(
                 url_config,
@@ -70,12 +81,12 @@ async def process_and_post():
             scraping_results.append(result)
             
             # Add delay between URLs to be respectful
-            if i < len(WORKFLOWY_URLS):
+            if i < len(workflowy_urls):
                 print(f"⏱️ Waiting 2 seconds before next URL...")
                 await asyncio.sleep(2)
     
-    # Step 2: Post tweets for users that had new content
-    print(f"\n🐦 STEP 2: Posting tweets...")
+    # Step 3: Post tweets for users that had new content
+    print(f"\n🐦 STEP 3: Posting tweets...")
     posting_results = []
     
     # Get list of users who had content processed

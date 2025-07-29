@@ -1,4 +1,4 @@
-# aws_storage.py - New file to replace local file operations
+# aws_storage.py - Updated with configuration management
 import boto3
 import json
 from typing import Dict, List, Optional
@@ -17,10 +17,15 @@ class AWSStorage:
         self.bucket_name = os.environ.get('WORKFLOWY_BUCKET', 'workflowy-content-test')
         self.state_table_name = os.environ.get('STATE_TABLE', 'workflowy-state-table-test')
         self.state_table = self.dynamodb.Table(self.state_table_name)
+        
+        # Configuration tables
+        self.urls_table_name = os.environ.get('URLS_CONFIG_TABLE', 'workflowy-urls-config-test')
+        self.mapping_table_name = os.environ.get('USER_MAPPING_TABLE', 'workflowy-user-account-mapping-test')
+        self.urls_table = self.dynamodb.Table(self.urls_table_name)
+        self.mapping_table = self.dynamodb.Table(self.mapping_table_name)
     
     def save_scraped_content(self, user_name: str, content: str, timestamp: str) -> str:
         """Replace: user_dir / f"{user_name}_scraped_workflowy_{timestamp}.txt" """
-        # OLD: key = f"scraped_content/{user_name}/{user_name}_scraped_workflowy_{timestamp}.txt"
         key = f"{user_name}/scraped_content/{user_name}_scraped_workflowy_{timestamp}.txt"
 
         print("Bucket name: ", self.bucket_name)
@@ -36,7 +41,6 @@ class AWSStorage:
     
     def save_change_tweets(self, user_name: str, tweets: List[Dict], timestamp: str) -> str:
         """Replace: user_dir / f"{user_name}_change_tweets_{timestamp}.json" """
-        # OLD: key = f"change_tweets/{user_name}/{user_name}_change_tweets_{timestamp}.json"
         key = f"{user_name}/change_tweets/{user_name}_change_tweets_{timestamp}.json"
         
         self.s3.put_object(
@@ -94,6 +98,202 @@ class AWSStorage:
             return 'Item' not in response
         except:
             return True
+
+    # ============================================================================
+    # Configuration Management Methods
+    # ============================================================================
+    
+    def get_workflowy_urls(self) -> List[Dict]:
+        """
+        Get all active Workflowy URLs from DynamoDB.
+        
+        Returns:
+            List of dicts with 'url' and 'name' keys
+        """
+        try:
+            response = self.urls_table.scan(
+                FilterExpression='active = :active',
+                ExpressionAttributeValues={':active': True}
+            )
+            
+            urls = []
+            for item in response.get('Items', []):
+                urls.append({
+                    'url': item['url'],
+                    'name': item['name']
+                })
+            
+            return urls
+            
+        except Exception as e:
+            print(f"Error loading Workflowy URLs from DynamoDB: {e}")
+            print("Falling back to empty list")
+            return []
+    
+    def get_user_account_mapping(self) -> Dict[str, int]:
+        """
+        Get user to account ID mapping from DynamoDB.
+        
+        Returns:
+            Dict mapping user names to account IDs
+        """
+        try:
+            response = self.mapping_table.scan(
+                FilterExpression='active = :active',
+                ExpressionAttributeValues={':active': True}
+            )
+            
+            mapping = {}
+            for item in response.get('Items', []):
+                mapping[item['user_name']] = int(item['account_id'])
+            
+            return mapping
+            
+        except Exception as e:
+            print(f"Error loading user account mapping from DynamoDB: {e}")
+            print("Falling back to empty mapping")
+            return {}
+    
+    def add_workflowy_url(self, url: str, name: str, active: bool = True) -> bool:
+        """
+        Add a new Workflowy URL configuration.
+        
+        Args:
+            url: The Workflowy URL
+            name: Friendly name for the URL
+            active: Whether this URL should be processed
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Generate URL ID from name
+            url_id = name.lower().replace(' ', '_').replace('-', '_')
+            
+            self.urls_table.put_item(
+                Item={
+                    'url_id': url_id,
+                    'url': url,
+                    'name': name,
+                    'active': active,
+                    'created_at': datetime.now().isoformat(),
+                    'updated_at': datetime.now().isoformat()
+                }
+            )
+            print(f"✅ Added Workflowy URL: {name} -> {url}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error adding Workflowy URL: {e}")
+            return False
+    
+    def add_user_account_mapping(self, user_name: str, account_id: int, active: bool = True) -> bool:
+        """
+        Add a new user to account ID mapping.
+        
+        Args:
+            user_name: The user name (should match Workflowy URL name)
+            account_id: The Twitter account ID to use for posting
+            active: Whether this mapping should be used
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            self.mapping_table.put_item(
+                Item={
+                    'user_name': user_name,
+                    'account_id': account_id,
+                    'active': active,
+                    'created_at': datetime.now().isoformat(),
+                    'updated_at': datetime.now().isoformat()
+                }
+            )
+            print(f"✅ Added user mapping: {user_name} -> Account {account_id}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error adding user mapping: {e}")
+            return False
+    
+    def update_url_status(self, url_id: str, active: bool) -> bool:
+        """Update the active status of a Workflowy URL."""
+        try:
+            self.urls_table.update_item(
+                Key={'url_id': url_id},
+                UpdateExpression='SET active = :active, updated_at = :updated',
+                ExpressionAttributeValues={
+                    ':active': active,
+                    ':updated': datetime.now().isoformat()
+                }
+            )
+            print(f"✅ Updated URL {url_id} active status to {active}")
+            return True
+        except Exception as e:
+            print(f"❌ Error updating URL status: {e}")
+            return False
+    
+    def update_user_mapping_status(self, user_name: str, active: bool) -> bool:
+        """Update the active status of a user mapping."""
+        try:
+            self.mapping_table.update_item(
+                Key={'user_name': user_name},
+                UpdateExpression='SET active = :active, updated_at = :updated',
+                ExpressionAttributeValues={
+                    ':active': active,
+                    ':updated': datetime.now().isoformat()
+                }
+            )
+            print(f"✅ Updated user {user_name} mapping active status to {active}")
+            return True
+        except Exception as e:
+            print(f"❌ Error updating user mapping status: {e}")
+            return False
+
+    def setup_initial_configuration(self):
+        """
+        Setup initial configuration data from existing constants.
+        This is a one-time migration helper.
+        """
+        print("🔧 Setting up initial configuration in DynamoDB...")
+        
+        # Initial Workflowy URLs (from current WORKFLOWY_URLS constant)
+        initial_urls = [
+            {
+                'url': 'https://workflowy.com/s/new-pk-2-reading-cou/bjSyw1MzswiIsciE',
+                'name': 'new_pk_2_reading_course'
+            }
+        ]
+        
+        # Initial user mappings (from current USER_ACCOUNT_MAPPING constant)
+        initial_mappings = {
+            "new_pk_2_reading_course": 3,
+        }
+        
+        # Add URLs
+        for url_config in initial_urls:
+            self.add_workflowy_url(url_config['url'], url_config['name'])
+        
+        # Add user mappings
+        for user_name, account_id in initial_mappings.items():
+            self.add_user_account_mapping(user_name, account_id)
+        
+        print("✅ Initial configuration setup complete!")
+
+    def list_all_configurations(self):
+        """List all current configurations for debugging."""
+        print("\n📋 Current Workflowy URLs Configuration:")
+        urls = self.get_workflowy_urls()
+        for i, url_config in enumerate(urls, 1):
+            print(f"  {i}. {url_config['name']}: {url_config['url']}")
+        
+        print(f"\n🔗 Current User Account Mappings:")
+        mappings = self.get_user_account_mapping()
+        for user_name, account_id in mappings.items():
+            print(f"  • {user_name} -> Account {account_id}")
+        
+        if not urls and not mappings:
+            print("  (No configurations found)")
 
 
 

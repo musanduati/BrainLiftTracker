@@ -13,13 +13,6 @@ from aws_storage import AWSStorage
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# User to Account ID mapping
-USER_ACCOUNT_MAPPING = {
-    # "agentic_frameworks": 2,
-    # "new_pk_2_reading_course": 2,
-    "new_pk_2_reading_course": 3,
-}
-
 class TweetPoster:
     def __init__(self, posting_mode: str = "all"):
         """
@@ -28,8 +21,6 @@ class TweetPoster:
         Args:
             posting_mode: Either "single" (for backward compatibility) or "all" - both now post all threads
         """
-        # self.api_base = "http://localhost:5555/api/v1"
-        # self.api_key = "2043adb52a7468621a9245c94d702e4bed5866b0ec52772f203286f823a50bbb"
         self.api_base = "http://98.86.153.32/api/v1"
         self.api_key = "6b6fea7c92a74e005a3c59a0834948c7cab4f50be333a68e852f09314120243d"
         self.headers = {
@@ -39,16 +30,38 @@ class TweetPoster:
         self.users_dir = Path("users")
         self.posting_mode = posting_mode
         
-        # Add AWS storage for loading tweet data
+        # Add AWS storage for loading tweet data and configuration
         self.storage = AWSStorage()
+        
+        # Load user account mapping from DynamoDB
+        self._user_account_mapping = None
         
         # Note: Both modes now post all threads - kept for backward compatibility
         if posting_mode not in ["single", "all"]:
             raise ValueError("posting_mode must be either 'single' or 'all'")
 
     def get_account_id(self, user_name: str) -> Optional[int]:
-        """Get account ID for a user."""
-        return USER_ACCOUNT_MAPPING.get(user_name)
+        """Get account ID for a user from DynamoDB configuration."""
+        if self._user_account_mapping is None:
+            # Lazy load the mapping from DynamoDB
+            self._user_account_mapping = self.storage.get_user_account_mapping()
+            print(f"📋 Loaded user account mapping from DynamoDB: {self._user_account_mapping}")
+        
+        account_id = self._user_account_mapping.get(user_name)
+        if account_id is None:
+            print(f"❌ No account mapping found for user: {user_name}")
+            print(f"Available mappings: {list(self._user_account_mapping.keys())}")
+        
+        return account_id
+
+    def get_user_account_mapping(self) -> Dict[str, int]:
+        """Get the complete user account mapping from DynamoDB."""
+        if self._user_account_mapping is None:
+            # Lazy load the mapping from DynamoDB
+            self._user_account_mapping = self.storage.get_user_account_mapping()
+            print(f"📋 Loaded user account mapping from DynamoDB: {self._user_account_mapping}")
+        
+        return self._user_account_mapping
 
     def get_available_users(self) -> List[str]:
         """Get list of available users by checking S3 for user data."""
@@ -59,18 +72,24 @@ class TweetPoster:
                 Delimiter='/',  # This will give us top-level "directories" (prefixes)
                 MaxKeys=1000
             )
-            
+
+            print("Response: ", response)
             users = []
+            
+            # Get user account mapping from DynamoDB
+            user_mapping = self.get_user_account_mapping()
             
             # Get user names from S3 prefixes
             if 'CommonPrefixes' in response:
                 for prefix_info in response['CommonPrefixes']:
                     prefix = prefix_info['Prefix']
+                    print("Prefix: ", prefix)
                     # Extract user name (remove trailing slash)
                     user_name = prefix.rstrip('/')
+                    print("User name: ", user_name)
                     
                     # Check if user has valid account mapping and has tweet data
-                    if user_name in USER_ACCOUNT_MAPPING:
+                    if user_name in user_mapping:
                         # Verify the user has change_tweets data
                         if self.user_has_tweet_data(user_name):
                             users.append(user_name)
@@ -81,7 +100,7 @@ class TweetPoster:
         except Exception as e:
             logger.error(f"❌ Error checking S3 for available users: {e}")
             # Fallback to users in mapping (if S3 fails, we can still try the mapped users)
-            return list(USER_ACCOUNT_MAPPING.keys())
+            return list(self.get_user_account_mapping().keys())
 
     def user_has_tweet_data(self, user_name: str) -> bool:
         """Check if a user has tweet data in S3."""
@@ -1072,8 +1091,18 @@ if __name__ == "__main__":
     print("NOTE: All detected changes will be posted (no prioritization)")
     print()
     print("Available users and account IDs:")
-    for user, account_id in USER_ACCOUNT_MAPPING.items():
-        print(f"  {user}: Account {account_id}")
+    
+    # Load mapping from DynamoDB for display
+    try:
+        from aws_storage import AWSStorage
+        storage = AWSStorage()
+        user_mapping = storage.get_user_account_mapping()
+        for user, account_id in user_mapping.items():
+            print(f"  {user}: Account {account_id}")
+    except Exception as e:
+        print(f"  Error loading user mappings from DynamoDB: {e}")
+        print("  Make sure DynamoDB tables are set up with configuration data")
+    
     print()
     
     asyncio.run(main())
