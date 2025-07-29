@@ -888,6 +888,8 @@ def twitter_auth():
 @app.route('/api/v1/auth/callback', methods=['GET', 'POST'])
 def auth_callback():
     """Handle OAuth callback from Twitter (API endpoint version)"""
+    print("DEBUG: OAuth callback triggered!")
+    
     # For API endpoint, require API key
     if not check_api_key():
         return jsonify({'error': 'Invalid API key'}), 401
@@ -947,6 +949,27 @@ def auth_callback():
         }), 400
     
     tokens = response.json()
+    
+    # DEBUG: Log to file to ensure we capture it
+    import json
+    debug_info = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "has_refresh_token": "refresh_token" in tokens,
+        "token_keys": list(tokens.keys()),
+        "scope": tokens.get("scope", "NOT PROVIDED"),
+        "expires_in": tokens.get("expires_in", "NOT PROVIDED")
+    }
+    
+    # Write to log file
+    with open("logs/oauth_debug.log", "a") as f:
+        f.write(f"\n=== OAuth Debug {debug_info['timestamp']} ===\n")
+        f.write(json.dumps(debug_info, indent=2))
+        f.write(f"\nFull response: {json.dumps(tokens, indent=2)}\n")
+        f.write("="*50 + "\n")
+    
+    print(f"DEBUG: Token response logged to logs/oauth_debug.log")
+    print(f"DEBUG: Has refresh_token: {'refresh_token' in tokens}")
+    
     access_token = tokens['access_token']
     refresh_token = tokens.get('refresh_token')
     expires_in = tokens.get('expires_in', 7200)  # Default 2 hours
@@ -2374,8 +2397,28 @@ def auth_callback_redirect():
         return f"<h1>Token Exchange Failed</h1><p>Status: {response.status_code}</p><pre>{response.text}</pre>", 400
     
     tokens = response.json()
+    
+    # DEBUG: Log what Twitter returned
+    print(f"=== OAuth Token Response (Public Callback) ===")
+    print(f"Has refresh_token: {'refresh_token' in tokens}")
+    print(f"Token keys: {list(tokens.keys())}")
+    print(f"Scope: {tokens.get('scope', 'NOT PROVIDED')}")
+    print("=" * 40)
+    
+    # Also log to file
+    with open("logs/oauth_debug.log", "a") as f:
+        f.write(f"\n=== OAuth Debug (Public Callback) {datetime.utcnow().isoformat()} ===\n")
+        f.write(f"Has refresh_token: {'refresh_token' in tokens}\n")
+        f.write(f"Token keys: {list(tokens.keys())}\n")
+        f.write(f"Full response: {json.dumps(tokens, indent=2)}\n")
+        f.write("="*50 + "\n")
+    
     access_token = tokens['access_token']
     refresh_token = tokens.get('refresh_token')
+    expires_in = tokens.get('expires_in', 7200)  # Default 2 hours
+    
+    # Calculate token expiry time (with 5 minute buffer)
+    token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in - 300)
     
     # Get user info
     user_response = requests.get(
@@ -2401,19 +2444,46 @@ def auth_callback_redirect():
     ).fetchone()
     
     if existing:
-        # Update existing account
-        conn.execute(
-            'UPDATE twitter_account SET access_token = ?, refresh_token = ?, status = ?, updated_at = ? WHERE username = ?',
-            (encrypted_access_token, encrypted_refresh_token, 'active', datetime.utcnow().isoformat(), username)
-        )
+        # Update existing account with token metadata
+        conn.execute('''
+            UPDATE twitter_account 
+            SET access_token = ?, 
+                refresh_token = ?, 
+                status = ?, 
+                token_expires_at = ?,
+                last_token_refresh = ?,
+                refresh_failure_count = 0,
+                updated_at = ? 
+            WHERE username = ?
+        ''', (
+            encrypted_access_token, 
+            encrypted_refresh_token, 
+            'active', 
+            token_expires_at.isoformat(),
+            datetime.utcnow().isoformat(),
+            datetime.utcnow().isoformat(), 
+            username
+        ))
         account_id = existing['id']
         message = f"Account @{username} has been re-authorized successfully!"
     else:
-        # Create new account
-        cursor = conn.execute(
-            'INSERT INTO twitter_account (username, access_token, access_token_secret, refresh_token, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            (username, encrypted_access_token, None, encrypted_refresh_token, 'active', datetime.utcnow().isoformat())
-        )
+        # Create new account with token metadata
+        cursor = conn.execute('''
+            INSERT INTO twitter_account 
+            (username, access_token, access_token_secret, refresh_token, status, 
+             token_expires_at, last_token_refresh, refresh_failure_count, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            username, 
+            encrypted_access_token, 
+            None, 
+            encrypted_refresh_token, 
+            'active',
+            token_expires_at.isoformat(),
+            datetime.utcnow().isoformat(),
+            0,
+            datetime.utcnow().isoformat()
+        ))
         account_id = cursor.lastrowid
         message = f"Account @{username} has been authorized successfully!"
     
