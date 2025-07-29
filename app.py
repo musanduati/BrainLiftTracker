@@ -83,13 +83,143 @@ def decrypt_token(encrypted_token):
     except:
         return encrypted_token  # Return as-is if decryption fails
 
-def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None):
-    """Post a tweet to Twitter using the account's credentials
+def refresh_twitter_token(account_id, retry_count=0):
+    """Refresh an expired Twitter OAuth 2.0 token
+    
+    Args:
+        account_id: The database ID of the Twitter account
+        retry_count: Current retry attempt (for exponential backoff)
+    
+    Returns:
+        tuple: (success, new_access_token or error_message)
+    """
+    max_retries = 3
+    if retry_count >= max_retries:
+        return False, "Max refresh retries exceeded"
+    
+    conn = get_db()
+    
+    try:
+        # Get account with refresh token
+        account = conn.execute(
+            'SELECT * FROM twitter_account WHERE id = ?',
+            (account_id,)
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return False, "Account not found"
+        
+        if not account['refresh_token']:
+            conn.close()
+            return False, "No refresh token available"
+        
+        # Decrypt refresh token
+        refresh_token = decrypt_token(account['refresh_token'])
+        
+        # Prepare refresh request
+        token_url = 'https://api.twitter.com/2/oauth2/token'
+        
+        auth_string = f"{TWITTER_CLIENT_ID}:{TWITTER_CLIENT_SECRET}"
+        auth_bytes = auth_string.encode('ascii')
+        auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+        
+        headers = {
+            'Authorization': f'Basic {auth_b64}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        
+        data = {
+            'refresh_token': refresh_token,
+            'grant_type': 'refresh_token',
+            'client_id': TWITTER_CLIENT_ID
+        }
+        
+        # Add exponential backoff delay for retries
+        if retry_count > 0:
+            import time
+            delay = (2 ** retry_count) + (secrets.randbelow(1000) / 1000)
+            print(f"Retry {retry_count}/{max_retries} after {delay:.2f}s delay...")
+            time.sleep(delay)
+        
+        response = requests.post(token_url, headers=headers, data=data)
+        
+        if response.status_code == 200:
+            tokens = response.json()
+            new_access_token = tokens['access_token']
+            new_refresh_token = tokens.get('refresh_token', refresh_token)  # Sometimes a new refresh token is provided
+            expires_in = tokens.get('expires_in', 7200)  # Default 2 hours
+            
+            # Encrypt new tokens
+            encrypted_access_token = fernet.encrypt(new_access_token.encode()).decode()
+            encrypted_refresh_token = fernet.encrypt(new_refresh_token.encode()).decode()
+            
+            # Calculate token expiry time (with 5 minute buffer)
+            token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in - 300)
+            
+            # Update account with new tokens and reset failure count
+            conn.execute('''
+                UPDATE twitter_account 
+                SET access_token = ?, 
+                    refresh_token = ?, 
+                    token_expires_at = ?,
+                    last_token_refresh = ?,
+                    refresh_failure_count = 0,
+                    updated_at = ?
+                WHERE id = ?
+            ''', (
+                encrypted_access_token, 
+                encrypted_refresh_token, 
+                token_expires_at.isoformat(),
+                datetime.utcnow().isoformat(),
+                datetime.utcnow().isoformat(),
+                account_id
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"Successfully refreshed token for account {account['username']}")
+            return True, new_access_token
+            
+        else:
+            # Handle refresh failure
+            error_data = response.json() if response.headers.get('content-type') == 'application/json' else {}
+            error_msg = error_data.get('error_description', f'HTTP {response.status_code}')
+            
+            # If it's a rate limit error, retry with backoff
+            if response.status_code == 429:
+                conn.close()
+                return refresh_twitter_token(account_id, retry_count + 1)
+            
+            # Update failure count
+            conn.execute('''
+                UPDATE twitter_account 
+                SET refresh_failure_count = refresh_failure_count + 1,
+                    updated_at = ?
+                WHERE id = ?
+            ''', (datetime.utcnow().isoformat(), account_id))
+            
+            conn.commit()
+            conn.close()
+            
+            print(f"Failed to refresh token for account {account_id}: {error_msg}")
+            return False, error_msg
+            
+    except Exception as e:
+        if conn:
+            conn.close()
+        print(f"Exception during token refresh: {str(e)}")
+        return False, str(e)
+
+def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_refresh=True):
+    """Post a tweet to Twitter using the account's credentials with automatic token refresh
     
     Args:
         account_id: The database ID of the Twitter account
         tweet_text: The text content of the tweet
         reply_to_tweet_id: Optional Twitter ID of the tweet to reply to (for threads)
+        retry_after_refresh: Whether to retry after refreshing token (prevents infinite loops)
     """
     conn = get_db()
     
@@ -109,6 +239,23 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None):
         mock_tweet_id = f"mock_{datetime.now().timestamp()}"
         print(f"[MOCK MODE] Would post tweet for {account['username']}: {tweet_text}")
         return True, mock_tweet_id
+    
+    # Check if token needs proactive refresh (within 10 minutes of expiry)
+    if account['token_expires_at']:
+        token_expires = datetime.fromisoformat(account['token_expires_at'])
+        if datetime.utcnow() >= token_expires - timedelta(minutes=10):
+            print(f"Token for {account['username']} expires soon, refreshing proactively...")
+            conn.close()
+            success, result = refresh_twitter_token(account_id)
+            if success:
+                # Re-fetch account with new token
+                conn = get_db()
+                account = conn.execute(
+                    'SELECT * FROM twitter_account WHERE id = ?', 
+                    (account_id,)
+                ).fetchone()
+            else:
+                print(f"Proactive refresh failed: {result}")
     
     try:
         # Decrypt tokens
@@ -143,6 +290,19 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None):
                 headers=headers,
                 json=data
             )
+            
+            if response.status_code == 401 and retry_after_refresh:
+                # Token expired, try to refresh
+                conn.close()
+                print(f"Access token expired for {account['username']}, attempting refresh...")
+                success, new_token = refresh_twitter_token(account_id)
+                
+                if success:
+                    # Retry the post with refreshed token
+                    print("Token refreshed successfully, retrying post...")
+                    return post_to_twitter(account_id, tweet_text, reply_to_tweet_id, retry_after_refresh=False)
+                else:
+                    return False, f"Token refresh failed: {new_token}"
             
             if response.status_code != 201:
                 conn.close()
@@ -789,6 +949,7 @@ def auth_callback():
     tokens = response.json()
     access_token = tokens['access_token']
     refresh_token = tokens.get('refresh_token')
+    expires_in = tokens.get('expires_in', 7200)  # Default 2 hours
     
     # Get user info
     user_response = requests.get(
@@ -807,6 +968,9 @@ def auth_callback():
     encrypted_access_token = fernet.encrypt(access_token.encode()).decode()
     encrypted_refresh_token = fernet.encrypt(refresh_token.encode()).decode() if refresh_token else None
     
+    # Calculate token expiry time (with 5 minute buffer)
+    token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in - 300)
+    
     # Check if account exists
     existing = conn.execute(
         'SELECT id FROM twitter_account WHERE username = ?',
@@ -814,18 +978,45 @@ def auth_callback():
     ).fetchone()
     
     if existing:
-        # Update existing account
-        conn.execute(
-            'UPDATE twitter_account SET access_token = ?, refresh_token = ?, status = ?, updated_at = ? WHERE username = ?',
-            (encrypted_access_token, encrypted_refresh_token, 'active', datetime.utcnow().isoformat(), username)
-        )
+        # Update existing account with token metadata
+        conn.execute('''
+            UPDATE twitter_account 
+            SET access_token = ?, 
+                refresh_token = ?, 
+                status = ?, 
+                token_expires_at = ?,
+                last_token_refresh = ?,
+                refresh_failure_count = 0,
+                updated_at = ? 
+            WHERE username = ?
+        ''', (
+            encrypted_access_token, 
+            encrypted_refresh_token, 
+            'active', 
+            token_expires_at.isoformat(),
+            datetime.utcnow().isoformat(),
+            datetime.utcnow().isoformat(), 
+            username
+        ))
         account_id = existing['id']
     else:
-        # Create new account
-        cursor = conn.execute(
-            'INSERT INTO twitter_account (username, access_token, access_token_secret, refresh_token, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            (username, encrypted_access_token, None, encrypted_refresh_token, 'active', datetime.utcnow().isoformat())
-        )
+        # Create new account with token metadata
+        cursor = conn.execute('''
+            INSERT INTO twitter_account 
+            (username, access_token, access_token_secret, refresh_token, status, 
+             token_expires_at, last_token_refresh, refresh_failure_count, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            username, 
+            encrypted_access_token, 
+            None, 
+            encrypted_refresh_token, 
+            'active',
+            token_expires_at.isoformat(),
+            datetime.utcnow().isoformat(),
+            0,
+            datetime.utcnow().isoformat()
+        ))
         account_id = cursor.lastrowid
     
     # Clean up oauth_state
@@ -888,6 +1079,209 @@ def get_stats():
             }
         })
     
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/accounts/token-health', methods=['GET'])
+def check_token_health():
+    """Check health status of all account tokens"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get all accounts with token info
+        accounts = conn.execute('''
+            SELECT id, username, status, token_expires_at, last_token_refresh, 
+                   refresh_failure_count, updated_at
+            FROM twitter_account
+            ORDER BY username
+        ''').fetchall()
+        
+        current_time = datetime.utcnow()
+        health_report = {
+            'healthy': [],
+            'expiring_soon': [],
+            'expired': [],
+            'refresh_failures': [],
+            'no_refresh_token': []
+        }
+        
+        for account in accounts:
+            account_info = {
+                'id': account['id'],
+                'username': account['username'],
+                'status': account['status'],
+                'last_refresh': account['last_token_refresh'],
+                'failure_count': account['refresh_failure_count'] or 0
+            }
+            
+            # Check if account has refresh issues
+            if account['refresh_failure_count'] and account['refresh_failure_count'] > 0:
+                account_info['health_status'] = 'refresh_failures'
+                health_report['refresh_failures'].append(account_info)
+                continue
+            
+            # Check token expiry
+            if account['token_expires_at']:
+                expires_at = datetime.fromisoformat(account['token_expires_at'])
+                time_until_expiry = expires_at - current_time
+                account_info['expires_at'] = account['token_expires_at']
+                account_info['time_until_expiry'] = str(time_until_expiry)
+                
+                if time_until_expiry < timedelta(minutes=0):
+                    account_info['health_status'] = 'expired'
+                    health_report['expired'].append(account_info)
+                elif time_until_expiry < timedelta(hours=1):
+                    account_info['health_status'] = 'expiring_soon'
+                    health_report['expiring_soon'].append(account_info)
+                else:
+                    account_info['health_status'] = 'healthy'
+                    health_report['healthy'].append(account_info)
+            else:
+                # No expiry info, check if it's an old OAuth 1.0 account
+                account_info['health_status'] = 'no_refresh_token'
+                health_report['no_refresh_token'].append(account_info)
+        
+        conn.close()
+        
+        summary = {
+            'total_accounts': len(accounts),
+            'healthy': len(health_report['healthy']),
+            'expiring_soon': len(health_report['expiring_soon']),
+            'expired': len(health_report['expired']),
+            'refresh_failures': len(health_report['refresh_failures']),
+            'no_refresh_token': len(health_report['no_refresh_token'])
+        }
+        
+        return jsonify({
+            'summary': summary,
+            'details': health_report,
+            'timestamp': current_time.isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/accounts/<int:account_id>/refresh-token', methods=['POST'])
+def manual_refresh_token(account_id):
+    """Manually refresh token for a specific account"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        success, result = refresh_twitter_token(account_id)
+        
+        if success:
+            return jsonify({
+                'message': 'Token refreshed successfully',
+                'account_id': account_id
+            })
+        else:
+            return jsonify({
+                'error': 'Token refresh failed',
+                'reason': result
+            }), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/accounts/refresh-tokens', methods=['POST'])
+def refresh_all_expiring_tokens():
+    """Refresh tokens for all accounts that are expired or expiring soon"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get accounts with tokens expiring in the next hour
+        current_time = datetime.utcnow()
+        threshold_time = current_time + timedelta(hours=1)
+        
+        accounts = conn.execute('''
+            SELECT id, username, token_expires_at, refresh_failure_count
+            FROM twitter_account
+            WHERE token_expires_at IS NOT NULL 
+            AND token_expires_at < ?
+            AND refresh_failure_count < 3
+            ORDER BY token_expires_at
+        ''', (threshold_time.isoformat(),)).fetchall()
+        
+        results = {
+            'total': len(accounts),
+            'success': 0,
+            'failed': 0,
+            'details': []
+        }
+        
+        for account in accounts:
+            account_detail = {
+                'id': account['id'],
+                'username': account['username'],
+                'token_expires_at': account['token_expires_at']
+            }
+            
+            success, message = refresh_twitter_token(account['id'])
+            
+            if success:
+                results['success'] += 1
+                account_detail['status'] = 'refreshed'
+            else:
+                results['failed'] += 1
+                account_detail['status'] = 'failed'
+                account_detail['error'] = message
+            
+            results['details'].append(account_detail)
+        
+        conn.close()
+        
+        return jsonify({
+            'message': f"Processed {results['total']} accounts",
+            'results': results,
+            'timestamp': current_time.isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/accounts/<int:account_id>/clear-failures', methods=['POST'])
+def clear_refresh_failures(account_id):
+    """Clear refresh failure count for an account (useful after manual intervention)"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Check if account exists
+        account = conn.execute(
+            'SELECT username FROM twitter_account WHERE id = ?',
+            (account_id,)
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'Account not found'}), 404
+        
+        # Clear failure count
+        conn.execute('''
+            UPDATE twitter_account 
+            SET refresh_failure_count = 0,
+                updated_at = ?
+            WHERE id = ?
+        ''', (datetime.utcnow().isoformat(), account_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': 'Failure count cleared',
+            'account_id': account_id,
+            'username': account['username']
+        })
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -2174,6 +2568,25 @@ def init_database():
         except:
             pass  # Column already exists
         
+        # Add token metadata columns
+        try:
+            conn.execute('ALTER TABLE twitter_account ADD COLUMN token_expires_at DATETIME')
+            print("Added token_expires_at column to twitter_account table")
+        except:
+            pass  # Column already exists
+        
+        try:
+            conn.execute('ALTER TABLE twitter_account ADD COLUMN last_token_refresh DATETIME')
+            print("Added last_token_refresh column to twitter_account table")
+        except:
+            pass  # Column already exists
+        
+        try:
+            conn.execute('ALTER TABLE twitter_account ADD COLUMN refresh_failure_count INTEGER DEFAULT 0')
+            print("Added refresh_failure_count column to twitter_account table")
+        except:
+            pass  # Column already exists
+        
         # Add account_type column to twitter_account if it doesn't exist
         try:
             conn.execute("ALTER TABLE twitter_account ADD COLUMN account_type TEXT DEFAULT 'managed'")
@@ -2270,6 +2683,12 @@ if __name__ == '__main__':
     print("\nTwitter posting endpoints:")
     print("  POST /api/v1/tweet/post/<id> - Post specific tweet")
     print("  POST /api/v1/tweets/post-pending - Post all pending tweets")
+    
+    print("\nToken health endpoints:")
+    print("  GET  /api/v1/accounts/token-health - Check token health for all accounts")
+    print("  POST /api/v1/accounts/<id>/refresh-token - Manually refresh token for account")
+    print("  POST /api/v1/accounts/refresh-tokens - Refresh all expiring tokens")
+    print("  POST /api/v1/accounts/<id>/clear-failures - Clear refresh failure count")
     print("\nAccount type management:")
     print("  POST   /api/v1/accounts/<id>/set-type - Set account type (managed/list_owner)")
     print("  GET    /api/v1/accounts?type=list_owner - Get accounts by type")

@@ -136,6 +136,11 @@ kill_*.ps1
 
 # Deployment guides (keep private)
 DEPLOY_LIGHTSAIL.md
+DEPLOY_TOKEN_REFRESH_UPDATE.md
+LIGHTSAIL_CONSOLE_UPDATE.md
+TOKEN_REFRESH_SUMMARY.md
+verify_migration.py
+deploy/QUICK_START.md
 
 # Internal documentation
 prompt.md

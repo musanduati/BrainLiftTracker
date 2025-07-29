@@ -66,6 +66,12 @@ sudo systemctl status twitter-manager nginx
 
 # Manual backup
 ./deploy/backup.sh
+
+# Check token health
+curl -X GET http://localhost:5555/api/v1/accounts/token-health -H "X-API-Key: your-api-key"
+
+# View token monitor logs
+tail -f logs/token_monitor.log
 ```
 
 ## Troubleshooting

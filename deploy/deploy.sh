@@ -111,6 +111,15 @@ echo -e "${YELLOW}Step 10: Setting up automatic backups...${NC}"
 chmod +x deploy/backup.sh
 (crontab -l 2>/dev/null; echo "0 2 * * * $APP_DIR/deploy/backup.sh") | crontab -
 
+# Step 10.5: Set up token monitoring
+echo -e "${YELLOW}Step 10.5: Setting up token monitoring...${NC}"
+if [ -f monitor_tokens.py ]; then
+    chmod +x monitor_tokens.py
+    # Add token monitoring to crontab (every 30 minutes)
+    (crontab -l 2>/dev/null; echo "*/30 * * * * cd $APP_DIR && /usr/bin/python3 monitor_tokens.py >> logs/token_monitor.log 2>&1") | crontab -
+    echo "Token monitoring cron job added"
+fi
+
 # Step 11: Create update script
 echo -e "${YELLOW}Step 11: Creating update script...${NC}"
 cat > $APP_DIR/update.sh << 'EOF'

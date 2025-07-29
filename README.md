@@ -15,7 +15,8 @@ A Flask-based RESTful API for managing multiple Twitter accounts and posting con
 - **List Membership**: Add/remove accounts to/from lists with bulk operations
 - **Account Types**: Designate accounts as list owners or managed accounts
 - **Encryption**: Secure storage of credentials using Fernet encryption
-- **Token Management**: Support for refresh tokens and token updates
+- **Automatic Token Refresh**: OAuth tokens refresh automatically when expired
+- **Token Health Monitoring**: Track token expiry and health status across all accounts
 - **API Authentication**: Secure API access with API keys
 - **Statistics**: Track tweet counts and posting status
 
@@ -542,6 +543,54 @@ GET /api/v1/stats
 X-API-Key: your-api-key
 ```
 
+### Token Health Monitoring
+
+#### Check Token Health
+```http
+GET /api/v1/accounts/token-health
+X-API-Key: your-api-key
+```
+
+Returns health status of all account tokens:
+```json
+{
+    "summary": {
+        "total_accounts": 5,
+        "healthy": 3,
+        "expiring_soon": 1,
+        "expired": 1,
+        "refresh_failures": 0
+    },
+    "details": {
+        "healthy": [...],
+        "expiring_soon": [...],
+        "expired": [...]
+    }
+}
+```
+
+#### Manually Refresh Token
+```http
+POST /api/v1/accounts/{account_id}/refresh-token
+X-API-Key: your-api-key
+```
+
+#### Batch Refresh Expiring Tokens
+```http
+POST /api/v1/accounts/refresh-tokens
+X-API-Key: your-api-key
+```
+
+Refreshes all tokens expiring within the next hour.
+
+#### Clear Refresh Failures
+```http
+POST /api/v1/accounts/{account_id}/clear-failures
+X-API-Key: your-api-key
+```
+
+Reset failure count after resolving token issues.
+
 ## Example Usage
 
 ### 1. Authorize a Twitter Account
@@ -615,6 +664,30 @@ curl -X POST http://localhost:5555/api/v1/lists/1/members \
 - Environment variables for sensitive configuration
 - Input validation and sanitization
 - Rate limiting protection
+- Automatic token refresh prevents authentication failures
+- Token health monitoring for proactive maintenance
+
+## Token Monitoring
+
+The application includes automatic token refresh to prevent authentication failures. Additionally, you can set up proactive monitoring:
+
+### Automatic Monitoring Script
+
+Run `monitor_tokens.py` periodically to:
+- Check token health for all accounts
+- Automatically refresh expiring tokens
+- Generate alerts for accounts needing attention
+
+Setup with cron:
+```bash
+# Run every 30 minutes
+*/30 * * * * cd /path/to/twitter-manager && python3 monitor_tokens.py >> logs/token_monitor.log 2>&1
+```
+
+The monitor will:
+- Refresh tokens expiring within 1 hour
+- Alert on accounts with failed refreshes
+- Track accounts needing re-authorization
 
 ## Tweet Status Lifecycle
 
