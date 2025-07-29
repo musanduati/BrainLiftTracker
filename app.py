@@ -248,6 +248,9 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_
     # Check if token needs proactive refresh (within 15 minutes of expiry)
     if account['token_expires_at']:
         token_expires = datetime.fromisoformat(account['token_expires_at'])
+        # Make token_expires timezone-aware if it isn't already
+        if token_expires.tzinfo is None:
+            token_expires = token_expires.replace(tzinfo=UTC)
         if datetime.now(UTC) >= token_expires - timedelta(minutes=15):
             print(f"Token for {account['username']} expires soon, refreshing proactively...")
             conn.close()
@@ -1131,6 +1134,9 @@ def check_token_health():
             # Check token expiry
             if account['token_expires_at']:
                 expires_at = datetime.fromisoformat(account['token_expires_at'])
+                # Make expires_at timezone-aware if it isn't already
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=UTC)
                 time_until_expiry = expires_at - current_time
                 account_info['expires_at'] = account['token_expires_at']
                 account_info['time_until_expiry'] = str(time_until_expiry)
