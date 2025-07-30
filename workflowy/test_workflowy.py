@@ -19,7 +19,17 @@ import diff_match_patch as dmp_module
 # Add AWS storage import
 from aws_storage import AWSStorage
 
+# Import LLM service components
+from llm_service import (
+    extract_node_id_using_llm,
+    get_lm_service
+)
+
 logger = logging.getLogger("workflowy_test")
+logger.setLevel(logging.DEBUG)
+
+# Global LLM service instance
+lm_service = get_lm_service()
 
 # Replace with these simple classes:
 class AuxiliaryProject:
@@ -51,6 +61,33 @@ class WorkflowyNode:
         self.content = content
         self.timestamp = timestamp
 
+async def extract_top_level_nodes(item_data_list: list[dict[str, str]]) -> list[dict[str, str]]:
+    """
+    Extract the main nodes such as: Purpose, Owner, Experts, SPOVs, Knowledge Tree from a project's BrainLift
+
+    Args:
+        item_data_list: List of item data from Workflowy
+
+    Returns:
+        List of dictionaries containing node names and their IDs
+        [{"name": "Purpose", "id": "123"}, {"name": "Experts", "id": "456"}, ...]
+    """
+    # Find the root node (node with no parent or parent key doesn't exist)
+    root_node = next((item for item in item_data_list if "prnt" not in item or item.get("prnt") is None), None)
+
+    if not root_node:
+        logger.error("No root node found")
+        return []
+
+    # Get all direct children of the root node
+    main_nodes = []
+    for item in item_data_list:
+        if item.get("prnt") == root_node["id"]:
+            main_nodes.append({"name": item["nm"], "id": item["id"]})
+            logger.debug(f"Found main node: {item['nm']}")
+
+    return main_nodes
+
 def get_regex_matching_pattern(node_names: list[str] | str) -> re.Pattern:
     if isinstance(node_names, str):
         node_names = [node_names]
@@ -58,47 +95,153 @@ def get_regex_matching_pattern(node_names: list[str] | str) -> re.Pattern:
     pattern = r"^\s*[\-:;,.]*\s*(" + "|".join(re.escape(name) for name in node_names) + r")\s*[\-:;,.]*\s*$"
     return re.compile(pattern, re.IGNORECASE)
 
-def extract_dok_sections_from_content(content: str) -> str:
+async def extract_dok_sections_from_content_llm(item_data_list: list[dict[str, str]]) -> str:
     """
-    Extract only DOK4 and DOK3 sections from the clean markdown content.
-    Only looks for DOK4/DOK3 at the correct high-level indentation (2 spaces).
-    """
-    lines = content.split('\n')
-    filtered_lines = []
-    capturing = False
-    dok_indent_level = 2  # DOK4 and DOK3 are at 2 spaces indentation
+    Extract DOK4 and DOK3 sections using LLM-based node identification.
     
-    for line in lines:
-        # Calculate the indentation level
-        stripped = line.lstrip()
-        if stripped:
-            indent = len(line) - len(stripped)
+    Args:
+        item_data_list: List of item data from Workflowy
+        
+    Returns:
+        str: Combined DOK4 and DOK3 content in markdown format
+    """
+    try:
+        # Get top-level nodes
+        main_nodes = await extract_top_level_nodes(item_data_list)
+        
+        # Find DOK4 and DOK3 nodes using LLM
+        dok4_node_id = await extract_node_id_using_llm("DOK4", main_nodes)
+        logger.info(f"Dok4 node id: {dok4_node_id}")
+        dok3_node_id = await extract_node_id_using_llm("DOK3", main_nodes)
+        logger.info(f"Dok3 node id: {dok3_node_id}")
+        
+        combined_content = ""
+        
+        # Extract DOK4 content
+        if dok4_node_id:
+            dok4_content = _extract_node_content(item_data_list, dok4_node_id, "  - DOK4")
+            combined_content += dok4_content + "\n"
+        
+        # Extract DOK3 content  
+        if dok3_node_id:
+            dok3_content = _extract_node_content(item_data_list, dok3_node_id, "  - DOK3")
+            combined_content += dok3_content + "\n"
             
-            # Check if this is a DOK4 or DOK3 section header at the correct level
-            if (indent == dok_indent_level and 
-                (stripped.startswith('- DOK4') or stripped.startswith('- DOK3'))):
-                capturing = True
-                filtered_lines.append(line)
+        return combined_content.strip()
+        
+    except Exception as e:
+        logger.error("Error extracting DOK sections with LLM: %s", e)
+        return ""
+
+# Add this function before _extract_node_content (around line 330)
+def _clean_html_content(content: str) -> str:
+    """Clean HTML content and convert to markdown (standalone version)."""
+    if not content:
+        return ""
+    
+    import re
+    
+    # Remove mention tags
+    content = re.sub(r"<mention[^>]*>[^<]*</mention>", "", content)
+
+    # Convert hyperlinks to markdown format
+    def replace_link(match):
+        href = re.search(r'href=["\'](.*?)["\']', match.group(0))
+        text = re.sub(r"<[^>]+>", "", match.group(0))
+        if href:
+            return f"[{text.strip()}]({href.group(1)})"
+        return text.strip()
+
+    content = re.sub(r"<a[^>]+>.*?</a>", replace_link, content)
+    
+    # Remove all remaining HTML tags
+    content = re.sub(r"<[^>]+>", "", content)
+    
+    return content.strip()
+
+def _extract_node_content(item_data_list: list[dict[str, str]], node_id: str, header_prefix: str) -> str:
+    """
+    Extract content for a specific node and its children in markdown format.
+    Now with HTML tag cleaning!
+    
+    Args:
+        item_data_list: List of item data from Workflowy
+        node_id: ID of the node to extract
+        header_prefix: Prefix for the section header
+        
+    Returns:
+        str: Formatted content for the node (cleaned of HTML tags)
+    """
+    def get_node_by_id(target_id: str) -> dict | None:
+        return next((item for item in item_data_list if item["id"] == target_id), None)
+    
+    def get_children(parent_id: str) -> list[dict]:
+        return [item for item in item_data_list if item.get("prnt") == parent_id]
+    
+    def format_node_content(node: dict, indent_level: int = 0) -> str:
+        indent = "  " * indent_level
+        
+        # Clean HTML tags from node name
+        node_name = _clean_html_content(node.get('nm', '').strip())
+        content = f"{indent}- {node_name}\n"
+        
+        # Add note content if present (also clean HTML)
+        if node.get('no'):
+            note_content = _clean_html_content(node['no'].strip())
+            content += f"{indent}  {note_content}\n"
+        
+        # Recursively add children
+        children = get_children(node["id"])
+        for child in sorted(children, key=lambda x: x.get("pr", 0)):
+            content += format_node_content(child, indent_level + 1)
             
-            # If we're capturing and this line has greater indentation than DOK level, include it
-            elif capturing and indent > dok_indent_level:
-                filtered_lines.append(line)
-            
-            # If we hit a line at DOK level or less that's not DOK4/DOK3, stop capturing
-            elif capturing and indent <= dok_indent_level:
-                if (indent == dok_indent_level and 
-                    (stripped.startswith('- DOK4') or stripped.startswith('- DOK3'))):
-                    # Start a new DOK section
-                    filtered_lines.append(line)
-                else:
-                    # End of current DOK section
-                    capturing = False
+        return content
+    
+    # Get the main node
+    main_node = get_node_by_id(node_id)
+    if not main_node:
+        return ""
+    
+    # Start with header (clean HTML from main node name)
+    main_node_name = _clean_html_content(main_node.get('nm', '').strip())
+    result = f"{header_prefix} - {main_node_name}\n"
+    
+    # Add children content
+    children = get_children(node_id)
+    for child in sorted(children, key=lambda x: x.get("pr", 0)):
+        result += format_node_content(child, 2)  # Start with 2-space indent for DOK children
+    
+    return result
+
+async def extract_single_dok_section_llm(item_data_list: list[dict[str, str]], section_prefix: str) -> str:
+    """
+    Extract a single DOK section using LLM-based node identification.
+    
+    Args:
+        item_data_list: List of item data from Workflowy
+        section_prefix: "DOK4" or "DOK3"
+        
+    Returns:
+        str: Content for the specified DOK section
+    """
+    try:
+        # Get top-level nodes
+        main_nodes = await extract_top_level_nodes(item_data_list)
+        print(f"Main nodes: {main_nodes}")
+        
+        # Find the specific DOK node using LLM
+        dok_node_id = await extract_node_id_using_llm(section_prefix, main_nodes)
+        print(f"Dok node id: {dok_node_id}")
+        if dok_node_id:
+            return _extract_node_content(item_data_list, dok_node_id, f"  - {section_prefix}")
+
         else:
-            # Empty line - include if we're currently capturing
-            if capturing:
-                filtered_lines.append(line)
-    
-    return '\n'.join(filtered_lines)
+            logger.warning("Could not find %s node", section_prefix)
+            return ""
+            
+    except Exception as e:
+        logger.error("Error extracting %s section with LLM: %s", section_prefix, e)
+        return ""
 
 def extract_single_dok_section(content: str, section_prefix: str) -> str:
     """
@@ -515,9 +658,6 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
             elif len(content_chunks) > 1:
                 formatted_content += f" 🧵1/{len(content_chunks)}"
             
-            if chunk_idx == len(content_chunks):
-                formatted_content += f" #{section.replace('DOK', 'DOK')}"
-            
             tweets.append({
                 "id": f"{section.lower()}_added_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
                 "section": section,
@@ -544,9 +684,6 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
             elif len(content_chunks) > 1:
                 formatted_content += f" 🧵1/{len(content_chunks)}"
             
-            if chunk_idx == len(content_chunks):
-                formatted_content += f" #{section.replace('DOK', 'DOK')}"
-            
             tweets.append({
                 "id": f"{section.lower()}_updated_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
                 "section": section,
@@ -571,9 +708,6 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                 formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
             elif len(content_chunks) > 1:
                 formatted_content += f" 🧵1/{len(content_chunks)}"
-            
-            if chunk_idx == len(content_chunks):
-                formatted_content += f" #{section.replace('DOK', 'DOK')}"
             
             tweets.append({
                 "id": f"{section.lower()}_deleted_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
@@ -946,6 +1080,32 @@ class WorkflowyTester:
         else:
             raise Exception("No match found for PROJECT_TREE_DATA_URL_PARAMS.")
 
+    async def filter_nodes_llm(self, nodes, exclude_names):
+        """Recursively filter out nodes using LLM-based identification."""
+        if not exclude_names:
+            return nodes
+            
+        exclude_ids = set()
+        
+        # Get top-level nodes for LLM matching
+        main_nodes = await extract_top_level_nodes(nodes)
+
+        def collect_children(parent_id):
+            for node in nodes:
+                if node.get("prnt") == parent_id:
+                    exclude_ids.add(node["id"])
+                    collect_children(node["id"])
+
+        # Use LLM-based matching to find nodes to exclude
+        for exclude_name in exclude_names:
+            node_id = await extract_node_id_using_llm(exclude_name, main_nodes)
+            if node_id:
+                exclude_ids.add(node_id)
+                collect_children(node_id)
+                logger.debug("Excluding node '%s' with ID: %s", exclude_name, node_id)
+
+        return [node for node in nodes if node["id"] not in exclude_ids]
+
     def filter_nodes(self, nodes, exclude_names):
         """Recursively filter out nodes with the specified name and their children."""
         if not exclude_names:
@@ -982,7 +1142,7 @@ class WorkflowyTester:
         items = data.get("items", [])
 
         if exclude_node_names:
-            filtered_items = self.filter_nodes(items, exclude_node_names)
+            filtered_items = await self.filter_nodes_llm(items, exclude_node_names)
         else:
             filtered_items = items
 
@@ -1094,6 +1254,28 @@ class WorkflowyTester:
         
         return markdown
 
+    async def scrape_workflowy_raw_data(self, url: str, exclude_node_names: list[str] | None = None) -> list[dict[str, str]]:
+        """
+        Get raw Workflowy data for LLM processing.
+        """
+        try:
+            # Extract session and share IDs
+            session_id, share_id = await self.extract_share_id(url)
+            
+            # Get tree data using the original share_id
+            item_data_list = await self.get_tree_data(
+                session_id, 
+                share_id=share_id,
+                exclude_node_names=exclude_node_names
+            )
+            print(f"Successfully grabbed {len(item_data_list)} items from tree data")
+
+            return item_data_list
+            
+        except Exception as e:
+            print(f"Error getting raw Workflowy data: {str(e)}")
+            raise
+
     async def scrape_workflowy(self, url: str, exclude_node_names: list[str] | None = None) -> WorkflowyNode:
         """
         Main function to scrape Workflowy content.
@@ -1177,18 +1359,20 @@ class WorkflowyTester:
             print(f"Node Name: {result.node_name}")
             print(f"Total Content Length: {len(result.content)} characters")
             
-            # Save full content to S3 instead of local file
+            # Save full content to S3
             content_s3_url = self.storage.save_scraped_content(user_name, result.content, timestamp)
             print(f"✅ Full content saved to S3: {content_s3_url}")
             
-            # Process DOK sections
             print(f"\n📋 PROCESSING DOK SECTIONS:")
             
             current_state = {"dok4": [], "dok3": []}
             all_change_tweets = []
             
-            # DOK4 processing
-            dok4_content = extract_single_dok_section(result.content, "DOK4")
+            # Scrape once, use multiple times
+            raw_data = await self.scrape_workflowy_raw_data(url, exclude_node_names)
+
+            # DOK4 processing using the cached raw data
+            dok4_content = await extract_single_dok_section_llm(raw_data, "DOK4")
             if dok4_content.strip():
                 dok4_points = parse_dok_points(dok4_content, "DOK4")
                 current_state["dok4"] = create_dok_state_from_points(dok4_points)
@@ -1205,8 +1389,8 @@ class WorkflowyTester:
                     stats = changes.get("stats", {})
                     print(f"DOK4 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
             
-            # DOK3 processing
-            dok3_content = extract_single_dok_section(result.content, "DOK3")
+            # DOK3 processing using the same cached raw data  
+            dok3_content = await extract_single_dok_section_llm(raw_data, "DOK3")
             if dok3_content.strip():
                 dok3_points = parse_dok_points(dok3_content, "DOK3")
                 current_state["dok3"] = create_dok_state_from_points(dok3_points)
@@ -1288,44 +1472,6 @@ class WorkflowyTester:
             await self._session.close()
             self._session = None
 
-# Add these functions after create_user_directory() function
-
-def create_demo_directory():
-    """Create demo directory structure if it doesn't exist."""
-    demo_dir = Path("demo")
-    demo_dir.mkdir(exist_ok=True)
-    
-    (demo_dir / "data").mkdir(exist_ok=True)
-    (demo_dir / "assets" / "avatars").mkdir(parents=True, exist_ok=True)
-    
-    return demo_dir
-
-def get_next_run_number(user_name: str) -> int:
-    """Get the next run number for a user."""
-    demo_dir = Path("demo/data")
-    if not demo_dir.exists():
-        return 1
-    
-    # Look for existing session files for this user
-    pattern = f"session_*_{user_name}.json"
-    existing_files = list(demo_dir.glob(pattern))
-    
-    if not existing_files:
-        return 1
-    
-    # Extract run numbers from existing files
-    run_numbers = []
-    for file in existing_files:
-        try:
-            with open(file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                run_num = data.get("session", {}).get("run_number", 0)
-                run_numbers.append(run_num)
-        except (json.JSONDecodeError, FileNotFoundError):
-            continue
-    
-    return max(run_numbers, default=0) + 1
-
 # Configuration for multiple URLs
 # WORKFLOWY_URLS = [
 #     {
@@ -1362,8 +1508,8 @@ async def test_multiple_workflowy_urls():
             print(f"\n🔄 PROCESSING URL {i}/{len(workflowy_urls)}")
             
             result = await tester.process_single_url(
-                url_config,
-                exclude_node_names=["SpikyPOVs", "Private Notes"]
+                url_config
+                # exclude_node_names=["SpikyPOVs", "Private Notes"]
             )
             results.append(result)
             
