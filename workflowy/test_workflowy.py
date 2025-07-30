@@ -287,10 +287,6 @@ def generate_tweet_data(points: List[Dict]) -> List[Dict]:
             if total_parts == 1:
                 # Standalone tweet
                 formatted_content = f"🔍 {section} ({point_num}/{total_points}): {chunk}"
-                if section == "DOK4":
-                    formatted_content += " #AI #Strategy #Innovation"
-                else:  # DOK3
-                    formatted_content += " #Insights #Strategy #Tech"
             else:
                 # Thread tweet
                 thread_indicator = f"🧵{chunk_idx}/{total_parts}"
@@ -298,13 +294,6 @@ def generate_tweet_data(points: List[Dict]) -> List[Dict]:
                     formatted_content = f"🔍 {section} ({point_num}/{total_points}): {chunk} {thread_indicator}"
                 else:
                     formatted_content = f"{chunk} {thread_indicator}"
-                
-                # Add hashtags only to the last tweet in thread
-                if chunk_idx == total_parts:
-                    if section == "DOK4":
-                        formatted_content += " #AI #Strategy #Innovation"
-                    else:
-                        formatted_content += " #Insights #Strategy #Tech"
             
             # Create tweet data
             tweet_data = {
@@ -489,13 +478,6 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                         formatted_content = f"🟢 ADDED: {section} ({point['point_number']}): {chunk} {thread_indicator}"
                     else:
                         formatted_content = f"{chunk} {thread_indicator}"
-                
-                # Add hashtags
-                if chunk_idx == total_parts:
-                    if section == "DOK4":
-                        formatted_content += " #AI #Strategy #Innovation"
-                    else:
-                        formatted_content += " #Insights #Strategy #Tech"
                 
                 tweet_data = {
                     "id": f"{section.lower()}_added_{point['point_number']:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
@@ -800,13 +782,6 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                     else:
                         formatted_content = f"{chunk} {thread_indicator}"
                 
-                # Add hashtags
-                if chunk_idx == total_parts:
-                    if section == "DOK4":
-                        formatted_content += " #AI #Strategy #Innovation"
-                    else:
-                        formatted_content += " #Insights #Strategy #Tech"
-                
                 tweet_data = {
                     "id": f"{section.lower()}_added_{point['point_number']:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
                     "section": section,
@@ -842,10 +817,6 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
             elif len(content_chunks) > 1:
                 formatted_content += f" 🧵1/{len(content_chunks)}"
-            
-            if chunk_idx == len(content_chunks):
-                hashtag = "#AI #Strategy #Innovation" if section == "DOK4" else "#Insights #Strategy #Tech"
-                formatted_content += f" {hashtag}"
             
             tweets.append({
                 "id": f"{section.lower()}_added_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
@@ -884,10 +855,6 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
             elif len(content_chunks) > 1:
                 formatted_content += f" 🧵1/{len(content_chunks)}"
             
-            if chunk_idx == len(content_chunks):
-                hashtag = "#AI #Strategy #Innovation" if section == "DOK4" else "#Insights #Strategy #Tech"
-                formatted_content += f" {hashtag}"
-            
             tweets.append({
                 "id": f"{section.lower()}_updated_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
                 "section": section,
@@ -914,11 +881,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
             elif len(content_chunks) > 1:
                 formatted_content += f" 🧵1/{len(content_chunks)}"
-            
-            if chunk_idx == len(content_chunks):
-                hashtag = "#AI #Strategy #Innovation" if section == "DOK4" else "#Insights #Strategy #Tech"
-                formatted_content += f" {hashtag}"
-            
+
             tweets.append({
                 "id": f"{section.lower()}_deleted_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
                 "section": section,
