@@ -95,44 +95,6 @@ def get_regex_matching_pattern(node_names: list[str] | str) -> re.Pattern:
     pattern = r"^\s*[\-:;,.]*\s*(" + "|".join(re.escape(name) for name in node_names) + r")\s*[\-:;,.]*\s*$"
     return re.compile(pattern, re.IGNORECASE)
 
-async def extract_dok_sections_from_content_llm(item_data_list: list[dict[str, str]]) -> str:
-    """
-    Extract DOK4 and DOK3 sections using LLM-based node identification.
-    
-    Args:
-        item_data_list: List of item data from Workflowy
-        
-    Returns:
-        str: Combined DOK4 and DOK3 content in markdown format
-    """
-    try:
-        # Get top-level nodes
-        main_nodes = await extract_top_level_nodes(item_data_list)
-        
-        # Find DOK4 and DOK3 nodes using LLM
-        dok4_node_id = await extract_node_id_using_llm("DOK4", main_nodes)
-        logger.info(f"Dok4 node id: {dok4_node_id}")
-        dok3_node_id = await extract_node_id_using_llm("DOK3", main_nodes)
-        logger.info(f"Dok3 node id: {dok3_node_id}")
-        
-        combined_content = ""
-        
-        # Extract DOK4 content
-        if dok4_node_id:
-            dok4_content = _extract_node_content(item_data_list, dok4_node_id, "  - DOK4")
-            combined_content += dok4_content + "\n"
-        
-        # Extract DOK3 content  
-        if dok3_node_id:
-            dok3_content = _extract_node_content(item_data_list, dok3_node_id, "  - DOK3")
-            combined_content += dok3_content + "\n"
-            
-        return combined_content.strip()
-        
-    except Exception as e:
-        logger.error("Error extracting DOK sections with LLM: %s", e)
-        return ""
-
 # Add this function before _extract_node_content (around line 330)
 def _clean_html_content(content: str) -> str:
     """Clean HTML content and convert to markdown (standalone version)."""
@@ -463,30 +425,6 @@ def generate_tweet_data(points: List[Dict]) -> List[Dict]:
     
     return tweets
 
-def process_dok_content_to_tweets(full_content: str) -> Dict[str, List[Dict]]:
-    """
-    Process full DOK content and generate tweet data for both DOK4 and DOK3.
-    """
-    results = {}
-    
-    # Process DOK4
-    dok4_content = extract_single_dok_section(full_content, "DOK4")
-    if dok4_content.strip():
-        dok4_points = parse_dok_points(dok4_content, "DOK4")
-        dok4_tweets = generate_tweet_data(dok4_points)
-        results["dok4"] = dok4_tweets
-        print(f"Generated {len(dok4_tweets)} tweets from {len(dok4_points)} DOK4 points")
-    
-    # Process DOK3
-    dok3_content = extract_single_dok_section(full_content, "DOK3")
-    if dok3_content.strip():
-        dok3_points = parse_dok_points(dok3_content, "DOK3")
-        dok3_tweets = generate_tweet_data(dok3_points)
-        results["dok3"] = dok3_tweets
-        print(f"Generated {len(dok3_tweets)} tweets from {len(dok3_points)} DOK3 points")
-    
-    return results
-
 def extract_url_identifier(url: str) -> str:
     """Extract a unique identifier from the URL for file naming."""
     # Extract the share ID from URL like "https://workflowy.com/s/sanket-ghia/ehJL5sj6EXqV4LJR"
@@ -496,26 +434,6 @@ def extract_url_identifier(url: str) -> str:
     
     # Fallback: use hash of URL
     return hashlib.md5(url.encode()).hexdigest()[:8]
-
-def create_user_directory(user_name: str) -> Path:
-    """
-    Create and return the user directory path.
-    
-    Args:
-        user_name: Name for the user directory
-        
-    Returns:
-        Path object for the user directory
-    """
-    # Create users directory if it doesn't exist
-    users_dir = Path("users")
-    users_dir.mkdir(exist_ok=True)
-    
-    # Create user-specific directory
-    user_dir = users_dir / user_name
-    user_dir.mkdir(exist_ok=True)
-    
-    return user_dir
 
 # Add these utility functions BEFORE the WorkflowyTester class (around line 350)
 def get_timestamp() -> str:
@@ -560,173 +478,6 @@ def create_dok_state_from_points(points: List[Dict]) -> List[Dict]:
         }
         state_points.append(state_point)
     return state_points
-
-def compare_dok_states(previous_state: List[Dict], current_state: List[Dict]) -> Dict:
-    """Compare previous and current DOK states to identify changes."""
-    prev_hashes = {point["content_hash"]: point for point in previous_state}
-    curr_hashes = {point["content_hash"]: point for point in current_state}
-    
-    added = [point for hash_key, point in curr_hashes.items() if hash_key not in prev_hashes]
-    deleted = [point for hash_key, point in prev_hashes.items() if hash_key not in curr_hashes]
-    
-    # For updated detection, we need to check if content with same position has changed
-    updated = []
-    # We'll use a simpler approach: if main_content is similar but hash is different
-    for curr_point in current_state:
-        curr_main = curr_point["main_content"].lower().strip()
-        # Look for similar content in previous state
-        for prev_point in previous_state:
-            prev_main = prev_point["main_content"].lower().strip()
-            # If main content is very similar (first 50 chars) but hash is different
-            if (curr_main[:50] == prev_main[:50] and 
-                curr_point["content_hash"] != prev_point["content_hash"] and
-                curr_point["content_hash"] not in prev_hashes):
-                updated.append({
-                    "current": curr_point,
-                    "previous": prev_point
-                })
-                # Remove from added since it's an update
-                added = [p for p in added if p["content_hash"] != curr_point["content_hash"]]
-                break
-    
-    return {
-        "added": added,
-        "updated": updated,
-        "deleted": deleted
-    }
-
-def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = False) -> List[Dict]:
-    """Generate tweets based on detected changes with appropriate prefixes."""
-    tweets = []
-    timestamp = datetime.now().isoformat()
-    
-    # Handle first run - all content is "added"
-    if is_first_run:
-        for point in changes.get("added", []):
-            combined_content = create_combined_content(point["main_content"], point["sub_points"])
-            content_chunks = split_content_for_twitter(combined_content)
-            
-            thread_id = f"{section.lower()}_added_{point['point_number']:03d}_thread"
-            
-            for chunk_idx, chunk in enumerate(content_chunks, 1):
-                is_main_tweet = chunk_idx == 1
-                total_parts = len(content_chunks)
-                
-                # Add ADDED prefix
-                if total_parts == 1:
-                    formatted_content = f"🟢 ADDED: {section} ({point['point_number']}): {chunk}"
-                else:
-                    thread_indicator = f"🧵{chunk_idx}/{total_parts}"
-                    if is_main_tweet:
-                        formatted_content = f"🟢 ADDED: {section} ({point['point_number']}): {chunk} {thread_indicator}"
-                    else:
-                        formatted_content = f"{chunk} {thread_indicator}"
-                
-                tweet_data = {
-                    "id": f"{section.lower()}_added_{point['point_number']:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
-                    "section": section,
-                    "change_type": "added",
-                    "logical_tweet_number": point['point_number'],
-                    "thread_part": chunk_idx,
-                    "total_thread_parts": total_parts,
-                    "thread_id": thread_id,
-                    "content_raw": chunk,
-                    "content_formatted": formatted_content,
-                    "character_count": len(formatted_content),
-                    "is_main_tweet": is_main_tweet,
-                    "parent_tweet_id": f"{section.lower()}_added_{point['point_number']:03d}" if not is_main_tweet else None,
-                    "status": "pending",
-                    "created_at": timestamp
-                }
-                tweets.append(tweet_data)
-        return tweets
-    
-    # Handle subsequent runs with change detection
-    tweet_counter = 1
-    
-    # Added points
-    for point in changes.get("added", []):
-        combined_content = create_combined_content(point["main_content"], point["sub_points"])
-        content_chunks = split_content_for_twitter(combined_content)
-        
-        thread_id = f"{section.lower()}_added_{tweet_counter:03d}_thread"
-        
-        for chunk_idx, chunk in enumerate(content_chunks, 1):
-            formatted_content = f"🟢 ADDED: {section}: {chunk}"
-            if chunk_idx > 1:
-                formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
-            elif len(content_chunks) > 1:
-                formatted_content += f" 🧵1/{len(content_chunks)}"
-            
-            tweets.append({
-                "id": f"{section.lower()}_added_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
-                "section": section,
-                "change_type": "added",
-                "content_formatted": formatted_content,
-                "thread_id": thread_id,
-                "thread_part": chunk_idx,
-                "total_thread_parts": len(content_chunks),
-                "status": "pending",
-                "created_at": timestamp
-            })
-        tweet_counter += 1
-    
-    # Updated points
-    for update_info in changes.get("updated", []):
-        current_point = update_info["current"]
-        combined_content = create_combined_content(current_point["main_content"], current_point["sub_points"])
-        content_chunks = split_content_for_twitter(combined_content)
-        
-        thread_id = f"{section.lower()}_updated_{tweet_counter:03d}_thread"
-        
-        for chunk_idx, chunk in enumerate(content_chunks, 1):
-            formatted_content = f"🔄 UPDATED: {section}: {chunk}"
-            if chunk_idx > 1:
-                formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
-            elif len(content_chunks) > 1:
-                formatted_content += f" 🧵1/{len(content_chunks)}"
-            
-            tweets.append({
-                "id": f"{section.lower()}_updated_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
-                "section": section,
-                "change_type": "updated",
-                "content_formatted": formatted_content,
-                "thread_id": thread_id,
-                "thread_part": chunk_idx,
-                "total_thread_parts": len(content_chunks),
-                "status": "pending",
-                "created_at": timestamp
-            })
-        tweet_counter += 1
-    
-    # Deleted points
-    for point in changes.get("deleted", []):
-        combined_content = create_combined_content(point["main_content"], point["sub_points"])
-        content_chunks = split_content_for_twitter(combined_content)
-        
-        thread_id = f"{section.lower()}_deleted_{tweet_counter:03d}_thread"
-        
-        for chunk_idx, chunk in enumerate(content_chunks, 1):
-            formatted_content = f"❌ DELETED: {section}: {chunk}"
-            if chunk_idx > 1:
-                formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
-            elif len(content_chunks) > 1:
-                formatted_content += f" 🧵1/{len(content_chunks)}"
-            
-            tweets.append({
-                "id": f"{section.lower()}_deleted_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
-                "section": section,
-                "change_type": "deleted",
-                "content_formatted": formatted_content,
-                "thread_id": thread_id,
-                "thread_part": chunk_idx,
-                "total_thread_parts": len(content_chunks),
-                "status": "pending",
-                "created_at": timestamp
-            })
-        tweet_counter += 1
-    
-    return tweets
 
 def create_content_signature(main_content: str, sub_points: List[str]) -> str:
     """Create a normalized content signature for comparison."""
@@ -1115,28 +866,6 @@ class WorkflowyTester:
                 exclude_ids.add(node_id)
                 collect_children(node_id)
                 logger.debug("Excluding node '%s' with ID: %s", exclude_name, node_id)
-
-        return [node for node in nodes if node["id"] not in exclude_ids]
-
-    def filter_nodes(self, nodes, exclude_names):
-        """Recursively filter out nodes with the specified name and their children."""
-        if not exclude_names:
-            return nodes
-            
-        exclude_ids = set()
-        exclude_patterns = [get_regex_matching_pattern([name]) for name in exclude_names]
-
-        def collect_children(parent_id):
-            for node in nodes:
-                if node.get("prnt") == parent_id:
-                    exclude_ids.add(node["id"])
-                    collect_children(node["id"])
-
-        for node in nodes:
-            node_name = node.get("nm", "").strip()
-            if node_name and any(pattern.match(node_name) for pattern in exclude_patterns):
-                exclude_ids.add(node["id"])
-                collect_children(node["id"])
 
         return [node for node in nodes if node["id"] not in exclude_ids]
 
