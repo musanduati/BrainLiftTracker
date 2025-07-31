@@ -963,9 +963,7 @@ if __name__ == "__main__":
     logger.info("  python post_tweets.py [user1] [user2]                   # Post all changes for specified users")
     logger.info("  python post_tweets.py                                   # Post all changes for all users")
     logger.info("  python post_tweets.py preview [user1]                   # Preview what will be posted")
-    logger.info()
     logger.info("NOTE: All detected changes will be posted (no prioritization)")
-    logger.info()
     logger.info("Available users and account IDs:")
     
     # Load mapping from DynamoDB for display
