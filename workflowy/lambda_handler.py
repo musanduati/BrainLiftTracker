@@ -1,4 +1,3 @@
-# workflowy/lambda_handler.py - Updated to use DynamoDB configuration
 import json
 import asyncio
 from test_workflowy import WorkflowyTester
@@ -73,13 +72,8 @@ async def process_and_post():
     async with WorkflowyTester() as tester:
         for i, url_config in enumerate(workflowy_urls, 1):
             logger.info(f"🔄 SCRAPING URL {i}/{len(workflowy_urls)}: {url_config['name']}")
-            
-            result = await tester.process_single_url(
-                url_config
-                # exclude_node_names=["SpikyPOVs", "Private Notes"]
-            )
+            result = await tester.process_single_url(url_config)
             scraping_results.append(result)
-            
             # Add delay between URLs to be respectful
             if i < len(workflowy_urls):
                 logger.info(f"⏱️ Waiting 2 seconds before next URL...")
@@ -99,7 +93,7 @@ async def process_and_post():
         logger.info(f"👥 Users with new content to post: {users_with_content}")
         
         # Create TweetPoster and post tweets
-        poster = TweetPoster(posting_mode="single")  # or "all" if you want to post all threads
+        poster = TweetPoster(posting_mode="all")
         
         # Process each user individually for better error handling
         for user_name in users_with_content:
