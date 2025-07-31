@@ -151,8 +151,6 @@ class LMService:
         
         # Map lm_type to actual OpenAI model names
         model_map = {
-            'openai-4om': 'gpt-4o-mini',
-            'openai-4o': 'gpt-4o',
             'gpt-4o-mini': 'gpt-4o-mini',
             'gpt-4o': 'gpt-4o',
         }
@@ -162,7 +160,7 @@ class LMService:
         payload = {
             "model": model,
             "messages": messages,
-            "max_tokens": 100,
+            "max_tokens": 8192,
             "temperature": 0,
             "stream": False
         }
@@ -307,7 +305,7 @@ async def extract_node_id_using_llm(
         # Use actual LLM service integration 
         request = GenerateSimpleTextRequest(
             query=query, 
-            lm_type="gpt-4o-mini", 
+            lm_type="gpt-4o", 
             custom_instructions=EXTRACT_BRAINLIFT_NODE_ID_PROMPT
         )
         response = await lm_service_instance.generate_simple_text_using_slm(request)
