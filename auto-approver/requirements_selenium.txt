@@ -1,0 +1,8 @@
+# Selenium automation requirements
+selenium==4.18.1
+python-dotenv==1.0.1
+webdriver-manager==4.0.1  # Automatically manages browser drivers
+
+# Optional: For different browsers
+# geckodriver-autoinstaller==0.1.0  # For Firefox
+# msedge-selenium-tools==3.141.4   # For Edge

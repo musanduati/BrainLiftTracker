@@ -1,0 +1,25 @@
+{
+  "accounts": [
+    {
+      "username": "account1",
+      "password": "password1",
+      "email": "email1@example.com",
+      "max_approvals": 50,
+      "delay_seconds": 3
+    },
+    {
+      "username": "account2", 
+      "password": "password2",
+      "email": "email2@example.com",
+      "max_approvals": 100,
+      "delay_seconds": 2
+    },
+    {
+      "username": "account3",
+      "password": "password3",
+      "email": null,
+      "max_approvals": 25,
+      "delay_seconds": 5
+    }
+  ]
+}

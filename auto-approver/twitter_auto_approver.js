@@ -79,51 +79,73 @@ class TwitterAutoApprover {
             return [];
         }
 
+        // Wait a bit for dynamic content to load
+        console.log('Looking for accept buttons in modal...');
+
         // Multiple selectors to handle different Twitter UI versions
         const selectors = [
             'button[data-testid*="accept"]',
             'button[data-testid*="Accept"]',
             'button[aria-label*="Accept"]',
             'button[aria-label*="Approve"]',
-            'button:contains("Accept")',
             'div[role="button"][data-testid*="accept"]',
-            'div[role="button"]:contains("Accept")'
+            'div[role="button"][aria-label*="Accept"]',
+            // New selectors based on current Twitter UI
+            'button[type="button"]',
+            'div[role="button"]',
+            'span[role="button"]'
         ];
 
         let buttons = [];
         
         // Try specific selectors first
         for (const selector of selectors) {
-            if (selector.includes(':contains')) {
-                // Handle :contains pseudo-selector manually
-                const allButtons = modal.querySelectorAll('button, div[role="button"]');
-                const matchingButtons = Array.from(allButtons).filter(button => {
-                    const text = button.textContent.toLowerCase();
-                    return text.includes('accept') || text.includes('approve');
+            const found = modal.querySelectorAll(selector);
+            if (found.length > 0) {
+                // Filter for Accept buttons
+                const acceptButtons = Array.from(found).filter(button => {
+                    const text = button.textContent || '';
+                    const ariaLabel = button.getAttribute('aria-label') || '';
+                    const lowerText = text.toLowerCase();
+                    const lowerAria = ariaLabel.toLowerCase();
+                    
+                    // Look for Accept button, but not Decline
+                    return (lowerText === 'accept' || lowerText.includes('accept') || 
+                            lowerAria.includes('accept') || lowerAria.includes('approve')) &&
+                           !lowerText.includes('decline') && !lowerAria.includes('decline');
                 });
-                if (matchingButtons.length > 0) {
-                    buttons = matchingButtons;
-                    break;
-                }
-            } else {
-                const found = modal.querySelectorAll(selector);
-                if (found.length > 0) {
-                    buttons = Array.from(found);
+                
+                if (acceptButtons.length > 0) {
+                    buttons = acceptButtons;
+                    console.log(`Found ${buttons.length} accept buttons using selector: ${selector}`);
                     break;
                 }
             }
         }
 
-        // Fallback: look for buttons with text content within the modal
+        // Fallback: look for buttons with exact "Accept" text
         if (buttons.length === 0) {
-            const allButtons = modal.querySelectorAll('button, div[role="button"]');
+            const allButtons = modal.querySelectorAll('button, div[role="button"], span[role="button"]');
             buttons = Array.from(allButtons).filter(button => {
-                const text = button.textContent.toLowerCase();
-                return text.includes('accept') || text.includes('approve');
+                const text = (button.textContent || '').trim();
+                return text === 'Accept' || text === 'Approve';
+            });
+            
+            if (buttons.length > 0) {
+                console.log(`Found ${buttons.length} accept buttons using text matching`);
+            }
+        }
+
+        // Debug output
+        if (buttons.length === 0) {
+            console.log('No accept buttons found. All buttons in modal:');
+            const allButtons = modal.querySelectorAll('button, div[role="button"], span[role="button"]');
+            Array.from(allButtons).slice(0, 10).forEach((btn, i) => {
+                console.log(`Button ${i}: "${btn.textContent}" | data-testid="${btn.getAttribute('data-testid')}" | aria-label="${btn.getAttribute('aria-label')}"`);
             });
         }
 
-        console.log(`Found ${buttons.length} accept buttons in modal`);
+        console.log(`Total accept buttons found: ${buttons.length}`);
         return buttons;
     }
 
