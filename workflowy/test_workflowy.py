@@ -561,19 +561,22 @@ def advanced_compare_dok_states(previous_state: List[Dict], current_state: List[
     
     # Exact matches (unchanged content)
     exact_matches = set(prev_signatures.keys()) & set(curr_signatures.keys())
+    logger.info(f"Exact matches: {exact_matches}")
     
     # Clearly added content (new signatures)
     clearly_added = []
     for signature in curr_signatures:
         if signature not in prev_signatures:
             clearly_added.append(curr_signatures[signature])
-    
+    logger.info(f"Clearly added: {clearly_added}")
+
     # Clearly deleted content (missing signatures) 
     clearly_deleted = []
     for signature in prev_signatures:
         if signature not in curr_signatures:
             clearly_deleted.append(prev_signatures[signature])
-    
+    logger.info(f"Clearly deleted: {clearly_deleted}")
+
     # Advanced similarity matching for potential updates
     updated = []
     added = []
@@ -1114,7 +1117,9 @@ class WorkflowyTester:
                 else:
                     # Subsequent runs: generate tweets for changes
                     changes = advanced_compare_dok_states(previous_state["dok4"], current_state["dok4"])
+                    logger.info(f"DOK4 Changes: {changes}")
                     dok4_tweets = generate_advanced_change_tweets(changes, "DOK4", first_run)
+                    logger.info(f"DOK4 Tweets: {dok4_tweets}")
                     all_change_tweets.extend(dok4_tweets)
                     
                     stats = changes.get("stats", {})
@@ -1132,7 +1137,9 @@ class WorkflowyTester:
                 else:
                     # Subsequent runs: generate tweets for changes
                     changes = advanced_compare_dok_states(previous_state["dok3"], current_state["dok3"])
+                    logger.info(f"DOK3 Changes: {changes}")
                     dok3_tweets = generate_advanced_change_tweets(changes, "DOK3", first_run)
+                    logger.info(f"DOK3 Tweets: {dok3_tweets}")
                     all_change_tweets.extend(dok3_tweets)
                     
                     stats = changes.get("stats", {})
