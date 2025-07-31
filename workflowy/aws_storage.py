@@ -37,6 +37,9 @@ class AWSStorage:
             ContentType='text/plain'
         )
         
+        # Clean up old scraped content files (keep only latest 2)
+        self.cleanup_old_scraped_content(user_name, max_files=2)
+        
         return f"s3://{self.bucket_name}/{key}"
     
     def save_change_tweets(self, user_name: str, tweets: List[Dict], timestamp: str) -> str:
@@ -294,6 +297,74 @@ class AWSStorage:
         
         if not urls and not mappings:
             print("  (No configurations found)")
+
+    def cleanup_old_scraped_content(self, user_name: str, max_files: int = 2):
+        """
+        Clean up old scraped content files, keeping only the latest N files.
+        
+        Args:
+            user_name: The user name to clean up files for
+            max_files: Maximum number of files to keep (default: 3)
+        """
+        try:
+            # List all scraped content files for this user
+            prefix = f"{user_name}/scraped_content/"
+            response = self.s3.list_objects_v2(
+                Bucket=self.bucket_name,
+                Prefix=prefix,
+                MaxKeys=1000
+            )
+            
+            if 'Contents' not in response:
+                print(f"📄 No existing scraped content files found for {user_name}")
+                return
+            
+            # Filter to only scraped content files (exclude other files that might be in the directory)
+            scraped_files = [
+                obj for obj in response['Contents'] 
+                if '_scraped_workflowy_' in obj['Key'] and obj['Key'].endswith('.txt')
+            ]
+            
+            if len(scraped_files) <= max_files:
+                print(f"📄 Only {len(scraped_files)} scraped content files found for {user_name}, no cleanup needed")
+                return
+            
+            # Sort by last modified date (newest first)
+            scraped_files.sort(key=lambda x: x['LastModified'], reverse=True)
+            
+            # Files to delete (everything beyond the max_files limit)
+            files_to_delete = scraped_files[max_files:]
+            
+            if files_to_delete:
+                print(f"🗑️  Cleaning up {len(files_to_delete)} old scraped content files for {user_name}")
+                
+                # Delete old files
+                delete_keys = [{'Key': obj['Key']} for obj in files_to_delete]
+                
+                # S3 batch delete (more efficient than individual deletes)
+                response = self.s3.delete_objects(
+                    Bucket=self.bucket_name,
+                    Delete={
+                        'Objects': delete_keys,
+                        'Quiet': True  # Don't return info about successful deletes
+                    }
+                )
+                
+                # Check for any deletion errors
+                if 'Errors' in response and response['Errors']:
+                    print(f"❌ Some files could not be deleted: {response['Errors']}")
+                else:
+                    print(f"✅ Successfully cleaned up {len(files_to_delete)} old files for {user_name}")
+                    
+                # Log which files were kept
+                kept_files = scraped_files[:max_files]
+                print(f"📋 Kept latest {len(kept_files)} files:")
+                for file_obj in kept_files:
+                    print(f"   • {file_obj['Key']} (modified: {file_obj['LastModified']})")
+            
+        except Exception as e:
+            print(f"❌ Error cleaning up old scraped content for {user_name}: {e}")
+            # Don't raise the error - cleanup failure shouldn't break the main flow
 
 
 
