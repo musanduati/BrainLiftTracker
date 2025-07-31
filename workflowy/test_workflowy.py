@@ -345,7 +345,7 @@ def create_combined_content(main_content: str, sub_points: List[str]) -> str:
     
     return combined.strip()
 
-def split_content_for_twitter(content: str, max_chars: int = 25000) -> List[str]:
+def split_content_for_twitter(content: str, max_chars: int = 240) -> List[str]:
     """
     Split content into Twitter-sized chunks at sentence boundaries.
     Leaves room for thread indicators and formatting.
@@ -664,6 +664,8 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                 "change_type": "added",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "thread_part": chunk_idx,
+                "total_thread_parts": len(content_chunks),
                 "status": "pending",
                 "created_at": timestamp
             })
@@ -690,6 +692,8 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                 "change_type": "updated",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "thread_part": chunk_idx,
+                "total_thread_parts": len(content_chunks),
                 "status": "pending",
                 "created_at": timestamp
             })
@@ -715,6 +719,8 @@ def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = Fal
                 "change_type": "deleted",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "thread_part": chunk_idx,
+                "total_thread_parts": len(content_chunks),
                 "status": "pending",
                 "created_at": timestamp
             })
@@ -958,6 +964,8 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 "change_type": "added",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "thread_part": chunk_idx,
+                "total_thread_parts": len(content_chunks),
                 "status": "pending",
                 "created_at": timestamp
             })
@@ -997,6 +1005,8 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 "change_details": change_details,
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "thread_part": chunk_idx,
+                "total_thread_parts": len(content_chunks),
                 "status": "pending",
                 "created_at": timestamp
             })
@@ -1022,6 +1032,8 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
                 "change_type": "deleted",
                 "content_formatted": formatted_content,
                 "thread_id": thread_id,
+                "thread_part": chunk_idx,
+                "total_thread_parts": len(content_chunks),
                 "status": "pending",
                 "created_at": timestamp
             })
