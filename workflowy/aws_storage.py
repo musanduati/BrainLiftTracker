@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from logger_config import logger
 
 load_dotenv()
 
@@ -28,7 +29,7 @@ class AWSStorage:
         """Replace: user_dir / f"{user_name}_scraped_workflowy_{timestamp}.txt" """
         key = f"{user_name}/scraped_content/{user_name}_scraped_workflowy_{timestamp}.txt"
 
-        print("Bucket name: ", self.bucket_name)
+        logger.info(f"Saving scraped content to S3 Bucket: {self.bucket_name}")
         
         self.s3.put_object(
             Bucket=self.bucket_name,
@@ -66,7 +67,7 @@ class AWSStorage:
             
             # Ensure the state has the expected structure
             if not isinstance(state, dict):
-                print(f"Warning: Invalid state format for {user_name}, resetting to default")
+                logger.warning(f"Warning: Invalid state format for {user_name}, resetting to default")
                 return {"dok4": [], "dok3": []}
             
             # Ensure both keys exist
@@ -78,7 +79,7 @@ class AWSStorage:
             return state
             
         except Exception as e:
-            print(f"Error loading state for {user_name}: {e}")
+            logger.error(f"Error loading state for {user_name}: {e}")
             return {"dok4": [], "dok3": []}
     
     def save_current_state(self, user_name: str, state: Dict):
@@ -129,8 +130,8 @@ class AWSStorage:
             return urls
             
         except Exception as e:
-            print(f"Error loading Workflowy URLs from DynamoDB: {e}")
-            print("Falling back to empty list")
+            logger.error(f"Error loading Workflowy URLs from DynamoDB: {e}")
+            logger.info("Falling back to empty list")
             return []
     
     def get_user_account_mapping(self) -> Dict[str, int]:
@@ -153,8 +154,8 @@ class AWSStorage:
             return mapping
             
         except Exception as e:
-            print(f"Error loading user account mapping from DynamoDB: {e}")
-            print("Falling back to empty mapping")
+            logger.error(f"Error loading user account mapping from DynamoDB: {e}")
+            logger.info("Falling back to empty mapping")
             return {}
     
     def add_workflowy_url(self, url: str, name: str, active: bool = True) -> bool:
@@ -183,11 +184,11 @@ class AWSStorage:
                     'updated_at': datetime.now().isoformat()
                 }
             )
-            print(f"✅ Added Workflowy URL: {name} -> {url}")
+            logger.info(f"✅ Added Workflowy URL: {name} -> {url}")
             return True
             
         except Exception as e:
-            print(f"❌ Error adding Workflowy URL: {e}")
+            logger.error(f"❌ Error adding Workflowy URL: {e}")
             return False
     
     def add_user_account_mapping(self, user_name: str, account_id: int, active: bool = True) -> bool:
@@ -212,11 +213,11 @@ class AWSStorage:
                     'updated_at': datetime.now().isoformat()
                 }
             )
-            print(f"✅ Added user mapping: {user_name} -> Account {account_id}")
+            logger.info(f"✅ Added user mapping: {user_name} -> Account {account_id}")
             return True
             
         except Exception as e:
-            print(f"❌ Error adding user mapping: {e}")
+            logger.error(f"❌ Error adding user mapping: {e}")
             return False
 
     def cleanup_old_scraped_content(self, user_name: str, max_files: int = 2):
@@ -237,7 +238,7 @@ class AWSStorage:
             )
             
             if 'Contents' not in response:
-                print(f"📄 No existing scraped content files found for {user_name}")
+                logger.info(f"📄 No existing scraped content files found for {user_name}")
                 return
             
             # Filter to only scraped content files (exclude other files that might be in the directory)
@@ -247,7 +248,7 @@ class AWSStorage:
             ]
             
             if len(scraped_files) <= max_files:
-                print(f"📄 Only {len(scraped_files)} scraped content files found for {user_name}, no cleanup needed")
+                logger.info(f"📄 Only {len(scraped_files)} scraped content files found for {user_name}, no cleanup needed")
                 return
             
             # Sort by last modified date (newest first)
@@ -257,7 +258,7 @@ class AWSStorage:
             files_to_delete = scraped_files[max_files:]
             
             if files_to_delete:
-                print(f"🗑️  Cleaning up {len(files_to_delete)} old scraped content files for {user_name}")
+                logger.info(f"🗑️  Cleaning up {len(files_to_delete)} old scraped content files for {user_name}")
                 
                 # Delete old files
                 delete_keys = [{'Key': obj['Key']} for obj in files_to_delete]
@@ -273,19 +274,16 @@ class AWSStorage:
                 
                 # Check for any deletion errors
                 if 'Errors' in response and response['Errors']:
-                    print(f"❌ Some files could not be deleted: {response['Errors']}")
+                    logger.error(f"❌ Some files could not be deleted: {response['Errors']}")
                 else:
-                    print(f"✅ Successfully cleaned up {len(files_to_delete)} old files for {user_name}")
+                    logger.info(f"✅ Successfully cleaned up {len(files_to_delete)} old files for {user_name}")
                     
                 # Log which files were kept
                 kept_files = scraped_files[:max_files]
-                print(f"📋 Kept latest {len(kept_files)} files:")
+                logger.info(f"📋 Kept latest {len(kept_files)} files:")
                 for file_obj in kept_files:
-                    print(f"   • {file_obj['Key']} (modified: {file_obj['LastModified']})")
+                    logger.info(f"   • {file_obj['Key']} (modified: {file_obj['LastModified']})")
             
         except Exception as e:
-            print(f"❌ Error cleaning up old scraped content for {user_name}: {e}")
+            logger.error(f"❌ Error cleaning up old scraped content for {user_name}: {e}")
             # Don't raise the error - cleanup failure shouldn't break the main flow
-
-
-

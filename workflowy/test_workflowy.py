@@ -1,32 +1,22 @@
-# test_workflowy.py
 import asyncio
-import base64
 import hashlib
-import html
 import json
-import logging
 import re
 import time
-import os
 from pathlib import Path
 from typing import Any, Optional, List, Dict
 from datetime import datetime
-
 import aiohttp
-
 import diff_match_patch as dmp_module
 
-# Add AWS storage import
 from aws_storage import AWSStorage
+from logger_config import logger
 
 # Import LLM service components
 from llm_service import (
     extract_node_id_using_llm,
     get_lm_service
 )
-
-logger = logging.getLogger("workflowy_test")
-logger.setLevel(logging.DEBUG)
 
 # Global LLM service instance
 lm_service = get_lm_service()
@@ -189,11 +179,11 @@ async def extract_single_dok_section_llm(item_data_list: list[dict[str, str]], s
     try:
         # Get top-level nodes
         main_nodes = await extract_top_level_nodes(item_data_list)
-        print(f"Main nodes: {main_nodes}")
+        logger.info(f"Main nodes: {main_nodes}")
         
         # Find the specific DOK node using LLM
         dok_node_id = await extract_node_id_using_llm(section_prefix, main_nodes)
-        print(f"Dok node id: {dok_node_id}")
+        logger.info(f"Dok node id: {dok_node_id}")
         if dok_node_id:
             return _extract_node_content(item_data_list, dok_node_id, f"  - {section_prefix}")
 
@@ -1009,12 +999,12 @@ class WorkflowyTester:
                 share_id=share_id,
                 exclude_node_names=exclude_node_names
             )
-            print(f"Successfully grabbed {len(item_data_list)} items from tree data")
+            logger.info(f"Successfully grabbed {len(item_data_list)} items from tree data")
 
             return item_data_list
             
         except Exception as e:
-            print(f"Error getting raw Workflowy data: {str(e)}")
+            logger.error(f"Error getting raw Workflowy data: {str(e)}")
             raise
 
     async def scrape_workflowy(self, url: str, exclude_node_names: list[str] | None = None) -> WorkflowyNode:
@@ -1022,15 +1012,15 @@ class WorkflowyTester:
         Main function to scrape Workflowy content.
         """
         try:
-            print(f"Starting to scrape Workflowy URL: {url}")
+            logger.info(f"Starting to scrape Workflowy URL: {url}")
             
             # Extract session and share IDs
             session_id, share_id = await self.extract_share_id(url)
-            print(f"Extracted - Session ID: {session_id[:20]}..., Share ID: {share_id}")
+            logger.info(f"Extracted - Session ID: {session_id[:20]}..., Share ID: {share_id}")
             
             # Get initialization data
             root_node_ids = await self.get_initial_data(session_id, share_id)
-            print(f"Got root node IDs: {root_node_ids}")
+            logger.info(f"Got root node IDs: {root_node_ids}")
             
             # Get tree data using the original share_id
             item_data_list = await self.get_tree_data(
@@ -1038,21 +1028,21 @@ class WorkflowyTester:
                 share_id=share_id,
                 exclude_node_names=exclude_node_names
             )
-            print(f"Successfully grabbed {len(item_data_list)} items from tree data")
+            logger.info(f"Successfully grabbed {len(item_data_list)} items from tree data")
             
             # Convert to markdown
             workflowy_node = self.url_to_markdown(item_data_list, is_breadcrumb_format=False)
-            print(f"Created WorkflowyNode: {workflowy_node.node_name}")
+            logger.info(f"Created WorkflowyNode: {workflowy_node.node_name}")
             
             # Clean HTML tags
             workflowy_node.content = self.remove_unnecessary_html_tags(workflowy_node.content)
             workflowy_node.timestamp = time.time()
             
-            print(f"Final content length: {len(workflowy_node.content)} characters")
+            logger.info(f"Final content length: {len(workflowy_node.content)} characters")
             return workflowy_node
             
         except Exception as e:
-            print(f"Error scraping Workflowy: {str(e)}")
+            logger.error(f"Error scraping Workflowy: {str(e)}")
             raise
 
     async def process_single_url(self, url_config: Dict, exclude_node_names: list[str] | None = None):
@@ -1071,12 +1061,12 @@ class WorkflowyTester:
         first_run = self.storage.is_first_run(user_name)
         timestamp = get_timestamp()
         
-        print(f"\n{'='*60}")
-        print(f"PROCESSING: {url}")
-        print(f"USER: {user_name}")
-        print(f"FIRST RUN: {first_run}")
-        print(f"TIMESTAMP: {timestamp}")
-        print(f"{'='*60}")
+        logger.info(f"{'='*60}")
+        logger.info(f"PROCESSING: {url}")
+        logger.info(f"USER: {user_name}")
+        logger.info(f"FIRST RUN: {first_run}")
+        logger.info(f"TIMESTAMP: {timestamp}")
+        logger.info(f"{'='*60}")
         
         try:
             # Load previous state from DynamoDB with validation
@@ -1095,16 +1085,16 @@ class WorkflowyTester:
             # Scrape content (unchanged)
             result = await self.scrape_workflowy(url, exclude_node_names)
             
-            print(f"\n📄 SCRAPING RESULTS:")
-            print(f"Node ID: {result.node_id}")
-            print(f"Node Name: {result.node_name}")
-            print(f"Total Content Length: {len(result.content)} characters")
+            logger.info(f"📄 SCRAPING RESULTS:")
+            logger.info(f"\tNode ID: {result.node_id}")
+            logger.info(f"\tNode Name: {result.node_name}")
+            logger.info(f"\tTotal Content Length: {len(result.content)} characters")
             
             # Save full content to S3
             content_s3_url = self.storage.save_scraped_content(user_name, result.content, timestamp)
-            print(f"✅ Full content saved to S3: {content_s3_url}")
+            logger.info(f"✅ Full content saved to S3: {content_s3_url}")
             
-            print(f"\n📋 PROCESSING DOK SECTIONS:")
+            logger.info(f"📋 PROCESSING DOK SECTIONS:")
             
             current_state = {"dok4": [], "dok3": []}
             all_change_tweets = []
@@ -1120,7 +1110,7 @@ class WorkflowyTester:
                 
                 if first_run:
                     # First run: just establish baseline, no tweets
-                    print(f"DOK4 Baseline: {len(current_state['dok4'])} points established (no tweets generated)")
+                    logger.info(f"DOK4 Baseline: {len(current_state['dok4'])} points established (no tweets generated)")
                 else:
                     # Subsequent runs: generate tweets for changes
                     changes = advanced_compare_dok_states(previous_state["dok4"], current_state["dok4"])
@@ -1128,7 +1118,7 @@ class WorkflowyTester:
                     all_change_tweets.extend(dok4_tweets)
                     
                     stats = changes.get("stats", {})
-                    print(f"DOK4 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
+                    logger.info(f"DOK4 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
             
             # DOK3 processing using the same cached raw data  
             dok3_content = await extract_single_dok_section_llm(raw_data, "DOK3")
@@ -1138,7 +1128,7 @@ class WorkflowyTester:
                 
                 if first_run:
                     # First run: just establish baseline, no tweets
-                    print(f"DOK3 Baseline: {len(current_state['dok3'])} points established (no tweets generated)")
+                    logger.info(f"DOK3 Baseline: {len(current_state['dok3'])} points established (no tweets generated)")
                 else:
                     # Subsequent runs: generate tweets for changes
                     changes = advanced_compare_dok_states(previous_state["dok3"], current_state["dok3"])
@@ -1146,36 +1136,36 @@ class WorkflowyTester:
                     all_change_tweets.extend(dok3_tweets)
                     
                     stats = changes.get("stats", {})
-                    print(f"DOK3 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
+                    logger.info(f"DOK3 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
             
             # Save tweets to S3 only if there are tweets to save
             tweets_s3_url = None
             if all_change_tweets:
                 tweets_s3_url = self.storage.save_change_tweets(user_name, all_change_tweets, timestamp)
-                print(f"✅ Change tweets saved to S3: {tweets_s3_url} ({len(all_change_tweets)} tweets)")
+                logger.info(f"✅ Change tweets saved to S3: {tweets_s3_url} ({len(all_change_tweets)} tweets)")
                 
                 first_tweet = all_change_tweets[0]
-                print(f"   Preview: {first_tweet['content_formatted'][:100]}...")
+                logger.info(f"   Preview: {first_tweet['content_formatted'][:100]}...")
             elif first_run:
-                print(f"ℹ️ First run: No tweets generated (baseline established)")
+                logger.info(f"ℹ️ First run: No tweets generated (baseline established)")
             else:
-                print(f"ℹ️ No changes detected: No tweets generated")
+                logger.info(f"ℹ️ No changes detected: No tweets generated")
             
             # Save current state to DynamoDB
             self.storage.save_current_state(user_name, current_state)
-            print(f"✅ Current state saved to DynamoDB")
+            logger.info(f"✅ Current state saved to DynamoDB")
             
             # Summary
             total_changes = len(all_change_tweets)
             if first_run:
                 change_type = "FIRST RUN (BASELINE ESTABLISHED)"
-                print(f"\n🎉 URL PROCESSING COMPLETE! ({change_type})")
-                print(f"📊 Baseline established for {user_name} - no tweets generated")
-                print(f"🔄 Future runs will detect and post changes to Twitter")
+                logger.info(f"🎉 URL PROCESSING COMPLETE! ({change_type})")
+                logger.info(f"📊 Baseline established for {user_name} - no tweets generated")
+                logger.info(f"🔄 Future runs will detect and post changes to Twitter")
             else:
                 change_type = "INCREMENTAL UPDATE"
-                print(f"\n🎉 URL PROCESSING COMPLETE! ({change_type})")
-                print(f"📊 Generated {total_changes} change-based tweets for {user_name}")
+                logger.info(f"🎉 URL PROCESSING COMPLETE! ({change_type})")
+                logger.info(f"📊 Generated {total_changes} change-based tweets for {user_name}")
 
             return {
                 'url': url,
@@ -1192,7 +1182,7 @@ class WorkflowyTester:
             }
             
         except Exception as e:
-            print(f"❌ Error processing {url}: {str(e)}")
+            logger.error(f"❌ Error processing {url}: {str(e)}")
             import traceback
             traceback.print_exc()
             return {
@@ -1213,39 +1203,31 @@ class WorkflowyTester:
             await self._session.close()
             self._session = None
 
-# Configuration for multiple URLs
-# WORKFLOWY_URLS = [
-#     {
-#         'url': 'https://workflowy.com/s/new-pk-2-reading-cou/bjSyw1MzswiIsciE',
-#         'name': 'new_pk_2_reading_course'
-#     }
-# ]
-
 async def test_multiple_workflowy_urls():
     """Test multiple Workflowy URLs and generate separate files for each."""
     
-    print("🚀 MULTI-URL WORKFLOWY SCRAPER")
-    print("="*60)
+    logger.info("🚀 MULTI-URL WORKFLOWY SCRAPER")
+    logger.info("="*60)
     
     # Load URLs from DynamoDB instead of hardcoded constant
     storage = AWSStorage()
     workflowy_urls = storage.get_workflowy_urls()
     
     if not workflowy_urls:
-        print("❌ No active Workflowy URLs found in DynamoDB!")
+        logger.error("❌ No active Workflowy URLs found in DynamoDB!")
         return
     
-    print(f"📋 Found {len(workflowy_urls)} active URL(s) from DynamoDB:")
+    logger.info(f"📋 Found {len(workflowy_urls)} active URL(s) from DynamoDB:")
     for url_config in workflowy_urls:
-        print(f"  • {url_config['name']}: {url_config['url']}")
+        logger.info(f"  • {url_config['name']}: {url_config['url']}")
     
-    print(f"Output directory structure: users/{{user_name}}/")
+    logger.info(f"Output directory structure: users/{{user_name}}/")
     
     results = []
     
     async with WorkflowyTester() as tester:
         for i, url_config in enumerate(workflowy_urls, 1):
-            print(f"\n🔄 PROCESSING URL {i}/{len(workflowy_urls)}")
+            logger.info(f"🔄 PROCESSING URL {i}/{len(workflowy_urls)}")
             
             result = await tester.process_single_url(
                 url_config
@@ -1255,44 +1237,44 @@ async def test_multiple_workflowy_urls():
             
             # Add delay between URLs to be respectful
             if i < len(workflowy_urls):
-                print(f"⏱️ Waiting 2 seconds before next URL...")
+                logger.info(f"⏱️ Waiting 2 seconds before next URL...")
                 await asyncio.sleep(2)
     
     # Final summary
-    print(f"{'='*60}")
-    print("🏁 FINAL SUMMARY")
-    print(f"{'='*60}")
+    logger.info(f"{'='*60}")
+    logger.info("🏁 FINAL SUMMARY")
+    logger.info(f"{'='*60}")
     
     successful = [r for r in results if r['status'] == 'success']
     failed = [r for r in results if r['status'] == 'error']
     
-    print(f"✅ Successful: {len(successful)}/{len(results)}")
-    print(f"❌ Failed: {len(failed)}/{len(results)}")
+    logger.info(f"✅ Successful: {len(successful)}/{len(results)}")
+    logger.info(f"❌ Failed: {len(failed)}/{len(results)}")
     
     if successful:
-        print(f"\n📁 AWS STORAGE STRUCTURE CREATED:")
+        logger.info(f"\n📁 AWS STORAGE STRUCTURE CREATED:")
         for result in successful:
-            print(f"\n  👤 {result['user_name']} ({result['total_change_tweets']} tweets)")
+            logger.info(f"\n  👤 {result['user_name']} ({result['total_change_tweets']} tweets)")
             for file_type, filepath in result['files_created'].items():
                 if filepath:
                     if file_type == 'state_location':
-                        print(f"    - State: {filepath}")
+                        logger.info(f"    - State: {filepath}")
                     else:
                         # Extract just the key from S3 URL for display
                         if filepath.startswith('s3://'):
                             key = filepath.split('/', 3)[-1] if '/' in filepath else filepath
-                            print(f"    - {file_type}: s3://.../.../{key.split('/')[-1]}")
+                            logger.info(f"    - {file_type}: s3://.../.../{key.split('/')[-1]}")
                         else:
-                            print(f"    - {file_type}: {filepath}")
+                            logger.info(f"    - {file_type}: {filepath}")
     
     if failed:
-        print(f"\n❌ FAILED URLS:")
+        logger.info(f"\n❌ FAILED URLS:")
         for result in failed:
-            print(f"  - {result['url']}: {result['error']}")
+            logger.info(f"  - {result['url']}: {result['error']}")
     
     total_tweets = sum(r.get('total_change_tweets', 0) for r in successful)
-    print(f"\n🎉 GRAND TOTAL: {total_tweets} tweets generated!")
-    print(f"☁️ Check your S3 bucket and DynamoDB table for all generated content")
+    logger.info(f"\n🎉 GRAND TOTAL: {total_tweets} tweets generated!")
+    logger.info(f"☁️ Check your S3 bucket and DynamoDB table for all generated content")
 
 async def test_single_url():
     """Test with a single URL (for compatibility)."""
@@ -1308,11 +1290,11 @@ async def test_single_url():
                 # exclude_node_names=["SpikyPOVs", "Private Notes"]
             )
     else:
-        print("❌ No URLs configured in DynamoDB")
+        logger.error("❌ No URLs configured in DynamoDB")
 
 if __name__ == "__main__":
-    print("Workflowy Scraper Test")
-    print("=====================")
+    logger.info("Workflowy Scraper Test")
+    logger.info("=====================")
     
     # Choose which test to run:
     

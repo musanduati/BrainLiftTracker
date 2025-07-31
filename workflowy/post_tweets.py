@@ -3,15 +3,11 @@ import asyncio
 import aiohttp
 from typing import List, Dict, Optional
 from pathlib import Path
-import logging
 import re
 from datetime import datetime
 
 from aws_storage import AWSStorage
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from logger_config import logger
 
 class TweetPoster:
     def __init__(self, posting_mode: str = "all"):
@@ -45,12 +41,12 @@ class TweetPoster:
         if self._user_account_mapping is None:
             # Lazy load the mapping from DynamoDB
             self._user_account_mapping = self.storage.get_user_account_mapping()
-            print(f"📋 Loaded user account mapping from DynamoDB: {self._user_account_mapping}")
+            logger.info(f"📋 Loaded user account mapping from DynamoDB: {self._user_account_mapping}")
         
         account_id = self._user_account_mapping.get(user_name)
         if account_id is None:
-            print(f"❌ No account mapping found for user: {user_name}")
-            print(f"Available mappings: {list(self._user_account_mapping.keys())}")
+            logger.error(f"❌ No account mapping found for user: {user_name}")
+            logger.info(f"Available mappings: {list(self._user_account_mapping.keys())}")
         
         return account_id
 
@@ -59,7 +55,7 @@ class TweetPoster:
         if self._user_account_mapping is None:
             # Lazy load the mapping from DynamoDB
             self._user_account_mapping = self.storage.get_user_account_mapping()
-            print(f"📋 Loaded user account mapping from DynamoDB: {self._user_account_mapping}")
+            logger.info(f"📋 Loaded user account mapping from DynamoDB: {self._user_account_mapping}")
         
         return self._user_account_mapping
 
@@ -73,7 +69,7 @@ class TweetPoster:
                 MaxKeys=1000
             )
 
-            print("Response: ", response)
+            logger.info(f"Response: {response}")
             users = []
             
             # Get user account mapping from DynamoDB
@@ -83,10 +79,10 @@ class TweetPoster:
             if 'CommonPrefixes' in response:
                 for prefix_info in response['CommonPrefixes']:
                     prefix = prefix_info['Prefix']
-                    print("Prefix: ", prefix)
+                    logger.info(f"Prefix: {prefix}")
                     # Extract user name (remove trailing slash)
                     user_name = prefix.rstrip('/')
-                    print("User name: ", user_name)
+                    logger.info(f"User name: {user_name}")
                     
                     # Check if user has valid account mapping and has tweet data
                     if user_name in user_mapping:
@@ -283,18 +279,18 @@ class TweetPoster:
             tweet_id if successful, None if failed
         """
         url = f"{self.api_base}/tweet"
-        print("Creating tweet: ", text)
-        print("Account ID: ", account_id)
+        logger.info(f"Creating tweet: {text}")
+        logger.info(f"Account ID: {account_id}")
 
         payload = {
             "text": text,
             "account_id": account_id
         }
         logger.info("Tweet payload: ", payload)
-        print("Payload: ", payload)
+        logger.info(f"Payload: {payload}")
         
         try:
-            print("URL: ", url)
+            logger.info(f"URL: {url}")
             async with session.post(url, headers=self.headers, json=payload) as response:
                 if response.status == 201:
                     data = await response.json()
@@ -327,8 +323,8 @@ class TweetPoster:
         """
         url = f"{self.api_base}/tweet/post/{tweet_id}"
 
-        print("Posting tweet: ", tweet_id)
-        print("URL: ", url)
+        logger.info(f"Posting tweet: {tweet_id}")
+        logger.info(f"URL: {url}")
         
         try:
             async with session.post(url, headers=self.headers) as response:
@@ -813,7 +809,7 @@ class TweetPoster:
             )
             
             if 'Contents' not in response:
-                print(f"📄 No tweet files found in S3 for {user_name}")
+                logger.info(f"📄 No tweet files found in S3 for {user_name}")
                 return []
             
             # Sort by last modified and get latest
@@ -826,11 +822,11 @@ class TweetPoster:
             )
             
             tweets_data = json.loads(obj['Body'].read())
-            print(f"📄 Loaded {len(tweets_data)} tweets from S3: {latest_object['Key']}")
+            logger.info(f"📄 Loaded {len(tweets_data)} tweets from S3: {latest_object['Key']}")
             return tweets_data
             
         except Exception as e:
-            print(f"❌ Error loading tweets from AWS for {user_name}: {e}")
+            logger.error(f"❌ Error loading tweets from AWS for {user_name}: {e}")
             return []
 
     def save_updated_tweets_to_aws(self, user_name: str, tweets: List[Dict]):
@@ -843,17 +839,17 @@ class TweetPoster:
             
             # Save with updated status
             updated_url = self.storage.save_change_tweets(user_name, tweets, f"{timestamp}_updated")
-            print(f"📄 Updated tweet statuses saved to S3: {updated_url}")
+            logger.info(f"📄 Updated tweet statuses saved to S3: {updated_url}")
             
         except Exception as e:
-            print(f"❌ Error saving updated tweets to AWS for {user_name}: {e}")
+            logger.error(f"❌ Error saving updated tweets to AWS for {user_name}: {e}")
 
 def preview_what_will_be_posted(target_users: Optional[List[str]] = None, posting_mode: str = "all"):
     """Preview which tweets will be posted without actually posting them."""
     poster = TweetPoster(posting_mode=posting_mode)
     
-    print(f"👀 PREVIEW: What will be posted (ALL CHANGES)")
-    print("=" * 50)
+    logger.info(f"👀 PREVIEW: What will be posted (ALL CHANGES)")
+    logger.info("=" * 50)
     
     available_users = poster.get_available_users()
     
@@ -863,38 +859,38 @@ def preview_what_will_be_posted(target_users: Optional[List[str]] = None, postin
         users_to_preview = available_users
     
     if not users_to_preview:
-        print("❌ No users available for preview")
+        logger.error("❌ No users available for preview")
         return
     
     for user_name in users_to_preview:
         account_id = poster.get_account_id(user_name)
-        print(f"\n👤 USER: {user_name} (Account ID: {account_id})")
-        print("-" * 30)
+        logger.info(f"\n👤 USER: {user_name} (Account ID: {account_id})")
+        logger.info("-" * 30)
         
         # Find latest tweet file
         tweet_file = poster.find_latest_tweet_file(user_name)
         
         if not tweet_file:
-            print(f"❌ No tweet files found for {user_name}")
+            logger.error(f"❌ No tweet files found for {user_name}")
             continue
         
         timestamp = poster.extract_timestamp_from_filename(tweet_file)
-        print(f"📅 Latest file: {tweet_file.name} ({timestamp})")
+        logger.info(f"📅 Latest file: {tweet_file.name} ({timestamp})")
         
         # Load and analyze tweets
         all_tweets = poster.load_tweet_data(tweet_file)
         
         if not all_tweets:
-            print(f"❌ No tweets in file for {user_name}")
+            logger.error(f"❌ No tweets in file for {user_name}")
             continue
         
         # Show content summary
         dok4_tweets = poster.filter_tweets_by_section(all_tweets, "DOK4")
         dok3_tweets = poster.filter_tweets_by_section(all_tweets, "DOK3")
         
-        print(f"\n📊 Content Summary:")
-        print(f"   DOK4 tweets: {len(dok4_tweets)}")
-        print(f"   DOK3 tweets: {len(dok3_tweets)}")
+        logger.info(f"\n📊 Content Summary:")
+        logger.info(f"   DOK4 tweets: {len(dok4_tweets)}")
+        logger.info(f"   DOK3 tweets: {len(dok3_tweets)}")
         
         # Show change types
         change_summary = {}
@@ -902,33 +898,33 @@ def preview_what_will_be_posted(target_users: Optional[List[str]] = None, postin
             change_type = tweet.get("change_type", "unknown")
             change_summary[change_type] = change_summary.get(change_type, 0) + 1
         
-        print(f"   Change types: {change_summary}")
+        logger.info(f"   Change types: {change_summary}")
         
         # Show what will be posted
         thread_groups = poster.group_tweets_by_thread(all_tweets)
         
         if thread_groups:
-            print(f"\n🚀 Will post ALL {len(thread_groups)} threads:")
+            logger.info(f"\n🚀 Will post ALL {len(thread_groups)} threads:")
             
             for i, (thread_id, thread_tweets) in enumerate(thread_groups.items(), 1):
                 main_tweet = thread_tweets[0] if thread_tweets else {}
                 
-                print(f"\n   Thread {i}: {thread_id}")
-                print(f"      Section: {main_tweet.get('section')}")
-                print(f"      Change type: {main_tweet.get('change_type')}")
-                print(f"      Parts: {len(thread_tweets)}")
+                logger.info(f"\n   Thread {i}: {thread_id}")
+                logger.info(f"      Section: {main_tweet.get('section')}")
+                logger.info(f"      Change type: {main_tweet.get('change_type')}")
+                logger.info(f"      Parts: {len(thread_tweets)}")
                 
                 if main_tweet.get('change_type') == 'updated':
                     similarity = main_tweet.get('similarity_score', 0)
-                    print(f"      Similarity: {similarity:.0%}")
+                    logger.info(f"      Similarity: {similarity:.0%}")
                 
-                print(f"\n      Content preview:")
+                logger.info(f"\n      Content preview:")
                 for j, tweet in enumerate(thread_tweets, 1):
                     content = tweet.get("content_formatted", "")
-                    print(f"         Part {j}: {content[:80]}...")
-                    print(f"                  Characters: {len(content)}")
+                    logger.info(f"         Part {j}: {content[:80]}...")
+                    logger.info(f"                  Characters: {len(content)}")
         else:
-            print(f"\n❌ No threads available for {user_name}")
+            logger.error(f"\n❌ No threads available for {user_name}")
 
 async def main():
     """Main function with options."""
@@ -945,7 +941,7 @@ async def main():
         if arg == "--mode" and i + 1 < len(args):
             posting_mode = args[i + 1]
             if posting_mode not in ["single", "all"]:
-                print(f"❌ Invalid posting mode: {posting_mode}. Must be 'single' or 'all'")
+                logger.error(f"❌ Invalid posting mode: {posting_mode}. Must be 'single' or 'all'")
                 return
             i += 2
         elif arg == "preview":
@@ -962,15 +958,15 @@ async def main():
     await poster.run(target_users if target_users else None)
 
 if __name__ == "__main__":
-    print("Tweet Poster for DOK Content (Change Detection)")
-    print("Usage:")
-    print("  python post_tweets.py [user1] [user2]                   # Post all changes for specified users")
-    print("  python post_tweets.py                                   # Post all changes for all users")
-    print("  python post_tweets.py preview [user1]                   # Preview what will be posted")
-    print()
-    print("NOTE: All detected changes will be posted (no prioritization)")
-    print()
-    print("Available users and account IDs:")
+    logger.info("Tweet Poster for DOK Content (Change Detection)")
+    logger.info("Usage:")
+    logger.info("  python post_tweets.py [user1] [user2]                   # Post all changes for specified users")
+    logger.info("  python post_tweets.py                                   # Post all changes for all users")
+    logger.info("  python post_tweets.py preview [user1]                   # Preview what will be posted")
+    logger.info()
+    logger.info("NOTE: All detected changes will be posted (no prioritization)")
+    logger.info()
+    logger.info("Available users and account IDs:")
     
     # Load mapping from DynamoDB for display
     try:
@@ -978,11 +974,9 @@ if __name__ == "__main__":
         storage = AWSStorage()
         user_mapping = storage.get_user_account_mapping()
         for user, account_id in user_mapping.items():
-            print(f"  {user}: Account {account_id}")
+            logger.info(f"  {user}: Account {account_id}")
     except Exception as e:
-        print(f"  Error loading user mappings from DynamoDB: {e}")
-        print("  Make sure DynamoDB tables are set up with configuration data")
-    
-    print()
+        logger.error(f"  Error loading user mappings from DynamoDB: {e}")
+        logger.info("  Make sure DynamoDB tables are set up with configuration data")
     
     asyncio.run(main())

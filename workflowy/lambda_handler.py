@@ -4,13 +4,13 @@ import asyncio
 from test_workflowy import WorkflowyTester
 from post_tweets import TweetPoster
 from aws_storage import AWSStorage
-import os
+from logger_config import logger
 
 def lambda_handler(event, context):
     """
     Lambda handler for scheduled Workflowy processing AND tweet posting
     """
-    print("🚀 Starting Workflowy processing + Tweet posting in Lambda")
+    logger.info("🚀 Starting Workflowy processing + Tweet posting in Lambda")
     
     # Run the async processing
     results = asyncio.run(process_and_post())
@@ -36,8 +36,8 @@ def lambda_handler(event, context):
         }
     }
     
-    print(f"✅ Scraping complete: {scraping_successful} successful, {scraping_failed} failed")
-    print(f"✅ Posting complete: {posting_successful} successful, {posting_failed} failed")
+    logger.info(f"✅ Scraping complete: {scraping_successful} successful, {scraping_failed} failed")
+    logger.info(f"✅ Posting complete: {posting_successful} successful, {posting_failed} failed")
     
     return {
         'statusCode': 200,
@@ -48,12 +48,12 @@ async def process_and_post():
     """Process all URLs and then post tweets"""
     
     # Step 1: Get URLs from DynamoDB
-    print("📊 STEP 1: Loading configuration from DynamoDB...")
+    logger.info("📊 STEP 1: Loading configuration from DynamoDB...")
     storage = AWSStorage()
     workflowy_urls = storage.get_workflowy_urls()
     
     if not workflowy_urls:
-        print("❌ No active Workflowy URLs found in DynamoDB!")
+        logger.error("❌ No active Workflowy URLs found in DynamoDB!")
         return {
             'scraping_results': [{
                 'status': 'error',
@@ -62,17 +62,17 @@ async def process_and_post():
             'posting_results': []
         }
     
-    print(f"📋 Found {len(workflowy_urls)} active URL(s) to process")
+    logger.info(f"📋 Found {len(workflowy_urls)} active URL(s) to process")
     for url_config in workflowy_urls:
-        print(f"  • {url_config['name']}: {url_config['url']}")
+        logger.info(f"  • {url_config['name']}: {url_config['url']}")
     
     # Step 2: Scrape Workflowy content
-    print("\n📊 STEP 2: Scraping Workflowy content...")
+    logger.info("📊 STEP 2: Scraping Workflowy content...")
     scraping_results = []
     
     async with WorkflowyTester() as tester:
         for i, url_config in enumerate(workflowy_urls, 1):
-            print(f"\n🔄 SCRAPING URL {i}/{len(workflowy_urls)}: {url_config['name']}")
+            logger.info(f"🔄 SCRAPING URL {i}/{len(workflowy_urls)}: {url_config['name']}")
             
             result = await tester.process_single_url(
                 url_config
@@ -82,11 +82,11 @@ async def process_and_post():
             
             # Add delay between URLs to be respectful
             if i < len(workflowy_urls):
-                print(f"⏱️ Waiting 2 seconds before next URL...")
+                logger.info(f"⏱️ Waiting 2 seconds before next URL...")
                 await asyncio.sleep(2)
     
     # Step 3: Post tweets for users that had new content
-    print(f"\n🐦 STEP 3: Posting tweets...")
+    logger.info(f"🐦 STEP 3: Posting tweets...")
     posting_results = []
     
     # Get list of users who had content processed
@@ -94,9 +94,9 @@ async def process_and_post():
     for result in scraping_results:
         if result['status'] == 'success' and result.get('total_change_tweets', 0) > 0:
             users_with_content.append(result['user_name'])
-    
+
     if users_with_content:
-        print(f"👥 Users with new content to post: {users_with_content}")
+        logger.info(f"👥 Users with new content to post: {users_with_content}")
         
         # Create TweetPoster and post tweets
         poster = TweetPoster(posting_mode="single")  # or "all" if you want to post all threads
@@ -104,34 +104,34 @@ async def process_and_post():
         # Process each user individually for better error handling
         for user_name in users_with_content:
             try:
-                print(f"\n🔄 POSTING tweets for {user_name}...")
-                
+                logger.info(f"🔄 POSTING tweets for {user_name}...")
+
                 # Use the updated run method that can handle individual users
                 user_results = await process_single_user_posting(poster, user_name)
                 posting_results.append(user_results)
                 
                 # Add delay between users
                 if user_name != users_with_content[-1]:
-                    print(f"⏱️ Waiting 10 seconds before next user...")
+                    logger.info(f"⏱️ Waiting 10 seconds before next user...")
                     await asyncio.sleep(10)
                     
             except Exception as e:
-                print(f"❌ Error posting tweets for {user_name}: {e}")
+                logger.error(f"❌ Error posting tweets for {user_name}: {e}")
                 posting_results.append({
                     'user': user_name,
                     'status': 'error',
                     'error': str(e)
                 })
     else:
-        print("ℹ️ No users with new content to post")
+        logger.info("ℹ️ No users with new content to post")
         posting_results.append({
             'user': 'none',
             'status': 'success',
             'message': 'No new content to post'
         })
 
-    print(f"📊 Scraping results: {scraping_results}")
-    print(f"👥 Posting results: {posting_results}")
+    logger.info(f"📊 Scraping results: {scraping_results}")
+    logger.info(f"👥 Posting results: {posting_results}")
     
     return {
         'scraping_results': scraping_results,
@@ -172,7 +172,7 @@ async def process_single_user_posting(poster: TweetPoster, user_name: str):
             'pending_tweets': 0
         }
     
-    print(f"📊 Found {len(pending_tweets)} pending tweets for {user_name}")
+    logger.info(f"📊 Found {len(pending_tweets)} pending tweets for {user_name}")
     
     # Create aiohttp session for posting
     import aiohttp
@@ -195,10 +195,10 @@ async def process_single_user_posting(poster: TweetPoster, user_name: str):
                 success = await poster.process_single_thread_for_user(session, thread_tweets, account_id)
                 if success:
                     posted_count += len(thread_tweets)
-                    print(f"✅ Posted thread with {len(thread_tweets)} tweets")
+                    logger.info(f"✅ Posted thread with {len(thread_tweets)} tweets")
                 else:
                     failed_count += len(thread_tweets)
-                    print(f"❌ Failed to post thread with {len(thread_tweets)} tweets")
+                    logger.error(f"❌ Failed to post thread with {len(thread_tweets)} tweets")
                 
                 # Delay between threads
                 if thread_tweets != threads_to_process[-1]:
@@ -206,7 +206,7 @@ async def process_single_user_posting(poster: TweetPoster, user_name: str):
                     
             except Exception as e:
                 failed_count += len(thread_tweets)
-                print(f"❌ Error posting thread: {e}")
+                logger.error(f"❌ Error posting thread: {e}")
         
         return {
             'user': user_name,

@@ -9,18 +9,12 @@ This module contains all LLM-related functionality including:
 """
 
 import ast
-import logging
 import os
 import re
 from dataclasses import dataclass
 from typing import Optional, List, Dict
-
 import aiohttp
-
-# Setup logger
-logger = logging.getLogger("workflowy_llm")
-logger.setLevel(logging.DEBUG)
-
+from logger_config import logger
 
 def _fallback_node_matching(node_name: str, nodes: list[dict[str, str]]) -> str | None:
     """
@@ -299,9 +293,10 @@ async def extract_node_id_using_llm(
         lm_service_instance = get_lm_service()
     
     try:
+        logger.info(f"Extracting node ID for: {node_name}")
+        logger.info(f"Nodes: {nodes}")
         query = f"Node to find: {node_name} \n List of nodes: {nodes}"
-        print(f"Query: {query}")
-        
+
         # Use actual LLM service integration 
         request = GenerateSimpleTextRequest(
             query=query, 
