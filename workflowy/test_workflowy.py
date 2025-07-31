@@ -1492,7 +1492,6 @@ async def test_multiple_workflowy_urls():
     
     if not workflowy_urls:
         print("❌ No active Workflowy URLs found in DynamoDB!")
-        print("💡 Use storage.setup_initial_configuration() to set up initial data")
         return
     
     print(f"📋 Found {len(workflowy_urls)} active URL(s) from DynamoDB:")
@@ -1564,12 +1563,11 @@ async def test_single_url():
         
         async with WorkflowyTester() as tester:
             await tester.process_single_url(
-                url_config,
-                exclude_node_names=["SpikyPOVs", "Private Notes"]
+                url_config
+                # exclude_node_names=["SpikyPOVs", "Private Notes"]
             )
     else:
         print("❌ No URLs configured in DynamoDB")
-        print("💡 Use storage.setup_initial_configuration() to set up initial data")
 
 if __name__ == "__main__":
     print("Workflowy Scraper Test")
