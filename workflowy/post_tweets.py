@@ -203,7 +203,6 @@ class TweetPoster:
         
         logger.info(f"Thread payload: {len(tweet_texts)} tweets, thread_id: {thread_id}")
         logger.info(f"Payload: {payload}")
-        logger.info(f"Headers: {self.headers}")
         logger.info(f"URL: {url}")
         
         try:
@@ -248,7 +247,6 @@ class TweetPoster:
         url = f"{self.api_base}/thread/post/{thread_id}"
 
         logger.info(f"   Posting thread {thread_id}")
-        logger.info(f"   Headers: {self.headers}")
         logger.info(f"   URL: {url}")
 
         try:
@@ -297,7 +295,6 @@ class TweetPoster:
         
         try:
             print("URL: ", url)
-            print("Headers: ", self.headers)
             async with session.post(url, headers=self.headers, json=payload) as response:
                 if response.status == 201:
                     data = await response.json()
@@ -332,7 +329,6 @@ class TweetPoster:
 
         print("Posting tweet: ", tweet_id)
         print("URL: ", url)
-        print("Headers: ", self.headers)
         
         try:
             async with session.post(url, headers=self.headers) as response:
