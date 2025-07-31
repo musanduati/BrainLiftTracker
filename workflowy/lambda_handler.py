@@ -129,6 +129,9 @@ async def process_and_post():
             'status': 'success',
             'message': 'No new content to post'
         })
+
+    print(f"📊 Scraping results: {scraping_results}")
+    print(f"👥 Posting results: {posting_results}")
     
     return {
         'scraping_results': scraping_results,
