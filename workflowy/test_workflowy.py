@@ -19,7 +19,17 @@ import diff_match_patch as dmp_module
 # Add AWS storage import
 from aws_storage import AWSStorage
 
+# Import LLM service components
+from llm_service import (
+    extract_node_id_using_llm,
+    get_lm_service
+)
+
 logger = logging.getLogger("workflowy_test")
+logger.setLevel(logging.DEBUG)
+
+# Global LLM service instance
+lm_service = get_lm_service()
 
 # Replace with these simple classes:
 class AuxiliaryProject:
@@ -51,6 +61,33 @@ class WorkflowyNode:
         self.content = content
         self.timestamp = timestamp
 
+async def extract_top_level_nodes(item_data_list: list[dict[str, str]]) -> list[dict[str, str]]:
+    """
+    Extract the main nodes such as: Purpose, Owner, Experts, SPOVs, Knowledge Tree from a project's BrainLift
+
+    Args:
+        item_data_list: List of item data from Workflowy
+
+    Returns:
+        List of dictionaries containing node names and their IDs
+        [{"name": "Purpose", "id": "123"}, {"name": "Experts", "id": "456"}, ...]
+    """
+    # Find the root node (node with no parent or parent key doesn't exist)
+    root_node = next((item for item in item_data_list if "prnt" not in item or item.get("prnt") is None), None)
+
+    if not root_node:
+        logger.error("No root node found")
+        return []
+
+    # Get all direct children of the root node
+    main_nodes = []
+    for item in item_data_list:
+        if item.get("prnt") == root_node["id"]:
+            main_nodes.append({"name": item["nm"], "id": item["id"]})
+            logger.debug(f"Found main node: {item['nm']}")
+
+    return main_nodes
+
 def get_regex_matching_pattern(node_names: list[str] | str) -> re.Pattern:
     if isinstance(node_names, str):
         node_names = [node_names]
@@ -58,47 +95,115 @@ def get_regex_matching_pattern(node_names: list[str] | str) -> re.Pattern:
     pattern = r"^\s*[\-:;,.]*\s*(" + "|".join(re.escape(name) for name in node_names) + r")\s*[\-:;,.]*\s*$"
     return re.compile(pattern, re.IGNORECASE)
 
-def extract_dok_sections_from_content(content: str) -> str:
-    """
-    Extract only DOK4 and DOK3 sections from the clean markdown content.
-    Only looks for DOK4/DOK3 at the correct high-level indentation (2 spaces).
-    """
-    lines = content.split('\n')
-    filtered_lines = []
-    capturing = False
-    dok_indent_level = 2  # DOK4 and DOK3 are at 2 spaces indentation
+# Add this function before _extract_node_content (around line 330)
+def _clean_html_content(content: str) -> str:
+    """Clean HTML content and convert to markdown (standalone version)."""
+    if not content:
+        return ""
     
-    for line in lines:
-        # Calculate the indentation level
-        stripped = line.lstrip()
-        if stripped:
-            indent = len(line) - len(stripped)
+    import re
+    
+    # Remove mention tags
+    content = re.sub(r"<mention[^>]*>[^<]*</mention>", "", content)
+
+    # Convert hyperlinks to markdown format
+    def replace_link(match):
+        href = re.search(r'href=["\'](.*?)["\']', match.group(0))
+        text = re.sub(r"<[^>]+>", "", match.group(0))
+        if href:
+            return f"[{text.strip()}]({href.group(1)})"
+        return text.strip()
+
+    content = re.sub(r"<a[^>]+>.*?</a>", replace_link, content)
+    
+    # Remove all remaining HTML tags
+    content = re.sub(r"<[^>]+>", "", content)
+    
+    return content.strip()
+
+def _extract_node_content(item_data_list: list[dict[str, str]], node_id: str, header_prefix: str) -> str:
+    """
+    Extract content for a specific node and its children in markdown format.
+    Now with HTML tag cleaning!
+    
+    Args:
+        item_data_list: List of item data from Workflowy
+        node_id: ID of the node to extract
+        header_prefix: Prefix for the section header
+        
+    Returns:
+        str: Formatted content for the node (cleaned of HTML tags)
+    """
+    def get_node_by_id(target_id: str) -> dict | None:
+        return next((item for item in item_data_list if item["id"] == target_id), None)
+    
+    def get_children(parent_id: str) -> list[dict]:
+        return [item for item in item_data_list if item.get("prnt") == parent_id]
+    
+    def format_node_content(node: dict, indent_level: int = 0) -> str:
+        indent = "  " * indent_level
+        
+        # Clean HTML tags from node name
+        node_name = _clean_html_content(node.get('nm', '').strip())
+        content = f"{indent}- {node_name}\n"
+        
+        # Add note content if present (also clean HTML)
+        if node.get('no'):
+            note_content = _clean_html_content(node['no'].strip())
+            content += f"{indent}  {note_content}\n"
+        
+        # Recursively add children
+        children = get_children(node["id"])
+        for child in sorted(children, key=lambda x: x.get("pr", 0)):
+            content += format_node_content(child, indent_level + 1)
             
-            # Check if this is a DOK4 or DOK3 section header at the correct level
-            if (indent == dok_indent_level and 
-                (stripped.startswith('- DOK4') or stripped.startswith('- DOK3'))):
-                capturing = True
-                filtered_lines.append(line)
-            
-            # If we're capturing and this line has greater indentation than DOK level, include it
-            elif capturing and indent > dok_indent_level:
-                filtered_lines.append(line)
-            
-            # If we hit a line at DOK level or less that's not DOK4/DOK3, stop capturing
-            elif capturing and indent <= dok_indent_level:
-                if (indent == dok_indent_level and 
-                    (stripped.startswith('- DOK4') or stripped.startswith('- DOK3'))):
-                    # Start a new DOK section
-                    filtered_lines.append(line)
-                else:
-                    # End of current DOK section
-                    capturing = False
+        return content
+    
+    # Get the main node
+    main_node = get_node_by_id(node_id)
+    if not main_node:
+        return ""
+    
+    # Start with header (clean HTML from main node name)
+    main_node_name = _clean_html_content(main_node.get('nm', '').strip())
+    result = f"{header_prefix} - {main_node_name}\n"
+    
+    # Add children content
+    children = get_children(node_id)
+    for child in sorted(children, key=lambda x: x.get("pr", 0)):
+        result += format_node_content(child, 2)  # Start with 2-space indent for DOK children
+    
+    return result
+
+async def extract_single_dok_section_llm(item_data_list: list[dict[str, str]], section_prefix: str) -> str:
+    """
+    Extract a single DOK section using LLM-based node identification.
+    
+    Args:
+        item_data_list: List of item data from Workflowy
+        section_prefix: "DOK4" or "DOK3"
+        
+    Returns:
+        str: Content for the specified DOK section
+    """
+    try:
+        # Get top-level nodes
+        main_nodes = await extract_top_level_nodes(item_data_list)
+        print(f"Main nodes: {main_nodes}")
+        
+        # Find the specific DOK node using LLM
+        dok_node_id = await extract_node_id_using_llm(section_prefix, main_nodes)
+        print(f"Dok node id: {dok_node_id}")
+        if dok_node_id:
+            return _extract_node_content(item_data_list, dok_node_id, f"  - {section_prefix}")
+
         else:
-            # Empty line - include if we're currently capturing
-            if capturing:
-                filtered_lines.append(line)
-    
-    return '\n'.join(filtered_lines)
+            logger.warning("Could not find %s node", section_prefix)
+            return ""
+            
+    except Exception as e:
+        logger.error("Error extracting %s section with LLM: %s", section_prefix, e)
+        return ""
 
 def extract_single_dok_section(content: str, section_prefix: str) -> str:
     """
@@ -320,30 +425,6 @@ def generate_tweet_data(points: List[Dict]) -> List[Dict]:
     
     return tweets
 
-def process_dok_content_to_tweets(full_content: str) -> Dict[str, List[Dict]]:
-    """
-    Process full DOK content and generate tweet data for both DOK4 and DOK3.
-    """
-    results = {}
-    
-    # Process DOK4
-    dok4_content = extract_single_dok_section(full_content, "DOK4")
-    if dok4_content.strip():
-        dok4_points = parse_dok_points(dok4_content, "DOK4")
-        dok4_tweets = generate_tweet_data(dok4_points)
-        results["dok4"] = dok4_tweets
-        print(f"Generated {len(dok4_tweets)} tweets from {len(dok4_points)} DOK4 points")
-    
-    # Process DOK3
-    dok3_content = extract_single_dok_section(full_content, "DOK3")
-    if dok3_content.strip():
-        dok3_points = parse_dok_points(dok3_content, "DOK3")
-        dok3_tweets = generate_tweet_data(dok3_points)
-        results["dok3"] = dok3_tweets
-        print(f"Generated {len(dok3_tweets)} tweets from {len(dok3_points)} DOK3 points")
-    
-    return results
-
 def extract_url_identifier(url: str) -> str:
     """Extract a unique identifier from the URL for file naming."""
     # Extract the share ID from URL like "https://workflowy.com/s/sanket-ghia/ehJL5sj6EXqV4LJR"
@@ -353,26 +434,6 @@ def extract_url_identifier(url: str) -> str:
     
     # Fallback: use hash of URL
     return hashlib.md5(url.encode()).hexdigest()[:8]
-
-def create_user_directory(user_name: str) -> Path:
-    """
-    Create and return the user directory path.
-    
-    Args:
-        user_name: Name for the user directory
-        
-    Returns:
-        Path object for the user directory
-    """
-    # Create users directory if it doesn't exist
-    users_dir = Path("users")
-    users_dir.mkdir(exist_ok=True)
-    
-    # Create user-specific directory
-    user_dir = users_dir / user_name
-    user_dir.mkdir(exist_ok=True)
-    
-    return user_dir
 
 # Add these utility functions BEFORE the WorkflowyTester class (around line 350)
 def get_timestamp() -> str:
@@ -417,180 +478,6 @@ def create_dok_state_from_points(points: List[Dict]) -> List[Dict]:
         }
         state_points.append(state_point)
     return state_points
-
-def compare_dok_states(previous_state: List[Dict], current_state: List[Dict]) -> Dict:
-    """Compare previous and current DOK states to identify changes."""
-    prev_hashes = {point["content_hash"]: point for point in previous_state}
-    curr_hashes = {point["content_hash"]: point for point in current_state}
-    
-    added = [point for hash_key, point in curr_hashes.items() if hash_key not in prev_hashes]
-    deleted = [point for hash_key, point in prev_hashes.items() if hash_key not in curr_hashes]
-    
-    # For updated detection, we need to check if content with same position has changed
-    updated = []
-    # We'll use a simpler approach: if main_content is similar but hash is different
-    for curr_point in current_state:
-        curr_main = curr_point["main_content"].lower().strip()
-        # Look for similar content in previous state
-        for prev_point in previous_state:
-            prev_main = prev_point["main_content"].lower().strip()
-            # If main content is very similar (first 50 chars) but hash is different
-            if (curr_main[:50] == prev_main[:50] and 
-                curr_point["content_hash"] != prev_point["content_hash"] and
-                curr_point["content_hash"] not in prev_hashes):
-                updated.append({
-                    "current": curr_point,
-                    "previous": prev_point
-                })
-                # Remove from added since it's an update
-                added = [p for p in added if p["content_hash"] != curr_point["content_hash"]]
-                break
-    
-    return {
-        "added": added,
-        "updated": updated,
-        "deleted": deleted
-    }
-
-def generate_change_tweets(changes: Dict, section: str, is_first_run: bool = False) -> List[Dict]:
-    """Generate tweets based on detected changes with appropriate prefixes."""
-    tweets = []
-    timestamp = datetime.now().isoformat()
-    
-    # Handle first run - all content is "added"
-    if is_first_run:
-        for point in changes.get("added", []):
-            combined_content = create_combined_content(point["main_content"], point["sub_points"])
-            content_chunks = split_content_for_twitter(combined_content)
-            
-            thread_id = f"{section.lower()}_added_{point['point_number']:03d}_thread"
-            
-            for chunk_idx, chunk in enumerate(content_chunks, 1):
-                is_main_tweet = chunk_idx == 1
-                total_parts = len(content_chunks)
-                
-                # Add ADDED prefix
-                if total_parts == 1:
-                    formatted_content = f"🟢 ADDED: {section} ({point['point_number']}): {chunk}"
-                else:
-                    thread_indicator = f"🧵{chunk_idx}/{total_parts}"
-                    if is_main_tweet:
-                        formatted_content = f"🟢 ADDED: {section} ({point['point_number']}): {chunk} {thread_indicator}"
-                    else:
-                        formatted_content = f"{chunk} {thread_indicator}"
-                
-                tweet_data = {
-                    "id": f"{section.lower()}_added_{point['point_number']:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
-                    "section": section,
-                    "change_type": "added",
-                    "logical_tweet_number": point['point_number'],
-                    "thread_part": chunk_idx,
-                    "total_thread_parts": total_parts,
-                    "thread_id": thread_id,
-                    "content_raw": chunk,
-                    "content_formatted": formatted_content,
-                    "character_count": len(formatted_content),
-                    "is_main_tweet": is_main_tweet,
-                    "parent_tweet_id": f"{section.lower()}_added_{point['point_number']:03d}" if not is_main_tweet else None,
-                    "status": "pending",
-                    "created_at": timestamp
-                }
-                tweets.append(tweet_data)
-        return tweets
-    
-    # Handle subsequent runs with change detection
-    tweet_counter = 1
-    
-    # Added points
-    for point in changes.get("added", []):
-        combined_content = create_combined_content(point["main_content"], point["sub_points"])
-        content_chunks = split_content_for_twitter(combined_content)
-        
-        thread_id = f"{section.lower()}_added_{tweet_counter:03d}_thread"
-        
-        for chunk_idx, chunk in enumerate(content_chunks, 1):
-            formatted_content = f"🟢 ADDED: {section}: {chunk}"
-            if chunk_idx > 1:
-                formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
-            elif len(content_chunks) > 1:
-                formatted_content += f" 🧵1/{len(content_chunks)}"
-            
-            if chunk_idx == len(content_chunks):
-                formatted_content += f" #{section.replace('DOK', 'DOK')}"
-            
-            tweets.append({
-                "id": f"{section.lower()}_added_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
-                "section": section,
-                "change_type": "added",
-                "content_formatted": formatted_content,
-                "thread_id": thread_id,
-                "thread_part": chunk_idx,
-                "total_thread_parts": len(content_chunks),
-                "status": "pending",
-                "created_at": timestamp
-            })
-        tweet_counter += 1
-    
-    # Updated points
-    for update_info in changes.get("updated", []):
-        current_point = update_info["current"]
-        combined_content = create_combined_content(current_point["main_content"], current_point["sub_points"])
-        content_chunks = split_content_for_twitter(combined_content)
-        
-        thread_id = f"{section.lower()}_updated_{tweet_counter:03d}_thread"
-        
-        for chunk_idx, chunk in enumerate(content_chunks, 1):
-            formatted_content = f"🔄 UPDATED: {section}: {chunk}"
-            if chunk_idx > 1:
-                formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
-            elif len(content_chunks) > 1:
-                formatted_content += f" 🧵1/{len(content_chunks)}"
-            
-            if chunk_idx == len(content_chunks):
-                formatted_content += f" #{section.replace('DOK', 'DOK')}"
-            
-            tweets.append({
-                "id": f"{section.lower()}_updated_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
-                "section": section,
-                "change_type": "updated",
-                "content_formatted": formatted_content,
-                "thread_id": thread_id,
-                "status": "pending",
-                "created_at": timestamp
-            })
-        tweet_counter += 1
-    
-    # Deleted points
-    for point in changes.get("deleted", []):
-        combined_content = create_combined_content(point["main_content"], point["sub_points"])
-        content_chunks = split_content_for_twitter(combined_content)
-        
-        thread_id = f"{section.lower()}_deleted_{tweet_counter:03d}_thread"
-        
-        for chunk_idx, chunk in enumerate(content_chunks, 1):
-            formatted_content = f"❌ DELETED: {section}: {chunk}"
-            if chunk_idx > 1:
-                formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
-            elif len(content_chunks) > 1:
-                formatted_content += f" 🧵1/{len(content_chunks)}"
-            
-            if chunk_idx == len(content_chunks):
-                formatted_content += f" #{section.replace('DOK', 'DOK')}"
-            
-            tweets.append({
-                "id": f"{section.lower()}_deleted_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
-                "section": section,
-                "change_type": "deleted",
-                "content_formatted": formatted_content,
-                "thread_id": thread_id,
-                "thread_part": chunk_idx,
-                "total_thread_parts": len(content_chunks),
-                "status": "pending",
-                "created_at": timestamp
-            })
-        tweet_counter += 1
-    
-    return tweets
 
 def create_content_signature(main_content: str, sub_points: List[str]) -> str:
     """Create a normalized content signature for comparison."""
@@ -956,13 +843,15 @@ class WorkflowyTester:
         else:
             raise Exception("No match found for PROJECT_TREE_DATA_URL_PARAMS.")
 
-    def filter_nodes(self, nodes, exclude_names):
-        """Recursively filter out nodes with the specified name and their children."""
+    async def filter_nodes_llm(self, nodes, exclude_names):
+        """Recursively filter out nodes using LLM-based identification."""
         if not exclude_names:
             return nodes
             
         exclude_ids = set()
-        exclude_patterns = [get_regex_matching_pattern([name]) for name in exclude_names]
+        
+        # Get top-level nodes for LLM matching
+        main_nodes = await extract_top_level_nodes(nodes)
 
         def collect_children(parent_id):
             for node in nodes:
@@ -970,11 +859,13 @@ class WorkflowyTester:
                     exclude_ids.add(node["id"])
                     collect_children(node["id"])
 
-        for node in nodes:
-            node_name = node.get("nm", "").strip()
-            if node_name and any(pattern.match(node_name) for pattern in exclude_patterns):
-                exclude_ids.add(node["id"])
-                collect_children(node["id"])
+        # Use LLM-based matching to find nodes to exclude
+        for exclude_name in exclude_names:
+            node_id = await extract_node_id_using_llm(exclude_name, main_nodes)
+            if node_id:
+                exclude_ids.add(node_id)
+                collect_children(node_id)
+                logger.debug("Excluding node '%s' with ID: %s", exclude_name, node_id)
 
         return [node for node in nodes if node["id"] not in exclude_ids]
 
@@ -992,7 +883,7 @@ class WorkflowyTester:
         items = data.get("items", [])
 
         if exclude_node_names:
-            filtered_items = self.filter_nodes(items, exclude_node_names)
+            filtered_items = await self.filter_nodes_llm(items, exclude_node_names)
         else:
             filtered_items = items
 
@@ -1104,6 +995,28 @@ class WorkflowyTester:
         
         return markdown
 
+    async def scrape_workflowy_raw_data(self, url: str, exclude_node_names: list[str] | None = None) -> list[dict[str, str]]:
+        """
+        Get raw Workflowy data for LLM processing.
+        """
+        try:
+            # Extract session and share IDs
+            session_id, share_id = await self.extract_share_id(url)
+            
+            # Get tree data using the original share_id
+            item_data_list = await self.get_tree_data(
+                session_id, 
+                share_id=share_id,
+                exclude_node_names=exclude_node_names
+            )
+            print(f"Successfully grabbed {len(item_data_list)} items from tree data")
+
+            return item_data_list
+            
+        except Exception as e:
+            print(f"Error getting raw Workflowy data: {str(e)}")
+            raise
+
     async def scrape_workflowy(self, url: str, exclude_node_names: list[str] | None = None) -> WorkflowyNode:
         """
         Main function to scrape Workflowy content.
@@ -1187,18 +1100,20 @@ class WorkflowyTester:
             print(f"Node Name: {result.node_name}")
             print(f"Total Content Length: {len(result.content)} characters")
             
-            # Save full content to S3 instead of local file
+            # Save full content to S3
             content_s3_url = self.storage.save_scraped_content(user_name, result.content, timestamp)
             print(f"✅ Full content saved to S3: {content_s3_url}")
             
-            # Process DOK sections
             print(f"\n📋 PROCESSING DOK SECTIONS:")
             
             current_state = {"dok4": [], "dok3": []}
             all_change_tweets = []
             
-            # DOK4 processing
-            dok4_content = extract_single_dok_section(result.content, "DOK4")
+            # Scrape once, use multiple times
+            raw_data = await self.scrape_workflowy_raw_data(url, exclude_node_names)
+
+            # DOK4 processing using the cached raw data
+            dok4_content = await extract_single_dok_section_llm(raw_data, "DOK4")
             if dok4_content.strip():
                 dok4_points = parse_dok_points(dok4_content, "DOK4")
                 current_state["dok4"] = create_dok_state_from_points(dok4_points)
@@ -1215,8 +1130,8 @@ class WorkflowyTester:
                     stats = changes.get("stats", {})
                     print(f"DOK4 Changes: +{stats.get('added', 0)} ~{stats.get('updated', 0)} -{stats.get('deleted', 0)} ={stats.get('unchanged', 0)}")
             
-            # DOK3 processing
-            dok3_content = extract_single_dok_section(result.content, "DOK3")
+            # DOK3 processing using the same cached raw data  
+            dok3_content = await extract_single_dok_section_llm(raw_data, "DOK3")
             if dok3_content.strip():
                 dok3_points = parse_dok_points(dok3_content, "DOK3")
                 current_state["dok3"] = create_dok_state_from_points(dok3_points)
@@ -1298,44 +1213,6 @@ class WorkflowyTester:
             await self._session.close()
             self._session = None
 
-# Add these functions after create_user_directory() function
-
-def create_demo_directory():
-    """Create demo directory structure if it doesn't exist."""
-    demo_dir = Path("demo")
-    demo_dir.mkdir(exist_ok=True)
-    
-    (demo_dir / "data").mkdir(exist_ok=True)
-    (demo_dir / "assets" / "avatars").mkdir(parents=True, exist_ok=True)
-    
-    return demo_dir
-
-def get_next_run_number(user_name: str) -> int:
-    """Get the next run number for a user."""
-    demo_dir = Path("demo/data")
-    if not demo_dir.exists():
-        return 1
-    
-    # Look for existing session files for this user
-    pattern = f"session_*_{user_name}.json"
-    existing_files = list(demo_dir.glob(pattern))
-    
-    if not existing_files:
-        return 1
-    
-    # Extract run numbers from existing files
-    run_numbers = []
-    for file in existing_files:
-        try:
-            with open(file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                run_num = data.get("session", {}).get("run_number", 0)
-                run_numbers.append(run_num)
-        except (json.JSONDecodeError, FileNotFoundError):
-            continue
-    
-    return max(run_numbers, default=0) + 1
-
 # Configuration for multiple URLs
 # WORKFLOWY_URLS = [
 #     {
@@ -1356,7 +1233,6 @@ async def test_multiple_workflowy_urls():
     
     if not workflowy_urls:
         print("❌ No active Workflowy URLs found in DynamoDB!")
-        print("💡 Use storage.setup_initial_configuration() to set up initial data")
         return
     
     print(f"📋 Found {len(workflowy_urls)} active URL(s) from DynamoDB:")
@@ -1372,8 +1248,8 @@ async def test_multiple_workflowy_urls():
             print(f"\n🔄 PROCESSING URL {i}/{len(workflowy_urls)}")
             
             result = await tester.process_single_url(
-                url_config,
-                exclude_node_names=["SpikyPOVs", "Private Notes"]
+                url_config
+                # exclude_node_names=["SpikyPOVs", "Private Notes"]
             )
             results.append(result)
             
@@ -1428,12 +1304,11 @@ async def test_single_url():
         
         async with WorkflowyTester() as tester:
             await tester.process_single_url(
-                url_config,
-                exclude_node_names=["SpikyPOVs", "Private Notes"]
+                url_config
+                # exclude_node_names=["SpikyPOVs", "Private Notes"]
             )
     else:
         print("❌ No URLs configured in DynamoDB")
-        print("💡 Use storage.setup_initial_configuration() to set up initial data")
 
 if __name__ == "__main__":
     print("Workflowy Scraper Test")

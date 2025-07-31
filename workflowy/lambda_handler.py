@@ -75,8 +75,8 @@ async def process_and_post():
             print(f"\n🔄 SCRAPING URL {i}/{len(workflowy_urls)}: {url_config['name']}")
             
             result = await tester.process_single_url(
-                url_config,
-                exclude_node_names=["SpikyPOVs", "Private Notes"]
+                url_config
+                # exclude_node_names=["SpikyPOVs", "Private Notes"]
             )
             scraping_results.append(result)
             
