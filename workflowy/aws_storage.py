@@ -37,6 +37,9 @@ class AWSStorage:
             ContentType='text/plain'
         )
         
+        # Clean up old scraped content files (keep only latest 2)
+        self.cleanup_old_scraped_content(user_name, max_files=2)
+        
         return f"s3://{self.bucket_name}/{key}"
     
     def save_change_tweets(self, user_name: str, tweets: List[Dict], timestamp: str) -> str:
@@ -215,85 +218,74 @@ class AWSStorage:
         except Exception as e:
             print(f"❌ Error adding user mapping: {e}")
             return False
-    
-    def update_url_status(self, url_id: str, active: bool) -> bool:
-        """Update the active status of a Workflowy URL."""
-        try:
-            self.urls_table.update_item(
-                Key={'url_id': url_id},
-                UpdateExpression='SET active = :active, updated_at = :updated',
-                ExpressionAttributeValues={
-                    ':active': active,
-                    ':updated': datetime.now().isoformat()
-                }
-            )
-            print(f"✅ Updated URL {url_id} active status to {active}")
-            return True
-        except Exception as e:
-            print(f"❌ Error updating URL status: {e}")
-            return False
-    
-    def update_user_mapping_status(self, user_name: str, active: bool) -> bool:
-        """Update the active status of a user mapping."""
-        try:
-            self.mapping_table.update_item(
-                Key={'user_name': user_name},
-                UpdateExpression='SET active = :active, updated_at = :updated',
-                ExpressionAttributeValues={
-                    ':active': active,
-                    ':updated': datetime.now().isoformat()
-                }
-            )
-            print(f"✅ Updated user {user_name} mapping active status to {active}")
-            return True
-        except Exception as e:
-            print(f"❌ Error updating user mapping status: {e}")
-            return False
 
-    def setup_initial_configuration(self):
+    def cleanup_old_scraped_content(self, user_name: str, max_files: int = 2):
         """
-        Setup initial configuration data from existing constants.
-        This is a one-time migration helper.
+        Clean up old scraped content files, keeping only the latest N files.
+        
+        Args:
+            user_name: The user name to clean up files for
+            max_files: Maximum number of files to keep (default: 3)
         """
-        print("🔧 Setting up initial configuration in DynamoDB...")
-        
-        # Initial Workflowy URLs (from current WORKFLOWY_URLS constant)
-        initial_urls = [
-            {
-                'url': 'https://workflowy.com/s/new-pk-2-reading-cou/bjSyw1MzswiIsciE',
-                'name': 'new_pk_2_reading_course'
-            }
-        ]
-        
-        # Initial user mappings (from current USER_ACCOUNT_MAPPING constant)
-        initial_mappings = {
-            "new_pk_2_reading_course": 3,
-        }
-        
-        # Add URLs
-        for url_config in initial_urls:
-            self.add_workflowy_url(url_config['url'], url_config['name'])
-        
-        # Add user mappings
-        for user_name, account_id in initial_mappings.items():
-            self.add_user_account_mapping(user_name, account_id)
-        
-        print("✅ Initial configuration setup complete!")
-
-    def list_all_configurations(self):
-        """List all current configurations for debugging."""
-        print("\n📋 Current Workflowy URLs Configuration:")
-        urls = self.get_workflowy_urls()
-        for i, url_config in enumerate(urls, 1):
-            print(f"  {i}. {url_config['name']}: {url_config['url']}")
-        
-        print(f"\n🔗 Current User Account Mappings:")
-        mappings = self.get_user_account_mapping()
-        for user_name, account_id in mappings.items():
-            print(f"  • {user_name} -> Account {account_id}")
-        
-        if not urls and not mappings:
-            print("  (No configurations found)")
+        try:
+            # List all scraped content files for this user
+            prefix = f"{user_name}/scraped_content/"
+            response = self.s3.list_objects_v2(
+                Bucket=self.bucket_name,
+                Prefix=prefix,
+                MaxKeys=1000
+            )
+            
+            if 'Contents' not in response:
+                print(f"📄 No existing scraped content files found for {user_name}")
+                return
+            
+            # Filter to only scraped content files (exclude other files that might be in the directory)
+            scraped_files = [
+                obj for obj in response['Contents'] 
+                if '_scraped_workflowy_' in obj['Key'] and obj['Key'].endswith('.txt')
+            ]
+            
+            if len(scraped_files) <= max_files:
+                print(f"📄 Only {len(scraped_files)} scraped content files found for {user_name}, no cleanup needed")
+                return
+            
+            # Sort by last modified date (newest first)
+            scraped_files.sort(key=lambda x: x['LastModified'], reverse=True)
+            
+            # Files to delete (everything beyond the max_files limit)
+            files_to_delete = scraped_files[max_files:]
+            
+            if files_to_delete:
+                print(f"🗑️  Cleaning up {len(files_to_delete)} old scraped content files for {user_name}")
+                
+                # Delete old files
+                delete_keys = [{'Key': obj['Key']} for obj in files_to_delete]
+                
+                # S3 batch delete (more efficient than individual deletes)
+                response = self.s3.delete_objects(
+                    Bucket=self.bucket_name,
+                    Delete={
+                        'Objects': delete_keys,
+                        'Quiet': True  # Don't return info about successful deletes
+                    }
+                )
+                
+                # Check for any deletion errors
+                if 'Errors' in response and response['Errors']:
+                    print(f"❌ Some files could not be deleted: {response['Errors']}")
+                else:
+                    print(f"✅ Successfully cleaned up {len(files_to_delete)} old files for {user_name}")
+                    
+                # Log which files were kept
+                kept_files = scraped_files[:max_files]
+                print(f"📋 Kept latest {len(kept_files)} files:")
+                for file_obj in kept_files:
+                    print(f"   • {file_obj['Key']} (modified: {file_obj['LastModified']})")
+            
+        except Exception as e:
+            print(f"❌ Error cleaning up old scraped content for {user_name}: {e}")
+            # Don't raise the error - cleanup failure shouldn't break the main flow
 
 
 
