@@ -19,6 +19,8 @@ A Flask-based RESTful API for managing multiple Twitter accounts and posting con
 - **Token Health Monitoring**: Track token expiry and health status across all accounts
 - **API Authentication**: Secure API access with API keys
 - **Statistics**: Track tweet counts and posting status
+- **Rate Limiting Protection**: Automatic tracking and prevention of Twitter API 429 errors
+- **Failed Tweet Recovery**: Retry or reset failed tweets without data loss
 
 ## Requirements
 
@@ -154,19 +156,163 @@ Posts a specific pending tweet to Twitter. Returns:
 }
 ```
 
-#### Post All Pending Tweets
+#### Post All Pending Tweets (Batch Mode)
 ```http
 POST /api/v1/tweets/post-pending
 X-API-Key: your-api-key
+Content-Type: application/json
+
+{
+    "batch_size": 10,    // Optional: Number of tweets per batch (default: 10, max: 50)
+    "offset": 0          // Optional: Starting position for pagination (default: 0)
+}
 ```
 
-Posts all tweets with "pending" status. Returns:
+Posts tweets with "pending" status in batches to prevent timeouts. Returns:
 ```json
 {
-    "total": 3,
-    "posted": 2,
-    "failed": 1,
+    "total_pending": 25,
+    "batch_size": 10,
+    "offset": 0,
+    "processed": 10,
+    "posted": 8,
+    "failed": 2,
+    "has_more": true,    // Indicates if more tweets need processing
     "details": [...]
+}
+```
+
+To process all tweets, continue calling with incremented offset until `has_more` is false.
+
+#### Post All Pending Tweets (Async/Background)
+```http
+POST /api/v1/tweets/post-pending-async
+X-API-Key: your-api-key
+Content-Type: application/json
+
+{
+    "batch_size": 20    // Optional: Number of tweets per batch (default: 10, max: 50)
+}
+```
+
+Starts a background job to post all pending tweets without timeout issues. Returns immediately:
+```json
+{
+    "job_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "status": "started",
+    "total_pending": 150,
+    "message": "Background job started. Use /api/v1/jobs/{job_id} to check status."
+}
+```
+
+#### Check Background Job Status
+```http
+GET /api/v1/jobs/{job_id}
+X-API-Key: your-api-key
+```
+
+Check the status of a background tweet posting job:
+```json
+{
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "status": "running",    // Options: pending, running, completed, failed
+    "total_pending": 150,
+    "posted": 45,
+    "failed": 5,
+    "processed": 50,
+    "batch_size": 20,
+    "created_at": "2024-01-20T10:30:00Z",
+    "started_at": "2024-01-20T10:30:01Z",
+    "completed_at": null    // Set when job finishes
+}
+```
+
+#### Check Rate Limit Status
+```http
+GET /api/v1/rate-limits
+X-API-Key: your-api-key
+```
+
+Monitor rate limit status for all accounts to avoid 429 errors:
+```json
+{
+    "rate_limits": [
+        {
+            "account_id": 1,
+            "username": "example_user",
+            "tweets_posted": 45,
+            "tweets_remaining": 135,
+            "reset_in_seconds": 720,
+            "reset_at": "2024-01-20T10:45:00",
+            "current_delay": 1
+        }
+    ],
+    "timestamp": "2024-01-20T10:30:00Z"
+}
+```
+
+#### Retry Failed Tweets
+
+##### Retry Single Failed Tweet
+```http
+POST /api/v1/tweet/retry/{tweet_id}
+X-API-Key: your-api-key
+```
+
+Attempts to repost a specific failed tweet. Returns:
+```json
+{
+    "message": "Tweet posted successfully on retry",
+    "tweet_id": 123,
+    "twitter_id": "1947673926596731295"
+}
+```
+
+##### Retry Multiple Failed Tweets
+```http
+POST /api/v1/tweets/retry-failed
+X-API-Key: your-api-key
+Content-Type: application/json
+
+{
+    "batch_size": 10,       // Optional: default 10, max 50
+    "offset": 0,            // Optional: for pagination
+    "account_id": 5         // Optional: retry only for specific account
+}
+```
+
+Retries failed tweets in batches. Returns:
+```json
+{
+    "total_failed": 25,
+    "batch_size": 10,
+    "offset": 0,
+    "processed": 10,
+    "posted": 7,
+    "still_failed": 3,
+    "has_more": true,
+    "details": [...]
+}
+```
+
+##### Reset Failed Tweets to Pending
+```http
+POST /api/v1/tweets/reset-failed
+X-API-Key: your-api-key
+Content-Type: application/json
+
+{
+    "tweet_ids": [123, 456],    // Option 1: Specific tweet IDs
+    "account_id": 5,            // Option 2: All failed for an account
+    "days_old": 7               // Option 3: Failed tweets older than X days
+}
+```
+
+Resets failed tweets back to pending status so they can be posted again:
+```json
+{
+    "message": "Reset 15 failed tweets to pending status",
+    "count": 15
 }
 ```
 
@@ -614,12 +760,59 @@ for id in 1 2 3; do
     -d "{\"text\": \"Update from account $id\", \"account_id\": $id}"
 done
 
-# Post all pending tweets at once
+# Post all pending tweets at once (for small batches)
 curl -X POST http://localhost:5555/api/v1/tweets/post-pending \
+  -H "X-API-Key: your-api-key"
+
+# For large batches, use async mode to prevent timeouts
+curl -X POST http://localhost:5555/api/v1/tweets/post-pending-async \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"batch_size": 20}'
+
+# Check job status
+curl -X GET http://localhost:5555/api/v1/jobs/{job_id} \
   -H "X-API-Key: your-api-key"
 ```
 
-### 3. Lists Management Example
+### 3. Handling Large Batches of Tweets
+
+When posting many pending tweets, use the appropriate method based on volume:
+
+**For small batches (< 50 tweets):**
+```bash
+# Use batch mode with pagination
+curl -X POST http://localhost:5555/api/v1/tweets/post-pending \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"batch_size": 20, "offset": 0}'
+```
+
+**For large batches (50+ tweets) or to avoid timeouts:**
+```bash
+# Start async job
+response=$(curl -X POST http://localhost:5555/api/v1/tweets/post-pending-async \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"batch_size": 30}')
+
+job_id=$(echo $response | jq -r .job_id)
+
+# Poll for status
+while true; do
+  status=$(curl -s http://localhost:5555/api/v1/jobs/$job_id \
+    -H "X-API-Key: your-api-key" | jq -r .status)
+  
+  if [ "$status" = "completed" ] || [ "$status" = "failed" ]; then
+    break
+  fi
+  
+  echo "Job status: $status"
+  sleep 5
+done
+```
+
+### 4. Lists Management Example
 
 ```bash
 # Set an account as list owner
@@ -723,7 +916,13 @@ Error responses include a JSON body:
 | `/api/v1/tweet` | POST | Yes | Create new tweet |
 | `/api/v1/tweets` | GET | Yes | List all tweets |
 | `/api/v1/tweet/post/{id}` | POST | Yes | Post tweet to Twitter |
-| `/api/v1/tweets/post-pending` | POST | Yes | Post all pending tweets |
+| `/api/v1/tweets/post-pending` | POST | Yes | Post pending tweets (batch mode) |
+| `/api/v1/tweets/post-pending-async` | POST | Yes | Post pending tweets (async/background) |
+| `/api/v1/jobs/{id}` | GET | Yes | Check background job status |
+| `/api/v1/tweet/retry/{id}` | POST | Yes | Retry specific failed tweet |
+| `/api/v1/tweets/retry-failed` | POST | Yes | Retry failed tweets (batch mode) |
+| `/api/v1/tweets/reset-failed` | POST | Yes | Reset failed tweets to pending |
+| `/api/v1/rate-limits` | GET | Yes | Check rate limit status for all accounts |
 | `/api/v1/thread` | POST | Yes | Create new thread |
 | `/api/v1/threads` | GET | Yes | List all threads |
 | `/api/v1/thread/{id}` | GET | Yes | Get thread details |

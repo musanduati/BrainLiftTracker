@@ -20,6 +20,9 @@ import base64
 import urllib.parse
 from cryptography.fernet import Fernet
 import uuid
+import threading
+import time
+from collections import defaultdict
 
 app = Flask(__name__)
 
@@ -65,9 +68,52 @@ MOCK_TWITTER_POSTING = False
 # Allow runtime toggle
 mock_mode_override = {'enabled': False}
 
+# Rate limiting for Twitter API
+# Twitter allows 200 tweets per 15 minutes per user
+rate_limit_tracker = {
+    'accounts': defaultdict(lambda: {'count': 0, 'reset_time': 0}),
+    'lock': threading.Lock()
+}
+
+def check_rate_limit(account_id):
+    """Check if we can post for this account without hitting rate limits"""
+    with rate_limit_tracker['lock']:
+        current_time = time.time()
+        account_limits = rate_limit_tracker['accounts'][account_id]
+        
+        # Reset counter if 15 minutes have passed
+        if current_time > account_limits['reset_time']:
+            account_limits['count'] = 0
+            account_limits['reset_time'] = current_time + 900  # 15 minutes
+        
+        # Check if we've hit the limit (leave some buffer)
+        if account_limits['count'] >= 180:  # Leave buffer of 20 tweets
+            wait_time = account_limits['reset_time'] - current_time
+            return False, wait_time
+        
+        # Increment counter
+        account_limits['count'] += 1
+        return True, 0
+
+def get_rate_limit_delay(account_id):
+    """Get recommended delay based on current rate for this account"""
+    with rate_limit_tracker['lock']:
+        account_limits = rate_limit_tracker['accounts'][account_id]
+        tweets_posted = account_limits['count']
+        
+        # Progressive delays based on usage
+        if tweets_posted < 50:
+            return 1  # 1 second delay for first 50 tweets
+        elif tweets_posted < 100:
+            return 2  # 2 seconds for tweets 50-100
+        elif tweets_posted < 150:
+            return 3  # 3 seconds for tweets 100-150
+        else:
+            return 5  # 5 seconds when approaching limit
+
 def get_db():
-    """Get database connection"""
-    conn = sqlite3.connect(DB_PATH)
+    """Get database connection with timeout and WAL mode for better concurrency"""
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)  # 30 second timeout
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -245,6 +291,12 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_
         print(f"[MOCK MODE] Would post tweet for {account['username']}: {tweet_text}")
         return True, mock_tweet_id
     
+    # Check rate limit before attempting to post
+    can_post, wait_time = check_rate_limit(account_id)
+    if not can_post:
+        conn.close()
+        return False, f"Rate limit approaching for account. Wait {wait_time:.0f} seconds."
+    
     # Check if token needs proactive refresh (within 15 minutes of expiry)
     if account['token_expires_at']:
         token_expires = datetime.fromisoformat(account['token_expires_at'])
@@ -311,6 +363,22 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_
                     return post_to_twitter(account_id, tweet_text, reply_to_tweet_id, retry_after_refresh=False)
                 else:
                     return False, f"Token refresh failed: {new_token}"
+            
+            if response.status_code == 429:
+                # Rate limit hit - update our tracker
+                conn.close()
+                retry_after = response.headers.get('x-rate-limit-reset')
+                if retry_after:
+                    with rate_limit_tracker['lock']:
+                        reset_time = int(retry_after)
+                        rate_limit_tracker['accounts'][account_id]['reset_time'] = reset_time
+                        rate_limit_tracker['accounts'][account_id]['count'] = 200  # Mark as maxed out
+                    wait_time = reset_time - time.time()
+                    error_msg = f"Rate limit hit. Reset in {wait_time:.0f} seconds"
+                else:
+                    error_msg = "Rate limit hit. Please wait before posting again."
+                print(error_msg)
+                return False, error_msg
             
             if response.status_code != 201:
                 conn.close()
@@ -847,6 +915,83 @@ def get_tweets():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/v1/tweets/pending-analysis', methods=['GET'])
+def analyze_pending_tweets():
+    """Analyze pending tweets to understand why old tweets are still pending"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get all pending tweets with account info
+        pending_tweets = conn.execute('''
+            SELECT t.id, t.content, t.status, t.created_at, t.twitter_account_id,
+                   a.username, a.status as account_status
+            FROM tweet t
+            LEFT JOIN twitter_account a ON t.twitter_account_id = a.id
+            WHERE t.status = 'pending'
+            ORDER BY t.id
+        ''').fetchall()
+        
+        # Group by ID ranges
+        id_ranges = {
+            'very_old': [],  # < 100
+            'old': [],       # 100-500
+            'recent': [],    # > 500
+            'no_account': [] # Account doesn't exist
+        }
+        
+        for tweet in pending_tweets:
+            tweet_info = {
+                'id': tweet['id'],
+                'content_preview': tweet['content'][:50] + '...' if len(tweet['content']) > 50 else tweet['content'],
+                'created_at': tweet['created_at'],
+                'account_id': tweet['twitter_account_id'],
+                'username': tweet['username'],
+                'account_status': tweet['account_status']
+            }
+            
+            if tweet['username'] is None:
+                id_ranges['no_account'].append(tweet_info)
+            elif tweet['id'] < 100:
+                id_ranges['very_old'].append(tweet_info)
+            elif tweet['id'] < 500:
+                id_ranges['old'].append(tweet_info)
+            else:
+                id_ranges['recent'].append(tweet_info)
+        
+        # Get summary stats
+        summary = {
+            'total_pending': len(pending_tweets),
+            'very_old_count': len(id_ranges['very_old']),
+            'old_count': len(id_ranges['old']),
+            'recent_count': len(id_ranges['recent']),
+            'orphaned_count': len(id_ranges['no_account'])
+        }
+        
+        # Get account distribution
+        account_dist = conn.execute('''
+            SELECT a.username, COUNT(t.id) as pending_count
+            FROM tweet t
+            JOIN twitter_account a ON t.twitter_account_id = a.id
+            WHERE t.status = 'pending'
+            GROUP BY t.twitter_account_id
+            ORDER BY pending_count DESC
+        ''').fetchall()
+        
+        conn.close()
+        
+        return jsonify({
+            'summary': summary,
+            'id_ranges': id_ranges,
+            'account_distribution': [dict(row) for row in account_dist],
+            'recommendation': 'Consider cleaning up old pending tweets with IDs < 500 that may be from deleted accounts'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/v1/auth/twitter', methods=['GET'])
 def twitter_auth():
     """Get Twitter OAuth URL"""
@@ -1351,59 +1496,530 @@ def post_tweet(tweet_id):
 
 @app.route('/api/v1/tweets/post-pending', methods=['POST'])
 def post_pending_tweets():
-    """Post all pending tweets"""
+    """Post all pending tweets with batch processing to prevent timeouts"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        # Get batch size from request or use default
+        data = request.get_json() or {}
+        batch_size = min(data.get('batch_size', 10), 50)  # Max 50 tweets per batch
+        offset = data.get('offset', 0)
+        
+        conn = get_db()
+        
+        # Get total count of pending tweets
+        total_count = conn.execute(
+            'SELECT COUNT(*) as count FROM tweet WHERE status = "pending"'
+        ).fetchone()['count']
+        
+        # Get batch of pending tweets
+        pending_tweets = conn.execute(
+            'SELECT * FROM tweet WHERE status = "pending" ORDER BY created_at LIMIT ? OFFSET ?',
+            (batch_size, offset)
+        ).fetchall()
+        
+        results = {
+            'total_pending': total_count,
+            'batch_size': batch_size,
+            'offset': offset,
+            'processed': len(pending_tweets),
+            'posted': 0,
+            'failed': 0,
+            'details': [],
+            'has_more': (offset + len(pending_tweets)) < total_count
+        }
+        
+        for i, tweet in enumerate(pending_tweets):
+            try:
+                # Add delay between tweets (except for the first one)
+                if i > 0:
+                    delay = get_rate_limit_delay(tweet['twitter_account_id'])
+                    time.sleep(delay)
+                
+                success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+                
+                if success:
+                    # Update to posted with retry logic
+                    retry_count = 0
+                    while retry_count < 3:
+                        try:
+                            conn.execute(
+                                'UPDATE tweet SET status = ?, twitter_id = ?, posted_at = ? WHERE id = ?',
+                                ('posted', result, datetime.now(UTC).isoformat(), tweet['id'])
+                            )
+                            conn.commit()
+                            break
+                        except sqlite3.OperationalError as e:
+                            if "database is locked" in str(e) and retry_count < 2:
+                                retry_count += 1
+                                time.sleep(0.5 * retry_count)  # Exponential backoff
+                                continue
+                            raise
+                    
+                    results['posted'] += 1
+                    results['details'].append({
+                        'tweet_id': tweet['id'],
+                        'status': 'posted',
+                        'twitter_tweet_id': result
+                    })
+                else:
+                    # Update to failed with retry logic
+                    retry_count = 0
+                    while retry_count < 3:
+                        try:
+                            conn.execute(
+                                'UPDATE tweet SET status = ? WHERE id = ?',
+                                ('failed', tweet['id'])
+                            )
+                            conn.commit()
+                            break
+                        except sqlite3.OperationalError as e:
+                            if "database is locked" in str(e) and retry_count < 2:
+                                retry_count += 1
+                                time.sleep(0.5 * retry_count)
+                                continue
+                            raise
+                    
+                    results['failed'] += 1
+                    results['details'].append({
+                        'tweet_id': tweet['id'],
+                        'status': 'failed',
+                        'error': result
+                    })
+            except Exception as e:
+                # If any error occurs, mark as failed
+                results['failed'] += 1
+                results['details'].append({
+                    'tweet_id': tweet['id'],
+                    'status': 'failed',
+                    'error': f'Processing error: {str(e)}'
+                })
+        
+        conn.close()
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Background job tracking
+background_jobs = {}
+
+def post_tweets_background(job_id, batch_size=10):
+    """Background worker to post pending tweets"""
+    conn = None
+    try:
+        background_jobs[job_id]['status'] = 'running'
+        background_jobs[job_id]['started_at'] = datetime.now(UTC).isoformat()
+        
+        total_posted = 0
+        total_failed = 0
+        offset = 0
+        
+        while True:
+            try:
+                conn = get_db()
+                
+                # Get batch of pending tweets
+                pending_tweets = conn.execute(
+                    'SELECT * FROM tweet WHERE status = "pending" ORDER BY created_at LIMIT ? OFFSET ?',
+                    (batch_size, offset)
+                ).fetchall()
+                
+                if not pending_tweets:
+                    break
+                
+                for j, tweet in enumerate(pending_tweets):
+                    try:
+                        # Add delay between tweets
+                        if j > 0 or offset > 0:  # Delay unless it's the very first tweet
+                            delay = get_rate_limit_delay(tweet['twitter_account_id'])
+                            time.sleep(delay)
+                        
+                        success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+                        
+                        # Retry logic for database updates
+                        retry_count = 0
+                        while retry_count < 3:
+                            try:
+                                if success:
+                                    conn.execute(
+                                        'UPDATE tweet SET status = ?, twitter_id = ?, posted_at = ? WHERE id = ?',
+                                        ('posted', result, datetime.now(UTC).isoformat(), tweet['id'])
+                                    )
+                                    total_posted += 1
+                                else:
+                                    conn.execute(
+                                        'UPDATE tweet SET status = ? WHERE id = ?',
+                                        ('failed', tweet['id'])
+                                    )
+                                    total_failed += 1
+                                conn.commit()
+                                break
+                            except sqlite3.OperationalError as e:
+                                if "database is locked" in str(e) and retry_count < 2:
+                                    retry_count += 1
+                                    time.sleep(0.5 * retry_count)
+                                    continue
+                                raise
+                        
+                        # Update job progress
+                        background_jobs[job_id]['posted'] = total_posted
+                        background_jobs[job_id]['failed'] = total_failed
+                        background_jobs[job_id]['processed'] = total_posted + total_failed
+                        
+                    except Exception as e:
+                        print(f"Error processing tweet {tweet['id']}: {e}")
+                        total_failed += 1
+                        background_jobs[job_id]['failed'] = total_failed
+                        background_jobs[job_id]['processed'] = total_posted + total_failed
+                
+                conn.close()
+                conn = None
+                
+                offset += batch_size
+                
+            except sqlite3.OperationalError as e:
+                if conn:
+                    conn.close()
+                    conn = None
+                if "database is locked" in str(e):
+                    print(f"Database locked, retrying in 2 seconds...")
+                    time.sleep(2)
+                    continue
+                raise
+        
+        background_jobs[job_id]['status'] = 'completed'
+        background_jobs[job_id]['completed_at'] = datetime.now(UTC).isoformat()
+        
+    except Exception as e:
+        background_jobs[job_id]['status'] = 'failed'
+        background_jobs[job_id]['error'] = str(e)
+        background_jobs[job_id]['completed_at'] = datetime.now(UTC).isoformat()
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/v1/tweets/post-pending-async', methods=['POST'])
+def post_pending_tweets_async():
+    """Post all pending tweets asynchronously in background"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        data = request.get_json() or {}
+        batch_size = min(data.get('batch_size', 10), 50)
+        
+        # Create job ID
+        job_id = str(uuid.uuid4())
+        
+        # Get total pending count
+        conn = get_db()
+        total_count = conn.execute(
+            'SELECT COUNT(*) as count FROM tweet WHERE status = "pending"'
+        ).fetchone()['count']
+        conn.close()
+        
+        # Initialize job tracking
+        background_jobs[job_id] = {
+            'id': job_id,
+            'status': 'pending',
+            'total_pending': total_count,
+            'posted': 0,
+            'failed': 0,
+            'processed': 0,
+            'batch_size': batch_size,
+            'created_at': datetime.now(UTC).isoformat()
+        }
+        
+        # Start background thread
+        thread = threading.Thread(
+            target=post_tweets_background,
+            args=(job_id, batch_size),
+            daemon=True
+        )
+        thread.start()
+        
+        return jsonify({
+            'job_id': job_id,
+            'status': 'started',
+            'total_pending': total_count,
+            'message': 'Background job started. Use /api/v1/jobs/{job_id} to check status.'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/jobs/<job_id>', methods=['GET'])
+def get_job_status(job_id):
+    """Get status of a background job"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    if job_id not in background_jobs:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    return jsonify(background_jobs[job_id])
+
+# Tweet Retry Endpoints
+@app.route('/api/v1/tweet/retry/<int:tweet_id>', methods=['POST'])
+def retry_failed_tweet(tweet_id):
+    """Retry posting a specific failed tweet"""
     if not check_api_key():
         return jsonify({'error': 'Invalid API key'}), 401
     
     try:
         conn = get_db()
         
-        # Get all pending tweets
-        pending_tweets = conn.execute(
-            'SELECT * FROM tweet WHERE status = "pending" ORDER BY created_at'
-        ).fetchall()
+        # Get the failed tweet
+        tweet = conn.execute(
+            'SELECT * FROM tweet WHERE id = ? AND status = "failed"',
+            (tweet_id,)
+        ).fetchone()
+        
+        if not tweet:
+            conn.close()
+            return jsonify({'error': 'Tweet not found or not in failed status'}), 404
+        
+        # Try to post to Twitter
+        success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+        
+        if success:
+            # Update tweet status to posted
+            conn.execute(
+                'UPDATE tweet SET status = ?, twitter_id = ?, posted_at = ? WHERE id = ?',
+                ('posted', result, datetime.now(UTC).isoformat(), tweet_id)
+            )
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'message': 'Tweet posted successfully on retry',
+                'tweet_id': tweet_id,
+                'twitter_id': result
+            })
+        else:
+            # Keep as failed but update retry timestamp
+            conn.execute(
+                'UPDATE tweet SET updated_at = ? WHERE id = ?',
+                (datetime.now(UTC).isoformat(), tweet_id)
+            )
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'error': 'Tweet retry failed',
+                'reason': result,
+                'tweet_id': tweet_id
+            }), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/tweets/retry-failed', methods=['POST'])
+def retry_all_failed_tweets():
+    """Retry all failed tweets or a batch of them"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        data = request.get_json() or {}
+        batch_size = min(data.get('batch_size', 10), 50)
+        offset = data.get('offset', 0)
+        account_id = data.get('account_id')  # Optional: retry only for specific account
+        
+        conn = get_db()
+        
+        # Build query
+        query = 'SELECT * FROM tweet WHERE status = "failed"'
+        params = []
+        
+        if account_id:
+            query += ' AND twitter_account_id = ?'
+            params.append(account_id)
+            
+        query += ' ORDER BY created_at LIMIT ? OFFSET ?'
+        params.extend([batch_size, offset])
+        
+        # Get failed tweets
+        failed_tweets = conn.execute(query, params).fetchall()
+        
+        # Get total count
+        count_query = 'SELECT COUNT(*) as count FROM tweet WHERE status = "failed"'
+        count_params = []
+        if account_id:
+            count_query += ' AND twitter_account_id = ?'
+            count_params.append(account_id)
+        total_count = conn.execute(count_query, count_params).fetchone()['count']
         
         results = {
-            'total': len(pending_tweets),
+            'total_failed': total_count,
+            'batch_size': batch_size,
+            'offset': offset,
+            'processed': len(failed_tweets),
             'posted': 0,
-            'failed': 0,
-            'details': []
+            'still_failed': 0,
+            'details': [],
+            'has_more': (offset + len(failed_tweets)) < total_count
         }
         
-        for tweet in pending_tweets:
-            success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
-            
-            if success:
-                # Update to posted
-                conn.execute(
-                    'UPDATE tweet SET status = ?, twitter_id = ?, posted_at = ? WHERE id = ?',
-                    ('posted', result, datetime.now(UTC).isoformat(), tweet['id'])
-                )
-                results['posted'] += 1
-                results['details'].append({
-                    'tweet_id': tweet['id'],
-                    'status': 'posted',
-                    'twitter_tweet_id': result
-                })
-            else:
-                # Update to failed
-                conn.execute(
-                    'UPDATE tweet SET status = ? WHERE id = ?',
-                    ('failed', tweet['id'])
-                )
-                results['failed'] += 1
+        for i, tweet in enumerate(failed_tweets):
+            try:
+                # Add delay between tweets
+                if i > 0:
+                    delay = get_rate_limit_delay(tweet['twitter_account_id'])
+                    time.sleep(delay)
+                
+                success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+                
+                if success:
+                    # Update to posted
+                    conn.execute(
+                        'UPDATE tweet SET status = ?, twitter_id = ?, posted_at = ? WHERE id = ?',
+                        ('posted', result, datetime.now(UTC).isoformat(), tweet['id'])
+                    )
+                    conn.commit()
+                    
+                    results['posted'] += 1
+                    results['details'].append({
+                        'tweet_id': tweet['id'],
+                        'status': 'posted',
+                        'twitter_tweet_id': result
+                    })
+                else:
+                    # Update retry timestamp
+                    conn.execute(
+                        'UPDATE tweet SET updated_at = ? WHERE id = ?',
+                        (datetime.now(UTC).isoformat(), tweet['id'])
+                    )
+                    conn.commit()
+                    
+                    results['still_failed'] += 1
+                    results['details'].append({
+                        'tweet_id': tweet['id'],
+                        'status': 'failed',
+                        'error': result
+                    })
+                    
+            except Exception as e:
+                results['still_failed'] += 1
                 results['details'].append({
                     'tweet_id': tweet['id'],
                     'status': 'failed',
-                    'error': result
+                    'error': str(e)
                 })
         
-        conn.commit()
         conn.close()
-        
         return jsonify(results)
         
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/tweets/reset-failed', methods=['POST'])
+def reset_failed_tweets():
+    """Reset failed tweets back to pending status"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        data = request.get_json() or {}
+        tweet_ids = data.get('tweet_ids', [])  # Specific tweets to reset
+        account_id = data.get('account_id')  # Reset all failed for this account
+        days_old = data.get('days_old')  # Reset failed tweets older than X days
+        
+        if not tweet_ids and not account_id and days_old is None:
+            return jsonify({'error': 'Provide tweet_ids, account_id, or days_old parameter'}), 400
+        
+        conn = get_db()
+        
+        # Build update query
+        query = 'UPDATE tweet SET status = "pending", updated_at = ? WHERE status = "failed"'
+        params = [datetime.now(UTC).isoformat()]
+        
+        if tweet_ids:
+            placeholders = ','.join('?' * len(tweet_ids))
+            query += f' AND id IN ({placeholders})'
+            params.extend(tweet_ids)
+        
+        if account_id:
+            query += ' AND twitter_account_id = ?'
+            params.append(account_id)
+            
+        if days_old is not None:
+            cutoff_date = (datetime.now(UTC) - timedelta(days=days_old)).isoformat()
+            query += ' AND created_at < ?'
+            params.append(cutoff_date)
+        
+        # Get count before update
+        count_query = query.replace('UPDATE tweet SET status = "pending", updated_at = ?', 'SELECT COUNT(*) FROM tweet')
+        count = conn.execute(count_query, params[1:]).fetchone()[0]  # Skip the updated_at param
+        
+        # Execute update
+        conn.execute(query, params)
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': f'Reset {count} failed tweets to pending status',
+            'count': count
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/rate-limits', methods=['GET'])
+def get_rate_limits():
+    """Get current rate limit status for all accounts"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        accounts = conn.execute('SELECT id, username FROM twitter_account').fetchall()
+        conn.close()
+        
+        current_time = time.time()
+        rate_limit_info = []
+        
+        with rate_limit_tracker['lock']:
+            for account in accounts:
+                account_id = account['id']
+                limits = rate_limit_tracker['accounts'][account_id]
+                
+                # Calculate remaining tweets and time until reset
+                remaining = max(0, 180 - limits['count'])
+                reset_in = max(0, limits['reset_time'] - current_time)
+                tweets_posted = limits['count']
+                
+                # Calculate delay based on usage
+                if tweets_posted < 50:
+                    current_delay = 1
+                elif tweets_posted < 100:
+                    current_delay = 2
+                elif tweets_posted < 150:
+                    current_delay = 3
+                else:
+                    current_delay = 5
+                
+                rate_limit_info.append({
+                    'account_id': account_id,
+                    'username': account['username'],
+                    'tweets_posted': tweets_posted,
+                    'tweets_remaining': remaining,
+                    'reset_in_seconds': int(reset_in),
+                    'reset_at': datetime.fromtimestamp(limits['reset_time']).isoformat() if limits['reset_time'] > 0 else None,
+                    'current_delay': current_delay
+                })
+        
+        return jsonify({
+            'rate_limits': rate_limit_info,
+            'timestamp': datetime.now(UTC).isoformat()
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 # List Management Endpoints
@@ -2546,6 +3162,10 @@ def init_database():
     try:
         conn = get_db()
         
+        # Enable WAL mode once for better concurrent access
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')  # 5 seconds
+        
         # Create api_key table
         conn.execute('''
             CREATE TABLE IF NOT EXISTS api_key (
@@ -2724,7 +3344,14 @@ if __name__ == '__main__':
     print("  GET  /api/v1/stats")
     print("\nTwitter posting endpoints:")
     print("  POST /api/v1/tweet/post/<id> - Post specific tweet")
-    print("  POST /api/v1/tweets/post-pending - Post all pending tweets")
+    print("  POST /api/v1/tweets/post-pending - Post pending tweets (batch mode)")
+    print("  POST /api/v1/tweets/post-pending-async - Post pending tweets (async/background)")
+    print("  GET  /api/v1/jobs/<job_id> - Check background job status")
+    
+    print("\nTweet retry endpoints:")
+    print("  POST /api/v1/tweet/retry/<id> - Retry specific failed tweet")
+    print("  POST /api/v1/tweets/retry-failed - Retry failed tweets (batch mode)")
+    print("  POST /api/v1/tweets/reset-failed - Reset failed tweets to pending")
     
     print("\nToken health endpoints:")
     print("  GET  /api/v1/accounts/token-health - Check token health for all accounts")
