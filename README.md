@@ -233,20 +233,20 @@ GET /api/v1/accounts/check-twitter-status
 X-API-Key: your-api-key
 ```
 
-Check if your Twitter accounts are active, suspended, locked, restricted, or have other issues:
+Check if your Twitter accounts are active, suspended, locked, restricted, or have other issues. Problematic accounts are listed by username:
 ```json
 {
     "summary": {
         "total": 5,
         "active": 2,
-        "suspended": 1,
-        "locked": 1,
-        "restricted": 0,
+        "suspended": ["suspended_user"],
+        "locked": ["locked_user"],
+        "restricted": [],
         "protected": 1,
-        "deactivated": 0,
-        "token_expired": 0,
-        "unauthorized": 0,
-        "other_issues": 0
+        "deactivated": [],
+        "token_expired": ["expired_token_user", "another_expired"],
+        "unauthorized": ["revoked_user"],
+        "other_issues": ["error_user"]
     },
     "accounts": [
         {

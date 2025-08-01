@@ -2132,18 +2132,20 @@ def check_all_accounts_twitter_status():
             
             results.append(account_info)
         
-        # Summary statistics
+        # Summary statistics with account names for problematic accounts
+        problem_statuses = ['suspended', 'locked', 'restricted', 'deactivated', 'token_expired', 'unauthorized']
+        
         summary = {
             'total': len(results),
             'active': len([r for r in results if r['twitter_status'] == 'active']),
-            'suspended': len([r for r in results if r['twitter_status'] == 'suspended']),
-            'locked': len([r for r in results if r['twitter_status'] == 'locked']),
-            'restricted': len([r for r in results if r['twitter_status'] == 'restricted']),
+            'suspended': [r['username'] for r in results if r['twitter_status'] == 'suspended'],
+            'locked': [r['username'] for r in results if r['twitter_status'] == 'locked'],
+            'restricted': [r['username'] for r in results if r['twitter_status'] == 'restricted'],
             'protected': len([r for r in results if r['twitter_status'] == 'protected']),
-            'deactivated': len([r for r in results if r['twitter_status'] == 'deactivated']),
-            'token_expired': len([r for r in results if r['twitter_status'] == 'token_expired']),
-            'unauthorized': len([r for r in results if r['twitter_status'] == 'unauthorized']),
-            'other_issues': len([r for r in results if r['twitter_status'] not in ['active', 'suspended', 'locked', 'restricted', 'protected', 'deactivated', 'token_expired', 'unauthorized']])
+            'deactivated': [r['username'] for r in results if r['twitter_status'] == 'deactivated'],
+            'token_expired': [r['username'] for r in results if r['twitter_status'] == 'token_expired'],
+            'unauthorized': [r['username'] for r in results if r['twitter_status'] == 'unauthorized'],
+            'other_issues': [r['username'] for r in results if r['twitter_status'] not in ['active', 'suspended', 'locked', 'restricted', 'protected', 'deactivated', 'token_expired', 'unauthorized']]
         }
         
         return jsonify({
