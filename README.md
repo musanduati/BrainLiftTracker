@@ -733,6 +733,76 @@ Returns:
 }
 ```
 
+### Thread Retry and Recovery
+
+#### Retry Failed Thread
+```http
+POST /api/v1/thread/retry/{thread_id}
+X-API-Key: your-api-key
+```
+
+Retries posting a failed thread from where it left off. If some tweets in the thread were already posted successfully, it will continue from the last successful tweet, maintaining the reply chain.
+
+Returns:
+```json
+{
+    "message": "Thread retry completed",
+    "thread_id": "550e8400-e29b-41d4-a716-446655440000",
+    "posted": 2,
+    "failed": 0,
+    "tweets": [
+        {
+            "tweet_id": 2,
+            "twitter_id": "1234567890123456790",
+            "position": 1,
+            "status": "posted"
+        },
+        {
+            "tweet_id": 3,
+            "twitter_id": "1234567890123456791",
+            "position": 2,
+            "status": "posted"
+        }
+    ]
+}
+```
+
+#### Reset Failed Thread Tweets
+```http
+POST /api/v1/threads/reset-failed
+X-API-Key: your-api-key
+Content-Type: application/json
+
+{
+    "thread_ids": ["thread-id-1", "thread-id-2"],  // Option 1: Specific threads
+    "account_id": 5,                                // Option 2: All threads for an account
+    "days_old": 7                                   // Option 3: Threads older than X days
+}
+```
+
+Resets failed tweets in threads back to pending status so they can be posted again. This clears the twitter_id and reply_to_tweet_id fields, allowing a fresh attempt.
+
+Returns:
+```json
+{
+    "message": "Reset 4 failed tweets to pending status",
+    "count": 4,
+    "affected_threads": 2,
+    "thread_stats": [
+        {
+            "thread_id": "thread-1",
+            "total": 3,
+            "pending": 3
+        },
+        {
+            "thread_id": "thread-2",
+            "total": 2,
+            "pending": 1
+        }
+    ]
+}
+```
+
 #### List Tweets
 ```http
 GET /api/v1/tweets?status=posted&account_id=1&page=1
@@ -984,6 +1054,8 @@ Error responses include a JSON body:
 | `/api/v1/threads` | GET | Yes | List all threads |
 | `/api/v1/thread/{id}` | GET | Yes | Get thread details |
 | `/api/v1/thread/post/{id}` | POST | Yes | Post thread to Twitter |
+| `/api/v1/thread/retry/{id}` | POST | Yes | Retry failed thread from where it left off |
+| `/api/v1/threads/reset-failed` | POST | Yes | Reset failed thread tweets to pending |
 | `/api/v1/thread/{id}` | DELETE | Yes | Delete specific thread |
 | `/api/v1/threads/cleanup` | POST | Yes | Delete threads by criteria |
 | `/api/v1/auth/twitter` | GET | Yes | Start OAuth flow |

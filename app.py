@@ -3079,6 +3079,220 @@ def delete_thread(thread_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Thread Retry Endpoints
+@app.route('/api/v1/thread/retry/<thread_id>', methods=['POST'])
+def retry_failed_thread(thread_id):
+    """Retry posting a failed thread from where it left off"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Check thread status
+        thread_check = conn.execute(
+            '''SELECT COUNT(*) as total,
+                      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                      SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) as posted,
+                      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+               FROM tweet 
+               WHERE thread_id = ?''',
+            (thread_id,)
+        ).fetchone()
+        
+        if thread_check['total'] == 0:
+            conn.close()
+            return jsonify({'error': f'Thread {thread_id} not found'}), 404
+        
+        if thread_check['failed'] == 0:
+            conn.close()
+            return jsonify({
+                'error': 'No failed tweets in this thread',
+                'stats': dict(thread_check)
+            }), 400
+        
+        # Get the last successfully posted tweet in the thread (if any)
+        last_posted = conn.execute(
+            '''SELECT twitter_id, thread_position 
+               FROM tweet 
+               WHERE thread_id = ? AND status = 'posted'
+               ORDER BY thread_position DESC
+               LIMIT 1''',
+            (thread_id,)
+        ).fetchone()
+        
+        previous_tweet_id = last_posted['twitter_id'] if last_posted else None
+        
+        # Get all failed and pending tweets in order
+        tweets_to_retry = conn.execute(
+            '''SELECT id, twitter_account_id, content, thread_position 
+               FROM tweet 
+               WHERE thread_id = ? AND status IN ('failed', 'pending')
+               ORDER BY thread_position''',
+            (thread_id,)
+        ).fetchall()
+        
+        if not tweets_to_retry:
+            conn.close()
+            return jsonify({
+                'error': 'No tweets to retry',
+                'stats': dict(thread_check)
+            }), 404
+        
+        # Post tweets sequentially
+        posted_tweets = []
+        failed_tweets = []
+        
+        for tweet in tweets_to_retry:
+            # Add rate limiting delay
+            if posted_tweets or last_posted:  # Delay unless it's the first tweet
+                delay = get_rate_limit_delay(tweet['twitter_account_id'])
+                time.sleep(delay)
+            
+            success, result = post_to_twitter(
+                tweet['twitter_account_id'], 
+                tweet['content'],
+                reply_to_tweet_id=previous_tweet_id
+            )
+            
+            if success:
+                # Update tweet status
+                conn.execute(
+                    '''UPDATE tweet 
+                       SET status = ?, twitter_id = ?, posted_at = ?, reply_to_tweet_id = ?
+                       WHERE id = ?''',
+                    ('posted', result, datetime.now(UTC).isoformat(), previous_tweet_id, tweet['id'])
+                )
+                conn.commit()
+                
+                posted_tweets.append({
+                    'tweet_id': tweet['id'],
+                    'twitter_id': result,
+                    'position': tweet['thread_position'],
+                    'status': 'posted'
+                })
+                
+                # Set this tweet as the one to reply to for the next tweet
+                previous_tweet_id = result
+            else:
+                # Update as failed
+                conn.execute(
+                    'UPDATE tweet SET status = ? WHERE id = ?',
+                    ('failed', tweet['id'])
+                )
+                conn.commit()
+                
+                failed_tweets.append({
+                    'tweet_id': tweet['id'],
+                    'position': tweet['thread_position'],
+                    'status': 'failed',
+                    'error': result
+                })
+                
+                # Stop on first failure to maintain thread continuity
+                break
+        
+        conn.close()
+        
+        return jsonify({
+            'message': 'Thread retry completed',
+            'thread_id': thread_id,
+            'posted': len(posted_tweets),
+            'failed': len(failed_tweets),
+            'tweets': posted_tweets + failed_tweets
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/threads/reset-failed', methods=['POST'])
+def reset_failed_threads():
+    """Reset failed thread tweets back to pending status"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        conn = get_db()
+        
+        # Build query based on provided filters
+        query_parts = []
+        params = []
+        
+        if 'thread_ids' in data and data['thread_ids']:
+            placeholders = ','.join('?' * len(data['thread_ids']))
+            query_parts.append(f'thread_id IN ({placeholders})')
+            params.extend(data['thread_ids'])
+        
+        if 'account_id' in data:
+            query_parts.append('twitter_account_id = ?')
+            params.append(data['account_id'])
+        
+        if 'days_old' in data:
+            cutoff_date = (datetime.now(UTC) - timedelta(days=data['days_old'])).isoformat()
+            query_parts.append('created_at < ?')
+            params.append(cutoff_date)
+        
+        if not query_parts:
+            conn.close()
+            return jsonify({'error': 'No filter criteria provided'}), 400
+        
+        # First, get the thread IDs that have failed tweets
+        where_clause = ' AND '.join(query_parts)
+        affected_threads = conn.execute(
+            f'''SELECT DISTINCT thread_id 
+                FROM tweet 
+                WHERE status = 'failed' AND thread_id IS NOT NULL AND {where_clause}''',
+            params
+        ).fetchall()
+        
+        if not affected_threads:
+            conn.close()
+            return jsonify({
+                'message': 'No failed thread tweets found matching criteria',
+                'count': 0
+            })
+        
+        # Reset failed tweets to pending
+        result = conn.execute(
+            f'''UPDATE tweet 
+                SET status = 'pending', twitter_id = NULL, posted_at = NULL, reply_to_tweet_id = NULL
+                WHERE status = 'failed' AND thread_id IS NOT NULL AND {where_clause}''',
+            params
+        )
+        
+        count = result.rowcount
+        conn.commit()
+        
+        # Get updated thread statistics
+        thread_stats = []
+        for thread in affected_threads:
+            stats = conn.execute(
+                '''SELECT thread_id,
+                          COUNT(*) as total,
+                          SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+                   FROM tweet 
+                   WHERE thread_id = ?
+                   GROUP BY thread_id''',
+                (thread['thread_id'],)
+            ).fetchone()
+            thread_stats.append(dict(stats))
+        
+        conn.close()
+        
+        return jsonify({
+            'message': f'Reset {count} failed tweets to pending status',
+            'count': count,
+            'affected_threads': len(affected_threads),
+            'thread_stats': thread_stats
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # Add route at Twitter's expected callback URL
 @app.route('/auth/callback', methods=['GET'])
 def auth_callback_redirect():
@@ -3487,6 +3701,10 @@ if __name__ == '__main__':
     print("  POST /api/v1/tweet/retry/<id> - Retry specific failed tweet")
     print("  POST /api/v1/tweets/retry-failed - Retry failed tweets (batch mode)")
     print("  POST /api/v1/tweets/reset-failed - Reset failed tweets to pending")
+    
+    print("\nThread retry endpoints:")
+    print("  POST /api/v1/thread/retry/<thread_id> - Retry failed thread from where it left off")
+    print("  POST /api/v1/threads/reset-failed - Reset failed thread tweets to pending")
     
     print("\nToken health endpoints:")
     print("  GET  /api/v1/accounts/token-health - Check token health for all accounts")
