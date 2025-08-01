@@ -225,6 +225,71 @@ Check the status of a background tweet posting job:
 }
 ```
 
+#### Retry Failed Tweets
+
+##### Retry Single Failed Tweet
+```http
+POST /api/v1/tweet/retry/{tweet_id}
+X-API-Key: your-api-key
+```
+
+Attempts to repost a specific failed tweet. Returns:
+```json
+{
+    "message": "Tweet posted successfully on retry",
+    "tweet_id": 123,
+    "twitter_id": "1947673926596731295"
+}
+```
+
+##### Retry Multiple Failed Tweets
+```http
+POST /api/v1/tweets/retry-failed
+X-API-Key: your-api-key
+Content-Type: application/json
+
+{
+    "batch_size": 10,       // Optional: default 10, max 50
+    "offset": 0,            // Optional: for pagination
+    "account_id": 5         // Optional: retry only for specific account
+}
+```
+
+Retries failed tweets in batches. Returns:
+```json
+{
+    "total_failed": 25,
+    "batch_size": 10,
+    "offset": 0,
+    "processed": 10,
+    "posted": 7,
+    "still_failed": 3,
+    "has_more": true,
+    "details": [...]
+}
+```
+
+##### Reset Failed Tweets to Pending
+```http
+POST /api/v1/tweets/reset-failed
+X-API-Key: your-api-key
+Content-Type: application/json
+
+{
+    "tweet_ids": [123, 456],    // Option 1: Specific tweet IDs
+    "account_id": 5,            // Option 2: All failed for an account
+    "days_old": 7               // Option 3: Failed tweets older than X days
+}
+```
+
+Resets failed tweets back to pending status so they can be posted again:
+```json
+{
+    "message": "Reset 15 failed tweets to pending status",
+    "count": 15
+}
+```
+
 #### Mock Mode Control
 ```http
 GET /api/v1/mock-mode
@@ -828,6 +893,9 @@ Error responses include a JSON body:
 | `/api/v1/tweets/post-pending` | POST | Yes | Post pending tweets (batch mode) |
 | `/api/v1/tweets/post-pending-async` | POST | Yes | Post pending tweets (async/background) |
 | `/api/v1/jobs/{id}` | GET | Yes | Check background job status |
+| `/api/v1/tweet/retry/{id}` | POST | Yes | Retry specific failed tweet |
+| `/api/v1/tweets/retry-failed` | POST | Yes | Retry failed tweets (batch mode) |
+| `/api/v1/tweets/reset-failed` | POST | Yes | Reset failed tweets to pending |
 | `/api/v1/thread` | POST | Yes | Create new thread |
 | `/api/v1/threads` | GET | Yes | List all threads |
 | `/api/v1/thread/{id}` | GET | Yes | Get thread details |
