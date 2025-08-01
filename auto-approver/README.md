@@ -1,6 +1,6 @@
 # Twitter Follow Request Auto-Approver
 
-Automated tool for managing Twitter/X follow requests using Selenium WebDriver.
+Automated tool for managing Twitter/X follow requests using Selenium WebDriver with support for 2FA authentication codes.
 
 ## Prerequisites
 
@@ -64,17 +64,71 @@ python batch_automation.py --accounts brainlift_accounts.csv
 ## How It Works
 
 1. **Automated Login**: Handles Twitter login with credentials
-2. **Navigation**: Accesses follow requests via More → Follower requests
-3. **Auto-Approval**: Clicks Accept buttons for each request
-4. **Progress Tracking**: Shows real-time approval count
-5. **Batch Processing**: Handles multiple accounts sequentially
+2. **2FA Support**: Interactive prompt for authentication codes when required
+3. **Navigation**: Accesses follow requests via More → Follower requests
+4. **Auto-Approval**: Clicks Accept buttons for each request
+5. **Progress Tracking**: Shows real-time approval count
+6. **Batch Processing**: Handles multiple accounts sequentially
+
+## Authentication Code Handling
+
+When Twitter requires a 2FA authentication code:
+
+1. **Automatic Detection**: The tool detects when Twitter asks for a verification code
+2. **User Prompt**: Displays a clear message with 60-second countdown
+3. **Code Entry**: Enter the code from SMS/email/authenticator app
+4. **Skip Option**: Press ENTER without typing to skip the account
+5. **Auto-Continue**: After 60 seconds, automatically proceeds to next account
+
+### Example Prompt:
+```
+==================================================
+🔐 AUTHENTICATION CODE REQUIRED
+==================================================
+
+Twitter is requesting an authentication code for account: @username
+This code may have been sent to:
+  - Your email address
+  - Your phone via SMS
+  - Your authenticator app
+
+You have 60 seconds to enter the code.
+Press ENTER without typing anything to skip this account.
+
+Enter authentication code (or press ENTER to skip): _
+```
 
 ## Error Handling
 
 - Failed accounts don't stop the batch process
+- Authentication code timeouts are handled gracefully
 - Each error is logged and reported
 - Browser properly closes even on failures
 - Detailed JSON report generated after batch runs
+
+### Batch Report Example:
+```json
+{
+  "summary": {
+    "total_accounts": 3,
+    "successful_accounts": 2,
+    "total_approvals": 75
+  },
+  "results": [
+    {
+      "username": "account1",
+      "success": true,
+      "approved_count": 45
+    },
+    {
+      "username": "account2",
+      "success": false,
+      "error": "Authentication code required but not provided - account skipped",
+      "auth_code_required": true
+    }
+  ]
+}
+```
 
 ## Files
 

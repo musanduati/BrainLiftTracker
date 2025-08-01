@@ -184,7 +184,11 @@ class BatchTwitterAutomation:
             result['success'] = success
             
             if not success and result['approved_count'] == 0:
-                result['error'] = "No follow requests found or unable to access them"
+                if hasattr(automation, 'auth_code_skipped') and automation.auth_code_skipped:
+                    result['error'] = "Authentication code required but not provided - account skipped"
+                    result['auth_code_required'] = True
+                else:
+                    result['error'] = "No follow requests found or unable to access them"
             
         except Exception as e:
             result['error'] = str(e)

@@ -34,6 +34,7 @@ class TwitterSeleniumAutomation:
         self.driver = None
         self.wait = None
         self.headless = headless
+        self.auth_code_skipped = False  # Track if auth code was skipped
         
         # Configuration
         self.username = os.getenv('TWITTER_USERNAME')
@@ -127,6 +128,13 @@ class TwitterSeleniumAutomation:
             print("Waiting for login to complete...")
             time.sleep(5)
             
+            # Check for authentication code request
+            auth_code_required = self.handle_auth_code_if_needed()
+            if auth_code_required == "skip":
+                print("⚠️ Authentication code required but not provided, skipping this account")
+                self.auth_code_skipped = True
+                return False
+            
             # Verify login by checking for home timeline or profile elements
             self.wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="primaryColumn"]'))
@@ -140,6 +148,150 @@ class TwitterSeleniumAutomation:
         except Exception as e:
             print(f"❌ Login error: {str(e)}")
             return False
+    
+    def handle_auth_code_if_needed(self, timeout=60):
+        """
+        Handle authentication code if Twitter requests it
+        
+        Args:
+            timeout (int): Maximum time to wait for user input in seconds
+            
+        Returns:
+            str: "success" if code entered and accepted, "skip" if timeout, "none" if no code needed
+        """
+        try:
+            # Check for authentication code input field
+            # Twitter may use different selectors for the auth code input
+            auth_code_selectors = [
+                'input[data-testid="ocfEnterTextTextInput"]',
+                'input[name="text"]',
+                'input[inputmode="numeric"]',
+                'input[autocomplete="one-time-code"]',
+                'input[type="text"][aria-label*="code"]',
+                'input[type="text"][aria-label*="Code"]',
+                'input[placeholder*="code"]',
+                'input[placeholder*="Code"]'
+            ]
+            
+            auth_code_input = None
+            for selector in auth_code_selectors:
+                try:
+                    # Use a short timeout for each selector
+                    auth_code_input = WebDriverWait(self.driver, 2).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                    )
+                    # Verify it's actually visible and for auth code
+                    if auth_code_input.is_displayed():
+                        # Check surrounding text for auth code context
+                        parent = auth_code_input.find_element(By.XPATH, './..')
+                        page_text = parent.text.lower()
+                        if any(keyword in page_text for keyword in ['code', 'verify', 'authentication', 'confirm']):
+                            break
+                    auth_code_input = None
+                except:
+                    continue
+            
+            if not auth_code_input:
+                # No auth code required
+                return "none"
+            
+            print("\n" + "="*50)
+            print("🔐 AUTHENTICATION CODE REQUIRED")
+            print("="*50)
+            print(f"\nTwitter is requesting an authentication code for account: {self.username}")
+            print("This code may have been sent to:")
+            print("  - Your email address")
+            print("  - Your phone via SMS")
+            print("  - Your authenticator app")
+            print(f"\nYou have {timeout} seconds to enter the code.")
+            print("Press ENTER without typing anything to skip this account.\n")
+            
+            # Show a countdown and wait for user input
+            import threading
+            import queue
+            
+            input_queue = queue.Queue()
+            
+            def get_input():
+                user_input = input("Enter authentication code (or press ENTER to skip): ").strip()
+                input_queue.put(user_input)
+            
+            # Start input thread
+            input_thread = threading.Thread(target=get_input)
+            input_thread.daemon = True
+            input_thread.start()
+            
+            # Wait for input with timeout
+            start_time = time.time()
+            code_entered = False
+            
+            while time.time() - start_time < timeout:
+                try:
+                    # Check if user provided input
+                    user_code = input_queue.get(timeout=1)
+                    
+                    if not user_code:
+                        print("No code entered, skipping this account...")
+                        return "skip"
+                    
+                    # Enter the code
+                    print(f"Entering authentication code: {user_code}")
+                    auth_code_input.clear()
+                    auth_code_input.send_keys(user_code)
+                    auth_code_input.send_keys(Keys.RETURN)
+                    
+                    # Wait for code verification
+                    time.sleep(3)
+                    
+                    # Check if we're still on the auth code page
+                    try:
+                        # If the auth code input is still there and visible, the code might be wrong
+                        WebDriverWait(self.driver, 2).until(
+                            EC.presence_of_element_located((By.CSS_SELECTOR, auth_code_input))
+                        )
+                        # Check for error messages
+                        error_selectors = [
+                            '[role="alert"]',
+                            '.error-message',
+                            '[data-testid="toast"]',
+                            'span[color="red"]'
+                        ]
+                        for error_sel in error_selectors:
+                            try:
+                                error_elem = self.driver.find_element(By.CSS_SELECTOR, error_sel)
+                                if error_elem.is_displayed():
+                                    print(f"❌ Error: {error_elem.text}")
+                                    print("The code may be incorrect. You can try again.")
+                                    # Allow retry
+                                    continue
+                            except:
+                                pass
+                    except:
+                        # Auth code input disappeared, likely successful
+                        print("✅ Authentication code accepted!")
+                        return "success"
+                    
+                    code_entered = True
+                    break
+                    
+                except queue.Empty:
+                    # No input yet, show countdown
+                    remaining = int(timeout - (time.time() - start_time))
+                    if remaining % 10 == 0 and remaining > 0:
+                        print(f"⏱️  {remaining} seconds remaining...")
+                except Exception as e:
+                    print(f"Error handling auth code: {e}")
+                    break
+            
+            if not code_entered:
+                print("\n⏱️  Timeout reached, skipping this account...")
+                return "skip"
+            
+            return "success"
+            
+        except Exception as e:
+            print(f"Error checking for auth code: {e}")
+            return "none"
     
     def navigate_to_follow_requests(self):
         """Navigate to the follow requests section"""
