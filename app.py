@@ -20,6 +20,8 @@ import base64
 import urllib.parse
 from cryptography.fernet import Fernet
 import uuid
+import threading
+import time
 
 app = Flask(__name__)
 
@@ -1351,23 +1353,38 @@ def post_tweet(tweet_id):
 
 @app.route('/api/v1/tweets/post-pending', methods=['POST'])
 def post_pending_tweets():
-    """Post all pending tweets"""
+    """Post all pending tweets with batch processing to prevent timeouts"""
     if not check_api_key():
         return jsonify({'error': 'Invalid API key'}), 401
     
     try:
+        # Get batch size from request or use default
+        data = request.get_json() or {}
+        batch_size = min(data.get('batch_size', 10), 50)  # Max 50 tweets per batch
+        offset = data.get('offset', 0)
+        
         conn = get_db()
         
-        # Get all pending tweets
+        # Get total count of pending tweets
+        total_count = conn.execute(
+            'SELECT COUNT(*) as count FROM tweet WHERE status = "pending"'
+        ).fetchone()['count']
+        
+        # Get batch of pending tweets
         pending_tweets = conn.execute(
-            'SELECT * FROM tweet WHERE status = "pending" ORDER BY created_at'
+            'SELECT * FROM tweet WHERE status = "pending" ORDER BY created_at LIMIT ? OFFSET ?',
+            (batch_size, offset)
         ).fetchall()
         
         results = {
-            'total': len(pending_tweets),
+            'total_pending': total_count,
+            'batch_size': batch_size,
+            'offset': offset,
+            'processed': len(pending_tweets),
             'posted': 0,
             'failed': 0,
-            'details': []
+            'details': [],
+            'has_more': (offset + len(pending_tweets)) < total_count
         }
         
         for tweet in pending_tweets:
@@ -1405,6 +1422,129 @@ def post_pending_tweets():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# Background job tracking
+background_jobs = {}
+
+def post_tweets_background(job_id, batch_size=10):
+    """Background worker to post pending tweets"""
+    try:
+        background_jobs[job_id]['status'] = 'running'
+        background_jobs[job_id]['started_at'] = datetime.now(UTC).isoformat()
+        
+        total_posted = 0
+        total_failed = 0
+        offset = 0
+        
+        while True:
+            conn = get_db()
+            
+            # Get batch of pending tweets
+            pending_tweets = conn.execute(
+                'SELECT * FROM tweet WHERE status = "pending" ORDER BY created_at LIMIT ? OFFSET ?',
+                (batch_size, offset)
+            ).fetchall()
+            
+            if not pending_tweets:
+                break
+            
+            for tweet in pending_tweets:
+                success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+                
+                if success:
+                    conn.execute(
+                        'UPDATE tweet SET status = ?, twitter_id = ?, posted_at = ? WHERE id = ?',
+                        ('posted', result, datetime.now(UTC).isoformat(), tweet['id'])
+                    )
+                    total_posted += 1
+                else:
+                    conn.execute(
+                        'UPDATE tweet SET status = ? WHERE id = ?',
+                        ('failed', tweet['id'])
+                    )
+                    total_failed += 1
+                
+                # Update job progress
+                background_jobs[job_id]['posted'] = total_posted
+                background_jobs[job_id]['failed'] = total_failed
+                background_jobs[job_id]['processed'] = total_posted + total_failed
+            
+            conn.commit()
+            conn.close()
+            
+            # Add small delay to prevent overwhelming the API
+            time.sleep(1)
+            
+            offset += batch_size
+        
+        background_jobs[job_id]['status'] = 'completed'
+        background_jobs[job_id]['completed_at'] = datetime.now(UTC).isoformat()
+        
+    except Exception as e:
+        background_jobs[job_id]['status'] = 'failed'
+        background_jobs[job_id]['error'] = str(e)
+        background_jobs[job_id]['completed_at'] = datetime.now(UTC).isoformat()
+
+@app.route('/api/v1/tweets/post-pending-async', methods=['POST'])
+def post_pending_tweets_async():
+    """Post all pending tweets asynchronously in background"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        data = request.get_json() or {}
+        batch_size = min(data.get('batch_size', 10), 50)
+        
+        # Create job ID
+        job_id = str(uuid.uuid4())
+        
+        # Get total pending count
+        conn = get_db()
+        total_count = conn.execute(
+            'SELECT COUNT(*) as count FROM tweet WHERE status = "pending"'
+        ).fetchone()['count']
+        conn.close()
+        
+        # Initialize job tracking
+        background_jobs[job_id] = {
+            'id': job_id,
+            'status': 'pending',
+            'total_pending': total_count,
+            'posted': 0,
+            'failed': 0,
+            'processed': 0,
+            'batch_size': batch_size,
+            'created_at': datetime.now(UTC).isoformat()
+        }
+        
+        # Start background thread
+        thread = threading.Thread(
+            target=post_tweets_background,
+            args=(job_id, batch_size),
+            daemon=True
+        )
+        thread.start()
+        
+        return jsonify({
+            'job_id': job_id,
+            'status': 'started',
+            'total_pending': total_count,
+            'message': 'Background job started. Use /api/v1/jobs/{job_id} to check status.'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/jobs/<job_id>', methods=['GET'])
+def get_job_status(job_id):
+    """Get status of a background job"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    if job_id not in background_jobs:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    return jsonify(background_jobs[job_id])
 
 # List Management Endpoints
 @app.route('/api/v1/lists', methods=['POST'])
@@ -2724,7 +2864,9 @@ if __name__ == '__main__':
     print("  GET  /api/v1/stats")
     print("\nTwitter posting endpoints:")
     print("  POST /api/v1/tweet/post/<id> - Post specific tweet")
-    print("  POST /api/v1/tweets/post-pending - Post all pending tweets")
+    print("  POST /api/v1/tweets/post-pending - Post pending tweets (batch mode)")
+    print("  POST /api/v1/tweets/post-pending-async - Post pending tweets (async/background)")
+    print("  GET  /api/v1/jobs/<job_id> - Check background job status")
     
     print("\nToken health endpoints:")
     print("  GET  /api/v1/accounts/token-health - Check token health for all accounts")
