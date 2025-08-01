@@ -227,6 +227,62 @@ Check the status of a background tweet posting job:
 }
 ```
 
+#### Check Twitter Account Status
+```http
+GET /api/v1/accounts/check-twitter-status
+X-API-Key: your-api-key
+```
+
+Check if your Twitter accounts are active, suspended, locked, restricted, or have other issues:
+```json
+{
+    "summary": {
+        "total": 5,
+        "active": 2,
+        "suspended": 1,
+        "locked": 1,
+        "restricted": 0,
+        "protected": 1,
+        "deactivated": 0,
+        "token_expired": 0,
+        "unauthorized": 0,
+        "other_issues": 0
+    },
+    "accounts": [
+        {
+            "id": 1,
+            "username": "example_user",
+            "twitter_status": "active",
+            "error": null,
+            "metrics": {
+                "followers_count": 1234,
+                "following_count": 567,
+                "tweet_count": 890
+            }
+        },
+        {
+            "id": 2,
+            "username": "suspended_user",
+            "twitter_status": "suspended",
+            "error": "User has been suspended: suspended_user"
+        },
+        {
+            "id": 3,
+            "username": "locked_user",
+            "twitter_status": "locked",
+            "error": "Account is locked"
+        },
+        {
+            "id": 4,
+            "username": "protected_user",
+            "twitter_status": "protected",
+            "error": null,
+            "checked_at": "2024-01-20T10:30:03Z"
+        }
+    ]
+}
+```
+
 #### Check Rate Limit Status
 ```http
 GET /api/v1/rate-limits
@@ -923,6 +979,7 @@ Error responses include a JSON body:
 | `/api/v1/tweets/retry-failed` | POST | Yes | Retry failed tweets (batch mode) |
 | `/api/v1/tweets/reset-failed` | POST | Yes | Reset failed tweets to pending |
 | `/api/v1/rate-limits` | GET | Yes | Check rate limit status for all accounts |
+| `/api/v1/accounts/check-twitter-status` | GET | Yes | Check if accounts are suspended/locked |
 | `/api/v1/thread` | POST | Yes | Create new thread |
 | `/api/v1/threads` | GET | Yes | List all threads |
 | `/api/v1/thread/{id}` | GET | Yes | Get thread details |

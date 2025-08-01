@@ -1777,6 +1777,66 @@
 					]
 				},
 				{
+					"name": "Check Twitter Account Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/check-twitter-status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"check-twitter-status"
+							]
+						},
+						"description": "Check if Twitter accounts are active, suspended, locked, or have other issues"
+					},
+					"response": [
+						{
+							"name": "Account Status Report",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/check-twitter-status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"check-twitter-status"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"summary\": {\n        \"total\": 5,\n        \"active\": 2,\n        \"suspended\": 1,\n        \"locked\": 1,\n        \"restricted\": 0,\n        \"protected\": 1,\n        \"deactivated\": 0,\n        \"token_expired\": 0,\n        \"unauthorized\": 0,\n        \"other_issues\": 0\n    },\n    \"accounts\": [\n        {\n            \"id\": 1,\n            \"username\": \"example_user\",\n            \"twitter_status\": \"active\",\n            \"error\": null,\n            \"metrics\": {\n                \"followers_count\": 1234,\n                \"following_count\": 567,\n                \"tweet_count\": 890\n            },\n            \"checked_at\": \"2024-01-20T10:30:00Z\"\n        },\n        {\n            \"id\": 2,\n            \"username\": \"suspended_user\",\n            \"twitter_status\": \"suspended\",\n            \"error\": \"User has been suspended: suspended_user\",\n            \"checked_at\": \"2024-01-20T10:30:01Z\"\n        },\n        {\n            \"id\": 3,\n            \"username\": \"locked_user\",\n            \"twitter_status\": \"locked\",\n            \"error\": \"Account is locked\",\n            \"checked_at\": \"2024-01-20T10:30:02Z\"\n        },\n        {\n            \"id\": 4,\n            \"username\": \"protected_user\",\n            \"twitter_status\": \"protected\",\n            \"error\": null,\n            \"checked_at\": \"2024-01-20T10:30:03Z\"\n        },\n        {\n            \"id\": 5,\n            \"username\": \"healthy_user\",\n            \"twitter_status\": \"active\",\n            \"error\": null,\n            \"metrics\": {\n                \"followers_count\": 456,\n                \"following_count\": 789,\n                \"tweet_count\": 321\n            },\n            \"checked_at\": \"2024-01-20T10:30:04Z\"\n        }\n    ],\n    \"timestamp\": \"2024-01-20T10:30:04Z\"\n}"
+						}
+					]
+				},
+				{
 					"name": "Check Token Health",
 					"request": {
 						"method": "GET",

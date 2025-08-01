@@ -2014,6 +2014,147 @@ def get_rate_limits():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/v1/accounts/check-twitter-status', methods=['GET'])
+def check_all_accounts_twitter_status():
+    """Check Twitter status (suspended/locked/active) for all accounts"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        accounts = conn.execute('''
+            SELECT id, username, access_token, token_expires_at 
+            FROM twitter_account 
+            WHERE status = 'active'
+        ''').fetchall()
+        conn.close()
+        
+        results = []
+        
+        for account in accounts:
+            account_info = {
+                'id': account['id'],
+                'username': account['username'],
+                'twitter_status': 'unknown',
+                'error': None,
+                'checked_at': datetime.now(UTC).isoformat()
+            }
+            
+            try:
+                # Decrypt access token
+                access_token = decrypt_token(account['access_token'])
+                
+                # Check if token is expired
+                if account['token_expires_at']:
+                    token_expires = datetime.fromisoformat(account['token_expires_at'])
+                    if token_expires < datetime.now(UTC):
+                        account_info['twitter_status'] = 'token_expired'
+                        account_info['error'] = 'OAuth token expired'
+                        results.append(account_info)
+                        continue
+                
+                # Call Twitter API to check account status
+                headers = {
+                    'Authorization': f'Bearer {access_token}',
+                    'Content-Type': 'application/json'
+                }
+                
+                # Get user info by username
+                response = requests.get(
+                    f'https://api.twitter.com/2/users/by/username/{account["username"]}',
+                    headers=headers,
+                    params={
+                        'user.fields': 'created_at,description,protected,public_metrics,verified,withheld'
+                    }
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    user_data = data.get('data', {})
+                    
+                    # Check various status indicators
+                    if user_data.get('withheld'):
+                        account_info['twitter_status'] = 'withheld'
+                        account_info['withheld_info'] = user_data['withheld']
+                    elif user_data.get('protected'):
+                        account_info['twitter_status'] = 'protected'
+                    else:
+                        account_info['twitter_status'] = 'active'
+                        account_info['metrics'] = user_data.get('public_metrics', {})
+                
+                elif response.status_code == 401:
+                    account_info['twitter_status'] = 'unauthorized'
+                    account_info['error'] = 'Invalid or expired token'
+                
+                elif response.status_code == 403:
+                    # Parse error details
+                    error_data = response.json()
+                    errors = error_data.get('errors', [])
+                    
+                    if errors:
+                        error_detail = str(errors[0].get('detail', '')).lower()
+                        error_title = str(errors[0].get('title', '')).lower()
+                        
+                        if 'suspended' in error_detail:
+                            account_info['twitter_status'] = 'suspended'
+                            account_info['error'] = errors[0].get('detail', 'Account suspended')
+                        elif 'locked' in error_detail or 'locked' in error_title:
+                            account_info['twitter_status'] = 'locked'
+                            account_info['error'] = errors[0].get('detail', 'Account is locked')
+                        elif 'restricted' in error_detail:
+                            account_info['twitter_status'] = 'restricted'
+                            account_info['error'] = errors[0].get('detail', 'Account is restricted')
+                        elif 'deactivated' in error_detail:
+                            account_info['twitter_status'] = 'deactivated'
+                            account_info['error'] = errors[0].get('detail', 'Account is deactivated')
+                        else:
+                            account_info['twitter_status'] = 'forbidden'
+                            account_info['error'] = errors[0].get('detail', 'Access forbidden')
+                    else:
+                        account_info['twitter_status'] = 'forbidden'
+                        account_info['error'] = 'Access forbidden'
+                
+                elif response.status_code == 404:
+                    account_info['twitter_status'] = 'not_found'
+                    account_info['error'] = 'Account not found'
+                
+                elif response.status_code == 429:
+                    account_info['twitter_status'] = 'rate_limited'
+                    account_info['error'] = 'Rate limit exceeded'
+                
+                else:
+                    account_info['twitter_status'] = 'error'
+                    account_info['error'] = f'HTTP {response.status_code}: {response.text[:100]}'
+                    
+            except Exception as e:
+                account_info['twitter_status'] = 'error'
+                account_info['error'] = str(e)
+            
+            results.append(account_info)
+        
+        # Summary statistics
+        summary = {
+            'total': len(results),
+            'active': len([r for r in results if r['twitter_status'] == 'active']),
+            'suspended': len([r for r in results if r['twitter_status'] == 'suspended']),
+            'locked': len([r for r in results if r['twitter_status'] == 'locked']),
+            'restricted': len([r for r in results if r['twitter_status'] == 'restricted']),
+            'protected': len([r for r in results if r['twitter_status'] == 'protected']),
+            'deactivated': len([r for r in results if r['twitter_status'] == 'deactivated']),
+            'token_expired': len([r for r in results if r['twitter_status'] == 'token_expired']),
+            'unauthorized': len([r for r in results if r['twitter_status'] == 'unauthorized']),
+            'other_issues': len([r for r in results if r['twitter_status'] not in ['active', 'suspended', 'locked', 'restricted', 'protected', 'deactivated', 'token_expired', 'unauthorized']])
+        }
+        
+        return jsonify({
+            'summary': summary,
+            'accounts': results,
+            'timestamp': datetime.now(UTC).isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # List Management Endpoints
 @app.route('/api/v1/lists', methods=['POST'])
 def create_list():
@@ -3350,6 +3491,7 @@ if __name__ == '__main__':
     print("  POST /api/v1/accounts/<id>/refresh-token - Manually refresh token for account")
     print("  POST /api/v1/accounts/refresh-tokens - Refresh all expiring tokens")
     print("  POST /api/v1/accounts/<id>/clear-failures - Clear refresh failure count")
+    print("  GET  /api/v1/accounts/check-twitter-status - Check if accounts are suspended/locked")
     print("\nAccount type management:")
     print("  POST   /api/v1/accounts/<id>/set-type - Set account type (managed/list_owner)")
     print("  GET    /api/v1/accounts?type=list_owner - Get accounts by type")
