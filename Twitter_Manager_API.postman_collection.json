@@ -1598,6 +1598,64 @@
 					]
 				},
 				{
+					"name": "Get Rate Limit Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/rate-limits",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"rate-limits"
+							]
+						},
+						"description": "Get current rate limit status for all Twitter accounts. Shows tweets posted, remaining, and time until reset."
+					},
+					"response": [
+						{
+							"name": "Rate Limit Status",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/rate-limits",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"rate-limits"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"rate_limits\": [\n        {\n            \"account_id\": 1,\n            \"username\": \"example_user\",\n            \"tweets_posted\": 45,\n            \"tweets_remaining\": 135,\n            \"reset_in_seconds\": 720,\n            \"reset_at\": \"2024-01-20T10:45:00\",\n            \"current_delay\": 1\n        },\n        {\n            \"account_id\": 2,\n            \"username\": \"another_user\",\n            \"tweets_posted\": 150,\n            \"tweets_remaining\": 30,\n            \"reset_in_seconds\": 450,\n            \"reset_at\": \"2024-01-20T10:37:30\",\n            \"current_delay\": 3\n        }\n    ],\n    \"timestamp\": \"2024-01-20T10:30:00Z\"\n}"
+						}
+					]
+				},
+				{
 					"name": "List All Tweets",
 					"request": {
 						"method": "GET",

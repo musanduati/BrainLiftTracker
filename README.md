@@ -19,6 +19,8 @@ A Flask-based RESTful API for managing multiple Twitter accounts and posting con
 - **Token Health Monitoring**: Track token expiry and health status across all accounts
 - **API Authentication**: Secure API access with API keys
 - **Statistics**: Track tweet counts and posting status
+- **Rate Limiting Protection**: Automatic tracking and prevention of Twitter API 429 errors
+- **Failed Tweet Recovery**: Retry or reset failed tweets without data loss
 
 ## Requirements
 
@@ -222,6 +224,30 @@ Check the status of a background tweet posting job:
     "created_at": "2024-01-20T10:30:00Z",
     "started_at": "2024-01-20T10:30:01Z",
     "completed_at": null    // Set when job finishes
+}
+```
+
+#### Check Rate Limit Status
+```http
+GET /api/v1/rate-limits
+X-API-Key: your-api-key
+```
+
+Monitor rate limit status for all accounts to avoid 429 errors:
+```json
+{
+    "rate_limits": [
+        {
+            "account_id": 1,
+            "username": "example_user",
+            "tweets_posted": 45,
+            "tweets_remaining": 135,
+            "reset_in_seconds": 720,
+            "reset_at": "2024-01-20T10:45:00",
+            "current_delay": 1
+        }
+    ],
+    "timestamp": "2024-01-20T10:30:00Z"
 }
 ```
 
@@ -896,6 +922,7 @@ Error responses include a JSON body:
 | `/api/v1/tweet/retry/{id}` | POST | Yes | Retry specific failed tweet |
 | `/api/v1/tweets/retry-failed` | POST | Yes | Retry failed tweets (batch mode) |
 | `/api/v1/tweets/reset-failed` | POST | Yes | Reset failed tweets to pending |
+| `/api/v1/rate-limits` | GET | Yes | Check rate limit status for all accounts |
 | `/api/v1/thread` | POST | Yes | Create new thread |
 | `/api/v1/threads` | GET | Yes | List all threads |
 | `/api/v1/thread/{id}` | GET | Yes | Get thread details |
