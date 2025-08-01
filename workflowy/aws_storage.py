@@ -1,8 +1,8 @@
 # aws_storage.py - Updated with configuration management
 import boto3
 import json
-from typing import Dict, List, Optional
-from datetime import datetime
+from typing import Dict, List
+from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
 from logger_config import logger
@@ -38,8 +38,8 @@ class AWSStorage:
             ContentType='text/plain'
         )
         
-        # Clean up old scraped content files (keep only latest 2)
-        self.cleanup_old_scraped_content(user_name, max_files=2)
+        # Clean up old scraped content files (keep only files from last 31 days)
+        self.cleanup_old_scraped_content(user_name)
         
         return f"s3://{self.bucket_name}/{key}"
     
@@ -220,15 +220,18 @@ class AWSStorage:
             logger.error(f"❌ Error adding user mapping: {e}")
             return False
 
-    def cleanup_old_scraped_content(self, user_name: str, max_files: int = 2):
+    def cleanup_old_scraped_content(self, user_name: str, days_to_keep: int = 31):
         """
-        Clean up old scraped content files, keeping only the latest N files.
+        Clean up old scraped content files, keeping only files from the last N days.
         
         Args:
             user_name: The user name to clean up files for
-            max_files: Maximum number of files to keep (default: 3)
+            days_to_keep: Number of days to keep files for (default: 31)
         """
         try:
+            # Calculate the cutoff date
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
+            
             # List all scraped content files for this user
             prefix = f"{user_name}/scraped_content/"
             response = self.s3.list_objects_v2(
@@ -247,42 +250,42 @@ class AWSStorage:
                 if '_scraped_workflowy_' in obj['Key'] and obj['Key'].endswith('.txt')
             ]
             
-            if len(scraped_files) <= max_files:
-                logger.info(f"📄 Only {len(scraped_files)} scraped content files found for {user_name}, no cleanup needed")
+            # Filter files older than cutoff date
+            files_to_delete = [
+                obj for obj in scraped_files 
+                if obj['LastModified'] < cutoff_date
+            ]
+            
+            if not files_to_delete:
+                logger.info(f"📄 No scraped content files older than {days_to_keep} days found for {user_name}, no cleanup needed")
                 return
             
-            # Sort by last modified date (newest first)
-            scraped_files.sort(key=lambda x: x['LastModified'], reverse=True)
+            logger.info(f"🗑️  Cleaning up {len(files_to_delete)} scraped content files older than {days_to_keep} days for {user_name}")
             
-            # Files to delete (everything beyond the max_files limit)
-            files_to_delete = scraped_files[max_files:]
+            # Delete old files
+            delete_keys = [{'Key': obj['Key']} for obj in files_to_delete]
             
-            if files_to_delete:
-                logger.info(f"🗑️  Cleaning up {len(files_to_delete)} old scraped content files for {user_name}")
+            # S3 batch delete (more efficient than individual deletes)
+            response = self.s3.delete_objects(
+                Bucket=self.bucket_name,
+                Delete={
+                    'Objects': delete_keys,
+                    'Quiet': True  # Don't return info about successful deletes
+                }
+            )
+            
+            # Check for any deletion errors
+            if 'Errors' in response and response['Errors']:
+                logger.error(f"❌ Some files could not be deleted: {response['Errors']}")
+            else:
+                logger.info(f"✅ Successfully cleaned up {len(files_to_delete)} old files for {user_name}")
                 
-                # Delete old files
-                delete_keys = [{'Key': obj['Key']} for obj in files_to_delete]
-                
-                # S3 batch delete (more efficient than individual deletes)
-                response = self.s3.delete_objects(
-                    Bucket=self.bucket_name,
-                    Delete={
-                        'Objects': delete_keys,
-                        'Quiet': True  # Don't return info about successful deletes
-                    }
-                )
-                
-                # Check for any deletion errors
-                if 'Errors' in response and response['Errors']:
-                    logger.error(f"❌ Some files could not be deleted: {response['Errors']}")
-                else:
-                    logger.info(f"✅ Successfully cleaned up {len(files_to_delete)} old files for {user_name}")
-                    
-                # Log which files were kept
-                kept_files = scraped_files[:max_files]
-                logger.info(f"📋 Kept latest {len(kept_files)} files:")
-                for file_obj in kept_files:
-                    logger.info(f"   • {file_obj['Key']} (modified: {file_obj['LastModified']})")
+            # Log which files were kept
+            files_kept = [obj for obj in scraped_files if obj not in files_to_delete]
+            files_kept.sort(key=lambda x: x['LastModified'], reverse=True)
+            logger.info(f"📋 Kept {len(files_kept)} files newer than {days_to_keep} days:")
+            for file_obj in files_kept:
+                logger.info(f"   • {file_obj['Key']} (modified: {file_obj['LastModified']})")
             
         except Exception as e:
             logger.error(f"❌ Error cleaning up old scraped content for {user_name}: {e}")
