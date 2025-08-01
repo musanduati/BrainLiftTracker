@@ -115,10 +115,6 @@ def get_db():
     """Get database connection with timeout and WAL mode for better concurrency"""
     conn = sqlite3.connect(DB_PATH, timeout=30.0)  # 30 second timeout
     conn.row_factory = sqlite3.Row
-    # Enable WAL mode for better concurrent access
-    conn.execute('PRAGMA journal_mode=WAL')
-    # Reduce lock timeout
-    conn.execute('PRAGMA busy_timeout=30000')  # 30 seconds
     return conn
 
 def check_api_key():
@@ -1994,15 +1990,26 @@ def get_rate_limits():
                 # Calculate remaining tweets and time until reset
                 remaining = max(0, 180 - limits['count'])
                 reset_in = max(0, limits['reset_time'] - current_time)
+                tweets_posted = limits['count']
+                
+                # Calculate delay based on usage
+                if tweets_posted < 50:
+                    current_delay = 1
+                elif tweets_posted < 100:
+                    current_delay = 2
+                elif tweets_posted < 150:
+                    current_delay = 3
+                else:
+                    current_delay = 5
                 
                 rate_limit_info.append({
                     'account_id': account_id,
                     'username': account['username'],
-                    'tweets_posted': limits['count'],
+                    'tweets_posted': tweets_posted,
                     'tweets_remaining': remaining,
                     'reset_in_seconds': int(reset_in),
                     'reset_at': datetime.fromtimestamp(limits['reset_time']).isoformat() if limits['reset_time'] > 0 else None,
-                    'current_delay': get_rate_limit_delay(account_id)
+                    'current_delay': current_delay
                 })
         
         return jsonify({
@@ -2011,6 +2018,8 @@ def get_rate_limits():
         })
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 # List Management Endpoints
@@ -3152,6 +3161,10 @@ def init_database():
     """Initialize database tables"""
     try:
         conn = get_db()
+        
+        # Enable WAL mode once for better concurrent access
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')  # 5 seconds
         
         # Create api_key table
         conn.execute('''
