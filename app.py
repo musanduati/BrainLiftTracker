@@ -1800,11 +1800,7 @@ def retry_failed_tweet(tweet_id):
                 'twitter_id': result
             })
         else:
-            # Keep as failed but update retry timestamp
-            conn.execute(
-                'UPDATE tweet SET updated_at = ? WHERE id = ?',
-                (datetime.now(UTC).isoformat(), tweet_id)
-            )
+            # Keep as failed (no updated_at column to update)
             conn.commit()
             conn.close()
             
@@ -1888,11 +1884,7 @@ def retry_all_failed_tweets():
                         'twitter_tweet_id': result
                     })
                 else:
-                    # Update retry timestamp
-                    conn.execute(
-                        'UPDATE tweet SET updated_at = ? WHERE id = ?',
-                        (datetime.now(UTC).isoformat(), tweet['id'])
-                    )
+                    # Keep as failed (no updated_at column to update)
                     conn.commit()
                     
                     results['still_failed'] += 1
@@ -1934,8 +1926,8 @@ def reset_failed_tweets():
         conn = get_db()
         
         # Build update query
-        query = 'UPDATE tweet SET status = "pending", updated_at = ? WHERE status = "failed"'
-        params = [datetime.now(UTC).isoformat()]
+        query = 'UPDATE tweet SET status = "pending" WHERE status = "failed"'
+        params = []
         
         if tweet_ids:
             placeholders = ','.join('?' * len(tweet_ids))
@@ -1952,8 +1944,8 @@ def reset_failed_tweets():
             params.append(cutoff_date)
         
         # Get count before update
-        count_query = query.replace('UPDATE tweet SET status = "pending", updated_at = ?', 'SELECT COUNT(*) FROM tweet')
-        count = conn.execute(count_query, params[1:]).fetchone()[0]  # Skip the updated_at param
+        count_query = query.replace('UPDATE tweet SET status = "pending"', 'SELECT COUNT(*) FROM tweet')
+        count = conn.execute(count_query, params).fetchone()[0]
         
         # Execute update
         conn.execute(query, params)
