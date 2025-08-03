@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request, redirect
+from flask_cors import CORS
 import sqlite3
 import os
 from dotenv import load_dotenv
@@ -25,6 +26,15 @@ import time
 from collections import defaultdict
 
 app = Flask(__name__)
+# Enable CORS for the frontend
+CORS(app, origins=[
+    "http://localhost:5173", 
+    "http://localhost:5174", 
+    "http://localhost:5175",
+    "http://localhost:3000",
+    "http://98.86.153.32",  # Lightsail IP
+    "*"  # Allow all origins in production - adjust based on your security needs
+], supports_credentials=True)
 
 # Database path
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'twitter_manager.db')
