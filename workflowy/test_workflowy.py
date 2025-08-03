@@ -8,6 +8,7 @@ from typing import Any, Optional, List, Dict
 from datetime import datetime
 import aiohttp
 import diff_match_patch as dmp_module
+import html
 
 from aws_storage import AWSStorage
 from logger_config import logger
@@ -85,13 +86,10 @@ def get_regex_matching_pattern(node_names: list[str] | str) -> re.Pattern:
     pattern = r"^\s*[\-:;,.]*\s*(" + "|".join(re.escape(name) for name in node_names) + r")\s*[\-:;,.]*\s*$"
     return re.compile(pattern, re.IGNORECASE)
 
-# Add this function before _extract_node_content (around line 330)
 def _clean_html_content(content: str) -> str:
     """Clean HTML content and convert to markdown (standalone version)."""
     if not content:
         return ""
-    
-    import re
     
     # Remove mention tags
     content = re.sub(r"<mention[^>]*>[^<]*</mention>", "", content)
@@ -108,6 +106,9 @@ def _clean_html_content(content: str) -> str:
     
     # Remove all remaining HTML tags
     content = re.sub(r"<[^>]+>", "", content)
+    
+    # Decode HTML entities (THIS IS THE KEY FIX)
+    content = html.unescape(content)
     
     return content.strip()
 
@@ -471,9 +472,10 @@ def create_dok_state_from_points(points: List[Dict]) -> List[Dict]:
 
 def create_content_signature(main_content: str, sub_points: List[str]) -> str:
     """Create a normalized content signature for comparison."""
-    # Normalize the content for comparison
-    normalized_main = main_content.strip().lower()
-    normalized_subs = [sub.strip().lower() for sub in sub_points]
+    
+    # Normalize the content for comparison AND decode HTML entities
+    normalized_main = html.unescape(main_content.strip().lower())
+    normalized_subs = [html.unescape(sub.strip().lower()) for sub in sub_points]
     return normalized_main + " " + " ".join(normalized_subs)
 
 def calculate_similarity_score(text1: str, text2: str) -> float:
@@ -905,6 +907,7 @@ class WorkflowyTester:
 
         content = re.sub(r"<a[^>]+>.*?</a>", replace_link, content)
         content = re.sub(r"<[^>]+>", "", content)
+        content = html.unescape(content) # Decode HTML entities
         return content.strip()
 
     def node_to_markdown(self, node: dict[str, Any], breadcrumb: str = "", level: int = 0) -> str:
@@ -1092,6 +1095,7 @@ class WorkflowyTester:
             logger.info(f"\tNode ID: {result.node_id}")
             logger.info(f"\tNode Name: {result.node_name}")
             logger.info(f"\tTotal Content Length: {len(result.content)} characters")
+            # logger.debug(f"\tResult Content: {result.content}")
             
             # Save full content to S3
             content_s3_url = self.storage.save_scraped_content(user_name, result.content, timestamp)
@@ -1104,12 +1108,17 @@ class WorkflowyTester:
             
             # Scrape once, use multiple times
             raw_data = await self.scrape_workflowy_raw_data(url, exclude_node_names)
+            # logger.info(f"Raw data: {raw_data}")
 
             # DOK4 processing using the cached raw data
             dok4_content = await extract_single_dok_section_llm(raw_data, "DOK4")
+            logger.info(f"DOK4 Content: {dok4_content}")
             if dok4_content.strip():
                 dok4_points = parse_dok_points(dok4_content, "DOK4")
+                logger.info(f"DOK4 Points: {dok4_points}")
                 current_state["dok4"] = create_dok_state_from_points(dok4_points)
+                logger.info(f"DOK4 Current State: {current_state['dok4']}")
+                logger.info(f"DOK4 Previous State: {previous_state['dok4']}")
                 
                 if first_run:
                     # First run: just establish baseline, no tweets
@@ -1127,9 +1136,13 @@ class WorkflowyTester:
             
             # DOK3 processing using the same cached raw data  
             dok3_content = await extract_single_dok_section_llm(raw_data, "DOK3")
+            logger.info(f"DOK3 Content: {dok3_content}")
             if dok3_content.strip():
                 dok3_points = parse_dok_points(dok3_content, "DOK3")
+                logger.info(f"DOK3 Points: {dok3_points}")
                 current_state["dok3"] = create_dok_state_from_points(dok3_points)
+                logger.info(f"DOK3 Current State: {current_state['dok3']}")
+                logger.info(f"DOK3 Previous State: {previous_state['dok3']}")
                 
                 if first_run:
                     # First run: just establish baseline, no tweets
