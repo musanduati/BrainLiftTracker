@@ -3,45 +3,54 @@ import asyncio
 from test_workflowy import WorkflowyTester
 from post_tweets import TweetPoster
 from aws_storage import AWSStorage
+from bulk_url_processor import is_bulk_url_request, handle_bulk_url_processing
 from logger_config import logger
 
 def lambda_handler(event, context):
     """
-    Lambda handler for scheduled Workflowy processing AND tweet posting
+    Lambda handler for:
+    1. Bulk URL processing (when event contains brainlift URLs)
+    2. Scheduled Workflowy processing AND tweet posting (default behavior)
     """
-    logger.info("🚀 Starting Workflowy processing + Tweet posting in Lambda")
     
-    # Run the async processing
-    results = asyncio.run(process_and_post())
-    
-    scraping_successful = len([r for r in results['scraping_results'] if r['status'] == 'success'])
-    scraping_failed = len([r for r in results['scraping_results'] if r['status'] == 'error'])
-    
-    posting_successful = len([r for r in results['posting_results'] if r['status'] == 'success'])
-    posting_failed = len([r for r in results['posting_results'] if r['status'] == 'error'])
-    
-    summary = {
-        'scraping': {
-            'total_processed': len(results['scraping_results']),
-            'successful': scraping_successful,
-            'failed': scraping_failed,
-            'results': results['scraping_results']
-        },
-        'posting': {
-            'total_processed': len(results['posting_results']),
-            'successful': posting_successful,
-            'failed': posting_failed,
-            'results': results['posting_results']
+    # Check if this is a bulk URL processing request
+    if is_bulk_url_request(event):
+        logger.info("🔗 Processing bulk URL upload request")
+        return handle_bulk_url_processing(event)
+    else:
+        logger.info("🚀 Starting Workflowy processing + Tweet posting in Lambda")
+        
+        # Run the async processing (existing functionality)
+        results = asyncio.run(process_and_post())
+        
+        scraping_successful = len([r for r in results['scraping_results'] if r['status'] == 'success'])
+        scraping_failed = len([r for r in results['scraping_results'] if r['status'] == 'error'])
+        
+        posting_successful = len([r for r in results['posting_results'] if r['status'] == 'success'])
+        posting_failed = len([r for r in results['posting_results'] if r['status'] == 'error'])
+        
+        summary = {
+            'scraping': {
+                'total_processed': len(results['scraping_results']),
+                'successful': scraping_successful,
+                'failed': scraping_failed,
+                'results': results['scraping_results']
+            },
+            'posting': {
+                'total_processed': len(results['posting_results']),
+                'successful': posting_successful,
+                'failed': posting_failed,
+                'results': results['posting_results']
+            }
         }
-    }
-    
-    logger.info(f"✅ Scraping complete: {scraping_successful} successful, {scraping_failed} failed")
-    logger.info(f"✅ Posting complete: {posting_successful} successful, {posting_failed} failed")
-    
-    return {
-        'statusCode': 200,
-        'body': json.dumps(summary, default=str)
-    }
+        
+        logger.info(f"✅ Scraping complete: {scraping_successful} successful, {scraping_failed} failed")
+        logger.info(f"✅ Posting complete: {posting_successful} successful, {posting_failed} failed")
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps(summary, default=str)
+        }
 
 async def process_and_post():
     """Process all URLs and then post tweets"""
@@ -88,6 +97,9 @@ async def process_and_post():
     for result in scraping_results:
         if result['status'] == 'success' and result.get('total_change_tweets', 0) > 0:
             users_with_content.append(result['user_name'])
+
+    # **** TMP TESTING, SO THAT WE DON'T POST ****
+    users_with_content = []
 
     if users_with_content:
         logger.info(f"👥 Users with new content to post: {users_with_content}")
