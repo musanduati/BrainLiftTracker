@@ -6,7 +6,7 @@ import { Layout } from './components/layout/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Accounts } from './pages/Accounts';
 import { AccountDetail } from './pages/AccountDetail';
-import { Tweets } from './pages/Tweets';
+import { InactiveAccounts } from './pages/InactiveAccounts';
 import { useStore } from './store/useStore';
 
 const queryClient = new QueryClient({
@@ -34,7 +34,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="accounts" element={<Accounts />} />
             <Route path="accounts/:id" element={<AccountDetail />} />
-            <Route path="tweets" element={<Tweets />} />
+            <Route path="accounts/inactive" element={<InactiveAccounts />} />
             <Route path="lists" element={<div>Lists Page (Coming Soon)</div>} />
             <Route path="settings" element={<div>Settings Page (Coming Soon)</div>} />
           </Route>

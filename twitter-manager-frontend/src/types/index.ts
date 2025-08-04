@@ -7,6 +7,7 @@ export interface TwitterAccount {
   authorized: boolean;
   followerCount?: number;
   tweetCount?: number;
+  threadCount?: number;
   createdAt: string;
   lastActiveAt?: string;
   tokenExpiresAt?: string;
@@ -20,9 +21,11 @@ export interface Tweet {
   content: string;
   status: 'pending' | 'posted' | 'failed';
   tweetId?: string;
+  threadId?: string;
   error?: string;
   createdAt: string;
   postedAt?: string;
+  username?: string; // Added for filtering
   engagementMetrics?: {
     likes: number;
     retweets: number;
@@ -74,4 +77,28 @@ export interface ListMembership {
   listId: string;
   accountId: number;
   addedAt: string;
+}
+
+export interface ThreadTweet {
+  id: number;
+  content: string;
+  status: 'pending' | 'posted' | 'failed';
+  twitter_id?: string;
+  reply_to_tweet_id?: string;
+  position: number;
+  created_at: string;
+  posted_at?: string;
+  error?: string;
+}
+
+export interface Thread {
+  thread_id: string;
+  account_id: number;
+  account_username: string;
+  tweet_count: number;
+  posted_count: number;
+  pending_count: number;
+  failed_count: number;
+  created_at: string;
+  tweets?: ThreadTweet[];
 }

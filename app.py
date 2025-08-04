@@ -1245,6 +1245,58 @@ def get_stats():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/v1/user-activity-rankings', methods=['GET'])
+def get_user_activity_rankings():
+    """Get top 10 users ranked by number of tweets"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get top 10 users by tweet count
+        rankings = conn.execute('''
+            SELECT 
+                a.id,
+                a.username,
+                a.display_name,
+                a.profile_picture,
+                COUNT(t.id) as tweet_count,
+                SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_count,
+                SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count
+            FROM twitter_account a
+            LEFT JOIN tweet t ON a.id = t.twitter_account_id
+            GROUP BY a.id, a.username, a.display_name, a.profile_picture
+            HAVING tweet_count > 0
+            ORDER BY tweet_count DESC
+            LIMIT 10
+        ''').fetchall()
+        
+        result = []
+        for rank, user in enumerate(rankings, 1):
+            result.append({
+                'rank': rank,
+                'id': user['id'],
+                'username': user['username'],
+                'displayName': user['display_name'],
+                'profilePicture': user['profile_picture'],
+                'tweetCount': user['tweet_count'],
+                'postedCount': user['posted_count'],
+                'pendingCount': user['pending_count'],
+                'failedCount': user['failed_count']
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'rankings': result,
+            'timestamp': datetime.now(UTC).isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/v1/accounts/token-health', methods=['GET'])
 def check_token_health():
     """Check health status of all account tokens"""

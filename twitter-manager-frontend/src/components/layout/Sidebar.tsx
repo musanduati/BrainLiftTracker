@@ -20,7 +20,6 @@ import { useStore } from '../../store/useStore';
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Accounts', href: '/accounts', icon: Users },
-  { name: 'Tweets', href: '/tweets', icon: MessageSquare },
   { name: 'Lists', href: '/lists', icon: List },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
@@ -63,7 +62,7 @@ export const Sidebar: React.FC = () => {
           {/* Logo */}
           <div className="flex items-center justify-between p-4 border-b border-border">
             <h1 className={cn('font-bold text-xl', isCollapsed && 'hidden')}>
-              Twitter Manager
+              Brainlift Monitor
             </h1>
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}

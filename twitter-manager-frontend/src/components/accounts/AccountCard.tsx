@@ -1,55 +1,30 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MoreVertical, RefreshCw, CheckCircle, AlertCircle, Eye } from 'lucide-react';
+import { CheckCircle, AlertCircle, Eye } from 'lucide-react';
 import { TwitterAccount } from '../../types';
 import { Card, CardContent } from '../common/Card';
 import { Badge } from '../common/Badge';
 import { Button } from '../common/Button';
 import { formatNumber, formatRelativeTime, getAccountHealthBadgeClass } from '../../utils/format';
 import { cn } from '../../utils/cn';
-import { useStore } from '../../store/useStore';
+import { getAvatarColor, getAvatarText } from '../../utils/avatar';
 
 interface AccountCardProps {
   account: TwitterAccount;
-  onRefreshToken: (id: number) => void;
-  onViewTweets: (account: TwitterAccount) => void;
-  onNewTweet: (account: TwitterAccount) => void;
 }
 
 export const AccountCard: React.FC<AccountCardProps> = ({
   account,
-  onRefreshToken,
-  onViewTweets,
-  onNewTweet,
 }) => {
-  const { selectedAccountIds, toggleAccountSelection } = useStore();
-  const isSelected = selectedAccountIds.includes(account.id);
 
   return (
-    <Card className={cn(
-      'relative overflow-hidden transition-all duration-200 hover:shadow-lg',
-      isSelected && 'ring-2 ring-primary'
-    )}>
-      {/* Selection checkbox */}
-      <div className="absolute top-4 left-4">
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={() => toggleAccountSelection(account.id)}
-          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-        />
-      </div>
+    <Card className="relative overflow-hidden transition-all duration-200 hover:shadow-lg">
 
-      {/* More options */}
-      <button className="absolute top-4 right-4 p-1 rounded-lg hover:bg-accent">
-        <MoreVertical size={18} />
-      </button>
-
-      <CardContent className="pt-8">
+      <CardContent className="p-6">
         <div className="flex flex-col items-center text-center">
           {/* Profile picture */}
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-2xl mb-4">
-            {account.displayName?.[0] || account.username[0]}
+          <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold text-2xl mb-4`}>
+            {getAvatarText(account.username, account.displayName)}
           </div>
 
           {/* Account info */}
@@ -57,15 +32,19 @@ export const AccountCard: React.FC<AccountCardProps> = ({
           <p className="text-muted-foreground">@{account.username}</p>
 
           {/* Stats */}
-          <div className="flex items-center gap-4 mt-4 text-sm">
-            <div>
-              <p className="font-semibold">{formatNumber(account.followerCount || 0)}</p>
-              <p className="text-muted-foreground">Followers</p>
-            </div>
-            <div className="border-l border-border pl-4">
-              <p className="font-semibold">{formatNumber(account.tweetCount || 0)}</p>
-              <p className="text-muted-foreground">Tweets</p>
-            </div>
+          <div className="flex items-center gap-6 mt-4 text-sm">
+            {account.tweetCount !== undefined && account.tweetCount > 0 && (
+              <div className="text-center">
+                <p className="font-semibold text-xl">{formatNumber(account.tweetCount)}</p>
+                <p className="text-muted-foreground">Tweets</p>
+              </div>
+            )}
+            {account.threadCount !== undefined && account.threadCount > 0 && (
+              <div className="text-center">
+                <p className="font-semibold text-xl">{formatNumber(account.threadCount)}</p>
+                <p className="text-muted-foreground">Threads</p>
+              </div>
+            )}
           </div>
 
           {/* Status badges */}
@@ -79,7 +58,7 @@ export const AccountCard: React.FC<AccountCardProps> = ({
             <Badge className={getAccountHealthBadgeClass(account.tokenStatus)}>
               {account.tokenStatus === 'healthy' && <CheckCircle size={12} className="mr-1" />}
               {account.tokenStatus === 'refresh_failed' && <AlertCircle size={12} className="mr-1" />}
-              {account.tokenStatus?.replace('_', ' ') || 'Unknown'}
+              {account.tokenStatus === 'healthy' ? 'Connected' : account.tokenStatus?.replace('_', ' ') || 'Unknown'}
             </Badge>
           </div>
 
@@ -102,21 +81,6 @@ export const AccountCard: React.FC<AccountCardProps> = ({
                 View Profile & Tweets
               </Button>
             </Link>
-            
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRefreshToken(account.id);
-              }}
-              disabled={account.tokenStatus === 'healthy'}
-              title="Refresh token"
-              className="w-full"
-            >
-              <RefreshCw size={16} className="mr-2" />
-              Refresh Token
-            </Button>
           </div>
         </div>
       </CardContent>

@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import { ApiResponse, TwitterAccount, Tweet, TokenHealth, BatchPostRequest, TwitterList, PaginatedResponse } from '../types';
+import { ApiResponse, TwitterAccount, Tweet, TokenHealth, BatchPostRequest, TwitterList, PaginatedResponse, Thread } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5555/api/v1';
 const API_KEY = import.meta.env.VITE_API_KEY || '';
@@ -107,9 +107,11 @@ class ApiClient {
       content: tweet.text || tweet.content,
       status: tweet.status,
       tweetId: tweet.tweet_id,
+      threadId: tweet.thread_id,
       error: tweet.error,
       createdAt: tweet.created_at,
       postedAt: tweet.posted_at,
+      username: tweet.username, // Add username for filtering
     }));
   }
 
@@ -181,6 +183,46 @@ class ApiClient {
 
   async setMockMode(enabled: boolean): Promise<void> {
     await this.client.post('/mock-mode', { enabled });
+  }
+
+  // Thread Management
+  async getThreads(accountId?: number): Promise<Thread[]> {
+    const { data } = await this.client.get<{ threads: Thread[] }>('/threads');
+    const allThreads = data.threads || [];
+    
+    // If accountId is provided, we need to filter by the account's username
+    if (accountId) {
+      // First, get the account to know its username
+      const account = await this.getAccount(accountId);
+      // Filter threads by account_username
+      return allThreads.filter(thread => thread.account_username === account.username);
+    }
+    
+    return allThreads;
+  }
+
+  async getThreadDetails(threadId: string): Promise<Thread> {
+    const { data } = await this.client.get<Thread>(`/thread/${threadId}`);
+    return data;
+  }
+
+  // User Activity Rankings
+  async getUserActivityRankings(): Promise<{
+    rankings: Array<{
+      rank: number;
+      id: number;
+      username: string;
+      displayName: string;
+      profilePicture: string;
+      tweetCount: number;
+      postedCount: number;
+      pendingCount: number;
+      failedCount: number;
+    }>;
+    timestamp: string;
+  }> {
+    const { data } = await this.client.get('/user-activity-rankings');
+    return data;
   }
 }
 
