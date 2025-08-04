@@ -1259,15 +1259,13 @@ def get_user_activity_rankings():
             SELECT 
                 a.id,
                 a.username,
-                a.display_name,
-                a.profile_picture,
                 COUNT(t.id) as tweet_count,
                 SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_count,
                 SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_count,
                 SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count
             FROM twitter_account a
             LEFT JOIN tweet t ON a.id = t.twitter_account_id
-            GROUP BY a.id, a.username, a.display_name, a.profile_picture
+            GROUP BY a.id, a.username
             HAVING tweet_count > 0
             ORDER BY tweet_count DESC
             LIMIT 10
@@ -1279,8 +1277,8 @@ def get_user_activity_rankings():
                 'rank': rank,
                 'id': user['id'],
                 'username': user['username'],
-                'displayName': user['display_name'],
-                'profilePicture': user['profile_picture'],
+                'displayName': user['username'],  # Use username as display name
+                'profilePicture': None,  # No profile picture in database
                 'tweetCount': user['tweet_count'],
                 'postedCount': user['posted_count'],
                 'pendingCount': user['pending_count'],
