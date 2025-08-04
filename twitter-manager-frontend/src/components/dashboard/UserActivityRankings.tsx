@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
-import { Trophy, TrendingUp, Users } from 'lucide-react';
+import { Trophy, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../common/Card';
 import { Skeleton } from '../common/Skeleton';
 import { apiClient } from '../../services/api';
-import { getAvatarColor, getAvatarText } from '../../utils/avatar';
 import toast from 'react-hot-toast';
 
 interface UserRanking {
@@ -72,31 +70,6 @@ export const UserActivityRankings: React.FC = () => {
     return colors[Math.min(index, colors.length - 1)];
   };
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-background border rounded-lg shadow-lg p-3">
-          <p className="font-semibold">{label}</p>
-          <p className="text-sm text-muted-foreground">
-            Total Activity: {data.total}
-          </p>
-          {data.tweets > 0 && (
-            <p className="text-sm text-muted-foreground">Changes: {data.tweets}</p>
-          )}
-          {data.threads > 0 && (
-            <p className="text-sm text-muted-foreground">Threads: {data.threads}</p>
-          )}
-          <p className="text-sm text-green-600">Posted: {data.posted}</p>
-          <p className="text-sm text-yellow-600">Pending: {data.pending}</p>
-          {data.failed > 0 && (
-            <p className="text-sm text-red-600">Failed: {data.failed}</p>
-          )}
-        </div>
-      );
-    }
-    return null;
-  };
 
   if (loading) {
     return (

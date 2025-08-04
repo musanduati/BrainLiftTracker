@@ -1,28 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, MessageSquare, TrendingUp, AlertCircle, Plus, UserX } from 'lucide-react';
+import { Users, TrendingUp, UserX } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/common/Card';
 import { Button } from '../components/common/Button';
-import { Badge } from '../components/common/Badge';
-import { Skeleton } from '../components/common/Skeleton';
 import { useStore } from '../store/useStore';
 import { apiClient } from '../services/api';
-import { formatNumber, formatRelativeTime } from '../utils/format';
+import { formatNumber } from '../utils/format';
 import toast from 'react-hot-toast';
 import { getAvatarColor, getAvatarText } from '../utils/avatar';
 import { TwitterAccount } from '../types';
 import { UserActivityRankings } from '../components/dashboard/UserActivityRankings';
 
 export const Dashboard: React.FC = () => {
-  const { accounts, tweets, setAccounts, setTweets, setLoadingAccounts, setLoadingTweets } = useStore();
-  const [stats, setStats] = useState({
-    totalAccounts: 0,
-    healthyAccounts: 0,
-    totalTweets: 0,
-    pendingTweets: 0,
-    failedTweets: 0,
-  });
+  const { accounts, setAccounts, setTweets, setLoadingAccounts, setLoadingTweets } = useStore();
   const [inactiveAccounts, setInactiveAccounts] = useState<TwitterAccount[]>([]);
 
   useEffect(() => {
@@ -58,14 +49,6 @@ export const Dashboard: React.FC = () => {
       setTweets(tweetsData);
       setInactiveAccounts(accountsWithoutContent);
 
-      // Calculate stats
-      setStats({
-        totalAccounts: accountsData.length,
-        healthyAccounts: accountsData.filter(a => a.tokenStatus === 'healthy').length,
-        totalTweets: tweetsData.length,
-        pendingTweets: tweetsData.filter(t => t.status === 'pending').length,
-        failedTweets: tweetsData.filter(t => t.status === 'failed').length,
-      });
     } catch (error) {
       toast.error('Failed to load dashboard data');
       console.error('Dashboard error:', error);
@@ -121,28 +104,6 @@ export const Dashboard: React.FC = () => {
     },
   ];
 
-  // Generate recent activity from posted changes and threads
-  const generateRecentActivity = () => {
-    const activities = [];
-    
-    // Get posted changes
-    const postedChanges = tweets
-      .filter(t => t.status === 'posted' && t.postedAt)
-      .sort((a, b) => new Date(b.postedAt!).getTime() - new Date(a.postedAt!).getTime())
-      .slice(0, 10)
-      .map(tweet => ({
-        type: 'change',
-        message: `New change posted by @${tweet.username}`,
-        time: formatRelativeTime(tweet.postedAt!)
-      }));
-    
-    activities.push(...postedChanges);
-    
-    // Sort by most recent and take top 5
-    return activities.slice(0, 5);
-  };
-  
-  const recentActivity = generateRecentActivity();
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { format, formatDistance, formatRelative, isToday, isYesterday } from 'date-fns';
+import { format, formatDistance, isToday, isYesterday } from 'date-fns';
 
 export function formatDate(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date;

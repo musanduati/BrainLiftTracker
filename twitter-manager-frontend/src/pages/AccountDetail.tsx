@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, MessageSquare, Heart, Repeat2, Share, MoreHorizontal, ChevronDown, ChevronRight, Hash, CheckCircle, XCircle, Clock, ChevronLeft, TrendingUp, BarChart3, Activity } from 'lucide-react';
+import { ArrowLeft, Calendar, ChevronDown, ChevronRight, Hash, CheckCircle, XCircle, Clock, ChevronLeft, TrendingUp, BarChart3, Activity } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -251,7 +251,7 @@ export const AccountDetail: React.FC = () => {
 
     // Extract topic from the first change if we have details
     let topic = 'Loading...';
-    if (hasDetails && details.tweets[0]) {
+    if (hasDetails && details.tweets && details.tweets[0]) {
       const firstChange = details.tweets[0].content;
       const topicMatch = firstChange.match(/(DOK\d+|SPOV[\s\d.]+):|^([^:]+):/i);
       topic = topicMatch ? (topicMatch[1] || topicMatch[2] || 'Thread').trim() : 'Thread';
@@ -621,7 +621,7 @@ export const AccountDetail: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {threads.slice(0, 5).map((thread, index) => (
+                  {threads.slice(0, 5).map((thread) => (
                     <div key={thread.thread_id} className="flex items-start gap-2">
                       <div className={cn(
                         "w-2 h-2 rounded-full mt-1.5",

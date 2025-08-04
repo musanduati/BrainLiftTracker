@@ -6,7 +6,6 @@ import { Card, CardContent } from '../common/Card';
 import { Badge } from '../common/Badge';
 import { Button } from '../common/Button';
 import { formatNumber, formatRelativeTime, getAccountHealthBadgeClass } from '../../utils/format';
-import { cn } from '../../utils/cn';
 import { getAvatarColor, getAvatarText } from '../../utils/avatar';
 
 interface AccountCardProps {

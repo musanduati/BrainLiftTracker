@@ -3,7 +3,6 @@ import { Dialog, Transition } from '@headlessui/react';
 import { X, Send } from 'lucide-react';
 import { TwitterAccount } from '../../types';
 import { Button } from '../common/Button';
-import { Badge } from '../common/Badge';
 import { cn } from '../../utils/cn';
 
 interface ComposeTweetModalProps {

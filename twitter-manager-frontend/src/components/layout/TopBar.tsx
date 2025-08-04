@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Bell, User, Moon, Sun, Shield } from 'lucide-react';
-import { cn } from '../../utils/cn';
 import { useStore } from '../../store/useStore';
 
 export const TopBar: React.FC = () => {

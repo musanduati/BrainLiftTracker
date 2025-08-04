@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, redirect
+from flask import Flask, jsonify, request, redirect, send_from_directory
 from flask_cors import CORS
 import sqlite3
 import os
@@ -3356,6 +3356,36 @@ def reset_failed_threads():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# Serve frontend files
+@app.route('/')
+def serve_frontend():
+    """Serve the React frontend"""
+    frontend_path = os.path.join(os.path.dirname(__file__), 'twitter-manager-frontend', 'dist')
+    if os.path.exists(os.path.join(frontend_path, 'index.html')):
+        return send_from_directory(frontend_path, 'index.html')
+    else:
+        return jsonify({'message': 'Frontend not built. Run: cd twitter-manager-frontend && npm run build'}), 404
+
+@app.route('/assets/<path:path>')
+def serve_assets(path):
+    """Serve frontend assets"""
+    frontend_path = os.path.join(os.path.dirname(__file__), 'twitter-manager-frontend', 'dist', 'assets')
+    return send_from_directory(frontend_path, path)
+
+# Catch-all route for React Router
+@app.route('/<path:path>')
+def catch_all(path):
+    """Handle React Router routes"""
+    # Don't catch API routes
+    if path.startswith('api/'):
+        return jsonify({'error': 'Not found'}), 404
+    
+    frontend_path = os.path.join(os.path.dirname(__file__), 'twitter-manager-frontend', 'dist')
+    if os.path.exists(os.path.join(frontend_path, 'index.html')):
+        return send_from_directory(frontend_path, 'index.html')
+    else:
+        return jsonify({'error': 'Not found'}), 404
 
 # Add route at Twitter's expected callback URL
 @app.route('/auth/callback', methods=['GET'])

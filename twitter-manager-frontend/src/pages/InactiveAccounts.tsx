@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, UserX, Eye, AlertCircle, Calendar, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, UserX, AlertCircle, Calendar, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/common/Card';
+import { Card, CardContent, CardHeader } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
 import { Skeleton } from '../components/common/Skeleton';

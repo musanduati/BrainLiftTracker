@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import { ApiResponse, TwitterAccount, Tweet, TokenHealth, BatchPostRequest, TwitterList, PaginatedResponse, Thread } from '../types';
+import { ApiResponse, TwitterAccount, Tweet, TokenHealth, BatchPostRequest, TwitterList, Thread } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5555/api/v1';
 const API_KEY = import.meta.env.VITE_API_KEY || '';
