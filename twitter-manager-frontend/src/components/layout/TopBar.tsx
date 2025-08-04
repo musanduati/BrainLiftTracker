@@ -1,61 +1,48 @@
 import React from 'react';
-import { Search, Bell, User } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Bell, User, Moon, Sun, Shield } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { useStore } from '../../store/useStore';
 
-interface TopBarProps {
-  title: string;
-  breadcrumbs?: Array<{ name: string; href?: string }>;
-}
+export const TopBar: React.FC = () => {
+  const { theme, toggleTheme, isMockMode } = useStore();
 
-export const TopBar: React.FC<TopBarProps> = ({ title, breadcrumbs }) => {
   return (
     <div className="bg-card border-b border-border px-6 py-4">
       <div className="flex items-center justify-between">
-        <div>
-          {/* Breadcrumbs */}
-          {breadcrumbs && breadcrumbs.length > 0 && (
-            <nav className="flex items-center space-x-2 text-sm text-muted-foreground mb-1">
-              {breadcrumbs.map((crumb, index) => (
-                <React.Fragment key={crumb.name}>
-                  {index > 0 && <span>/</span>}
-                  {crumb.href ? (
-                    <a
-                      href={crumb.href}
-                      className="hover:text-foreground transition-colors"
-                    >
-                      {crumb.name}
-                    </a>
-                  ) : (
-                    <span>{crumb.name}</span>
-                  )}
-                </React.Fragment>
-              ))}
-            </nav>
-          )}
-          
-          {/* Page title */}
-          <h1 className="text-2xl font-bold">{title}</h1>
+        <div className="flex items-center gap-6">
+          {/* App Name */}
+          <Link to="/" className="font-bold text-3xl hover:opacity-80 transition-opacity">
+            Brainlift Monitor
+          </Link>
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {/* Search */}
-          <div className="relative hidden md:block">
-            <Search
-              size={18}
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              type="text"
-              placeholder="Search..."
-              className="pl-10 pr-4 py-2 w-64 rounded-lg bg-background border border-border focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
+          {/* Mock mode indicator */}
+          {isMockMode && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-yellow-100 dark:bg-yellow-900/20">
+              <Shield size={16} className="text-yellow-600 dark:text-yellow-400" />
+              <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">
+                Mock Mode
+              </span>
+            </div>
+          )}
+
 
           {/* Notifications */}
           <button className="relative p-2 rounded-lg hover:bg-accent transition-colors">
             <Bell size={20} />
             <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+          </button>
+
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg hover:bg-accent transition-colors"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
           </button>
 
           {/* User menu */}

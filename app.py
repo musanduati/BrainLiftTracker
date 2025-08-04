@@ -1247,27 +1247,32 @@ def get_stats():
 
 @app.route('/api/v1/user-activity-rankings', methods=['GET'])
 def get_user_activity_rankings():
-    """Get top 10 users ranked by number of tweets"""
+    """Get top 10 users ranked by number of tweets and threads"""
     if not check_api_key():
         return jsonify({'error': 'Invalid API key'}), 401
     
     try:
         conn = get_db()
         
-        # Get top 10 users by tweet count
+        # Get top 10 users by total activity (tweets + threads)
         rankings = conn.execute('''
-            SELECT 
-                a.id,
-                a.username,
-                COUNT(t.id) as tweet_count,
-                SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_count,
-                SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_count,
-                SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count
-            FROM twitter_account a
-            LEFT JOIN tweet t ON a.id = t.twitter_account_id
-            GROUP BY a.id, a.username
-            HAVING tweet_count > 0
-            ORDER BY tweet_count DESC
+            WITH user_activity AS (
+                SELECT 
+                    a.id,
+                    a.username,
+                    COUNT(DISTINCT t.id) as tweet_count,
+                    SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_count,
+                    SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                    SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+                    COUNT(DISTINCT th.id) as thread_count
+                FROM twitter_account a
+                LEFT JOIN tweet t ON a.id = t.twitter_account_id
+                LEFT JOIN thread th ON a.username = th.account_username
+                GROUP BY a.id, a.username
+                HAVING (tweet_count > 0 OR thread_count > 0)
+            )
+            SELECT * FROM user_activity
+            ORDER BY (tweet_count + thread_count) DESC
             LIMIT 10
         ''').fetchall()
         
@@ -1280,6 +1285,8 @@ def get_user_activity_rankings():
                 'displayName': user['username'],  # Use username as display name
                 'profilePicture': None,  # No profile picture in database
                 'tweetCount': user['tweet_count'],
+                'threadCount': user['thread_count'],
+                'totalActivity': user['tweet_count'] + user['thread_count'],
                 'postedCount': user['posted_count'],
                 'pendingCount': user['pending_count'],
                 'failedCount': user['failed_count']

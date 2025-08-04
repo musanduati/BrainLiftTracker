@@ -35,8 +35,6 @@ function App() {
             <Route path="accounts" element={<Accounts />} />
             <Route path="accounts/:id" element={<AccountDetail />} />
             <Route path="accounts/inactive" element={<InactiveAccounts />} />
-            <Route path="lists" element={<div>Lists Page (Coming Soon)</div>} />
-            <Route path="settings" element={<div>Settings Page (Coming Soon)</div>} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -75,58 +75,68 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  // Calculate activity rate - accounts with content vs total accounts
+  const activeAccountsCount = accounts.length;
+  const inactiveAccountsCount = inactiveAccounts.length;
+  const totalAccountsCount = activeAccountsCount + inactiveAccountsCount;
+  const activityRate = totalAccountsCount > 0 
+    ? Math.round((activeAccountsCount / totalAccountsCount) * 100) 
+    : 0;
+
   const statCards = [
     {
-      title: 'Total Accounts',
-      value: stats.totalAccounts,
-      description: `${accounts.length} active, ${inactiveAccounts.length} inactive`,
+      title: 'Total Users Monitored',
+      value: totalAccountsCount,
+      description: 'All registered accounts',
       icon: Users,
       color: 'text-blue-500',
       bgColor: 'bg-blue-100 dark:bg-blue-900/20',
       link: '/accounts',
     },
     {
-      title: 'Total Tweets',
-      value: stats.totalTweets,
-      description: `${stats.pendingTweets} pending`,
-      icon: MessageSquare,
+      title: 'Active Users',
+      value: activeAccountsCount,
+      description: 'Users with changes',
+      icon: TrendingUp,
       color: 'text-green-500',
       bgColor: 'bg-green-100 dark:bg-green-900/20',
+      link: '/accounts',
     },
     {
-      title: 'Failed Tweets',
-      value: stats.failedTweets,
-      description: 'Need attention',
-      icon: AlertCircle,
-      color: 'text-red-500',
-      bgColor: 'bg-red-100 dark:bg-red-900/20',
+      title: 'Inactive Users',
+      value: inactiveAccountsCount,
+      description: 'No changes posted',
+      icon: UserX,
+      color: 'text-orange-500',
+      bgColor: 'bg-orange-100 dark:bg-orange-900/20',
+      link: '/accounts/inactive',
     },
     {
-      title: 'Engagement Rate',
-      value: '2.4%',
-      description: '+0.3% from last week',
+      title: 'Activity Rate',
+      value: `${activityRate}%`,
+      description: 'Percentage of active users',
       icon: TrendingUp,
       color: 'text-purple-500',
       bgColor: 'bg-purple-100 dark:bg-purple-900/20',
     },
   ];
 
-  // Generate recent activity from posted tweets and threads
+  // Generate recent activity from posted changes and threads
   const generateRecentActivity = () => {
     const activities = [];
     
-    // Get posted tweets
-    const postedTweets = tweets
+    // Get posted changes
+    const postedChanges = tweets
       .filter(t => t.status === 'posted' && t.postedAt)
       .sort((a, b) => new Date(b.postedAt!).getTime() - new Date(a.postedAt!).getTime())
       .slice(0, 10)
       .map(tweet => ({
-        type: 'tweet',
-        message: `New tweet posted by @${tweet.username}`,
+        type: 'change',
+        message: `New change posted by @${tweet.username}`,
         time: formatRelativeTime(tweet.postedAt!)
       }));
     
-    activities.push(...postedTweets);
+    activities.push(...postedChanges);
     
     // Sort by most recent and take top 5
     return activities.slice(0, 5);
@@ -136,21 +146,21 @@ export const Dashboard: React.FC = () => {
 
   return (
     <>
-      <TopBar title="Dashboard" />
+      <TopBar />
       
       <div className="p-6">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {statCards.map((stat, index) => {
             const Icon = stat.icon;
-            const content = (
-              <Card key={index} className="hover:shadow-md transition-shadow cursor-pointer">
+            const CardComponent = (
+              <Card className="hover:shadow-md transition-shadow cursor-pointer">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-muted-foreground">{stat.title}</p>
                       <p className="text-2xl font-bold mt-1">
-                        {formatNumber(typeof stat.value === 'number' ? stat.value : 0) || stat.value}
+                        {typeof stat.value === 'string' ? stat.value : formatNumber(stat.value)}
                       </p>
                       <p className="text-sm text-muted-foreground mt-1">{stat.description}</p>
                     </div>
@@ -162,19 +172,27 @@ export const Dashboard: React.FC = () => {
               </Card>
             );
 
-            return stat.link ? (
-              <Link key={index} to={stat.link}>
-                {content}
-              </Link>
-            ) : (
-              content
-            );
+            if (stat.link) {
+              return (
+                <Link key={index} to={stat.link}>
+                  {CardComponent}
+                </Link>
+              );
+            } else {
+              return <div key={index}>{CardComponent}</div>;
+            }
           })}
         </div>
 
-        {/* Inactive Accounts Section */}
-        {inactiveAccounts.length > 0 && (
-          <div className="mb-8">
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* User Activity Rankings */}
+          <div className="lg:col-span-2">
+            <UserActivityRankings />
+          </div>
+
+          {/* Inactive Accounts Section */}
+          {inactiveAccounts.length > 0 && (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -184,17 +202,14 @@ export const Dashboard: React.FC = () => {
                       Inactive Accounts
                     </CardTitle>
                     <CardDescription>
-                      {inactiveAccounts.length} account{inactiveAccounts.length !== 1 ? 's' : ''} with no tweets
+                      {inactiveAccounts.length} account{inactiveAccounts.length !== 1 ? 's' : ''} with no changes
                     </CardDescription>
                   </div>
-                  <Badge variant="secondary" className="text-orange-600">
-                    Needs Attention
-                  </Badge>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {inactiveAccounts.slice(0, 6).map((account) => (
+                <div className="space-y-3">
+                  {inactiveAccounts.slice(0, 5).map((account) => (
                     <div key={account.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
                       <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-semibold text-sm`}>
                         {getAvatarText(account.username, account.displayName)}
@@ -206,72 +221,16 @@ export const Dashboard: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                {inactiveAccounts.length > 6 && (
+                {inactiveAccounts.length > 5 && (
                   <Link to="/accounts/inactive" className="block text-center mt-4">
-                    <Button variant="outline" size="sm">
+                    <Button variant="secondary" size="sm">
                       View all {inactiveAccounts.length} inactive accounts
                     </Button>
                   </Link>
                 )}
               </CardContent>
             </Card>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Recent Activity */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Posts</CardTitle>
-                <CardDescription>Latest tweets posted by your accounts</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {recentActivity.length > 0 ? (
-                  <div className="space-y-4">
-                    {recentActivity.map((activity, index) => (
-                      <div key={index} className="flex items-start gap-3">
-                        <div className="w-2 h-2 rounded-full mt-1.5 bg-green-500" />
-                        <div className="flex-1">
-                          <p className="text-sm">{activity.message}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{activity.time}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground text-sm">
-                    No recent posts to display
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Common tasks</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Button className="w-full justify-start" variant="secondary">
-                  <Plus size={16} className="mr-2" />
-                  Add New Account
-                </Button>
-                <Button className="w-full justify-start" variant="secondary">
-                  <Users size={16} className="mr-2" />
-                  Refresh All Tokens
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* User Activity Rankings */}
-        <div className="mt-6">
-          <UserActivityRankings />
+          )}
         </div>
       </div>
     </>

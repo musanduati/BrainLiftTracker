@@ -36,7 +36,7 @@ export const AccountCard: React.FC<AccountCardProps> = ({
             {account.tweetCount !== undefined && account.tweetCount > 0 && (
               <div className="text-center">
                 <p className="font-semibold text-xl">{formatNumber(account.tweetCount)}</p>
-                <p className="text-muted-foreground">Tweets</p>
+                <p className="text-muted-foreground">Changes</p>
               </div>
             )}
             {account.threadCount !== undefined && account.threadCount > 0 && (
@@ -78,7 +78,7 @@ export const AccountCard: React.FC<AccountCardProps> = ({
                 className="w-full"
               >
                 <Eye size={16} className="mr-2" />
-                View Profile & Tweets
+                View Changes
               </Button>
             </Link>
           </div>

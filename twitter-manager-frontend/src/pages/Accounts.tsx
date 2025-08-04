@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { Grid3x3, List, RefreshCw } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Grid3x3, List, RefreshCw, ArrowLeft } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { AccountCard } from '../components/accounts/AccountCard';
 import { AccountList } from '../components/accounts/AccountList';
@@ -69,7 +70,7 @@ export const Accounts: React.FC = () => {
   if (isLoadingAccounts) {
     return (
       <>
-        <TopBar title="Accounts" />
+        <TopBar />
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <Skeleton className="h-64" />
@@ -83,9 +84,17 @@ export const Accounts: React.FC = () => {
 
   return (
     <>
-      <TopBar title="Accounts" />
+      <TopBar />
       
       <div className="p-6">
+        {/* Back Button */}
+        <Link to="/" className="inline-flex mb-6">
+          <Button variant="ghost" size="sm">
+            <ArrowLeft size={16} className="mr-2" />
+            Back to Dashboard
+          </Button>
+        </Link>
+
         {/* Header Actions */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-semibold">
