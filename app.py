@@ -1254,25 +1254,22 @@ def get_user_activity_rankings():
     try:
         conn = get_db()
         
-        # Get top 10 users by total activity (tweets + threads)
+        # Get top 10 users by total activity (tweets only for now)
+        # TODO: Add thread support when thread table exists
         rankings = conn.execute('''
-            WITH user_activity AS (
-                SELECT 
-                    a.id,
-                    a.username,
-                    COUNT(DISTINCT t.id) as tweet_count,
-                    SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_count,
-                    SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_count,
-                    SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count,
-                    COUNT(DISTINCT th.id) as thread_count
-                FROM twitter_account a
-                LEFT JOIN tweet t ON a.id = t.twitter_account_id
-                LEFT JOIN thread th ON a.username = th.account_username
-                GROUP BY a.id, a.username
-                HAVING (tweet_count > 0 OR thread_count > 0)
-            )
-            SELECT * FROM user_activity
-            ORDER BY (tweet_count + thread_count) DESC
+            SELECT 
+                a.id,
+                a.username,
+                COUNT(t.id) as tweet_count,
+                SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_count,
+                SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+                0 as thread_count
+            FROM twitter_account a
+            LEFT JOIN tweet t ON a.id = t.twitter_account_id
+            GROUP BY a.id, a.username
+            HAVING tweet_count > 0
+            ORDER BY tweet_count DESC
             LIMIT 10
         ''').fetchall()
         
