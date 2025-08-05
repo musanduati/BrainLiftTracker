@@ -1,14 +1,16 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Grid3x3, List, RefreshCw, ArrowLeft } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { AccountCard } from '../components/accounts/AccountCard';
 import { AccountList } from '../components/accounts/AccountList';
+import { ListFilter } from '../components/accounts/ListFilter';
 import { Button } from '../components/common/Button';
 import { Skeleton } from '../components/common/Skeleton';
 import { useStore } from '../store/useStore';
 import { apiClient } from '../services/api';
 import toast from 'react-hot-toast';
+import { TwitterAccount } from '../types';
 
 export const Accounts: React.FC = () => {
   const {
@@ -18,20 +20,49 @@ export const Accounts: React.FC = () => {
     setAccounts,
     setAccountViewMode,
     setLoadingAccounts,
+    setLists,
   } = useStore();
+
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [accountsByList, setAccountsByList] = useState<{
+    lists: any[];
+    unassigned_accounts: TwitterAccount[];
+  }>({ lists: [], unassigned_accounts: [] });
+  const [filteredAccounts, setFilteredAccounts] = useState<TwitterAccount[]>([]);
 
   useEffect(() => {
     loadAccounts();
   }, []);
 
+  useEffect(() => {
+    // Filter accounts based on selected list
+    if (selectedListId === null) {
+      // Show all accounts
+      setFilteredAccounts(accounts);
+    } else if (selectedListId === 'unassigned') {
+      // Show unassigned accounts
+      setFilteredAccounts(accountsByList.unassigned_accounts || []);
+    } else {
+      // Show accounts from selected list
+      const list = accountsByList.lists.find(l => l.id === selectedListId);
+      setFilteredAccounts(list?.members || []);
+    }
+  }, [selectedListId, accounts, accountsByList]);
+
   const loadAccounts = async () => {
     try {
       setLoadingAccounts(true);
-      const [accountsData, tweetsData, threadsData] = await Promise.all([
+      const [accountsData, tweetsData, threadsData, listsData, accountsByListData] = await Promise.all([
         apiClient.getAccounts(),
         apiClient.getTweets(),
-        apiClient.getThreads()
+        apiClient.getThreads(),
+        apiClient.getLists(),
+        apiClient.getAccountsByLists()
       ]);
+      
+      // Store lists data
+      setLists(listsData);
+      setAccountsByList(accountsByListData);
       
       // Filter accounts to show those with either tweets or threads
       const accountsWithContent = accountsData
@@ -67,6 +98,19 @@ export const Accounts: React.FC = () => {
     }
   };
 
+  // Calculate account counts for each list
+  const getAccountCounts = () => {
+    const counts: Record<string, number> = {};
+    
+    accountsByList.lists.forEach(list => {
+      counts[list.id] = list.member_count || 0;
+    });
+    
+    counts.unassigned = accountsByList.unassigned_accounts?.length || 0;
+    
+    return counts;
+  };
+
   if (isLoadingAccounts) {
     return (
       <>
@@ -98,7 +142,7 @@ export const Accounts: React.FC = () => {
         {/* Header Actions */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-semibold">
-            Twitter Accounts ({accounts.length})
+            Twitter Accounts ({filteredAccounts.length})
           </h2>
           
           <div className="flex gap-2">
@@ -123,14 +167,30 @@ export const Accounts: React.FC = () => {
           </div>
         </div>
 
+        {/* List Filter */}
+        <div className="mb-6">
+          <ListFilter
+            lists={accountsByList.lists}
+            selectedListId={selectedListId}
+            onSelectList={setSelectedListId}
+            accountCounts={getAccountCounts()}
+          />
+        </div>
+
         {/* Account Grid/List */}
-        {accounts.length === 0 ? (
+        {filteredAccounts.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">No accounts with tweets found</p>
+            <p className="text-muted-foreground">
+              {selectedListId === 'unassigned' 
+                ? 'No unassigned accounts found' 
+                : selectedListId 
+                  ? 'No accounts in this list' 
+                  : 'No accounts with tweets found'}
+            </p>
           </div>
         ) : accountViewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {accounts.map((account) => (
+            {filteredAccounts.map((account) => (
               <AccountCard
                 key={account.id}
                 account={account}
@@ -138,7 +198,7 @@ export const Accounts: React.FC = () => {
             ))}
           </div>
         ) : (
-          <AccountList accounts={accounts} />
+          <AccountList accounts={filteredAccounts} />
         )}
       </div>
     </>

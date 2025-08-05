@@ -224,6 +224,33 @@ class ApiClient {
     const { data } = await this.client.get('/user-activity-rankings');
     return data;
   }
+
+  // Get accounts grouped by lists
+  async getAccountsByLists(): Promise<{
+    lists: Array<{
+      id: string;
+      list_id: string;
+      name: string;
+      description: string;
+      mode: string;
+      source: string;
+      is_managed: boolean;
+      owner_username: string;
+      last_synced_at: string | null;
+      member_count: number;
+      members: TwitterAccount[];
+    }>;
+    unassigned_accounts: TwitterAccount[];
+    stats: {
+      total_lists: number;
+      total_managed_accounts: number;
+      accounts_in_lists: number;
+      accounts_not_in_lists: number;
+    };
+  }> {
+    const { data } = await this.client.get('/accounts/by-lists');
+    return data;
+  }
 }
 
 export const apiClient = new ApiClient();

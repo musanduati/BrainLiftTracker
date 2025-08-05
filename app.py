@@ -3094,6 +3094,110 @@ def get_twitter_list_members(list_id):
 
 # Enhanced List Management Endpoints
 
+@app.route('/api/v1/debug/group-concat', methods=['GET'])
+def debug_group_concat():
+    """Debug GROUP_CONCAT issue"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Test the exact query
+        result = conn.execute('''
+            SELECT 
+                tl.id,
+                tl.name,
+                GROUP_CONCAT(
+                    CASE WHEN ta_member.id IS NOT NULL 
+                    THEN json_object(
+                        'id', ta_member.id,
+                        'username', ta_member.username,
+                        'account_type', ta_member.account_type
+                    )
+                    ELSE NULL END, '|||'
+                ) as members
+            FROM twitter_list tl
+            LEFT JOIN list_membership lm ON tl.id = lm.list_id
+            LEFT JOIN twitter_account ta_member ON lm.account_id = ta_member.id
+            WHERE tl.id = 7
+            GROUP BY tl.id
+        ''').fetchone()
+        
+        raw_members = result['members'] if result else None
+        
+        # Try parsing
+        parsed_members = []
+        if raw_members:
+            member_jsons = raw_members.split('|||')
+            for member_json in member_jsons:
+                if member_json and member_json != 'null':
+                    try:
+                        parsed = json.loads(member_json)
+                        parsed_members.append(parsed)
+                    except Exception as e:
+                        parsed_members.append({'error': str(e), 'raw': member_json})
+        
+        conn.close()
+        
+        return jsonify({
+            'list_id': result['id'] if result else None,
+            'list_name': result['name'] if result else None,
+            'raw_members': raw_members,
+            'parsed_members': parsed_members,
+            'member_count': len(parsed_members)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/lists/sync/test', methods=['GET'])
+def test_sync_logic():
+    """Test endpoint to verify sync logic without actual Twitter API calls"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Simulate Twitter list members
+        twitter_members = [
+            {'username': 'brainlift_sideq'},
+            {'username': 'brainlift_tiger'},
+            {'username': 'brainlift_test'},  # Non-existent account
+        ]
+        
+        # Get all managed accounts
+        all_accounts = conn.execute('SELECT id, username FROM twitter_account').fetchall()
+        
+        # Test the matching logic
+        results = {
+            'all_accounts': [{'id': a['id'], 'username': a['username']} for a in all_accounts],
+            'twitter_members': [m['username'] for m in twitter_members],
+            'matches': []
+        }
+        
+        for member in twitter_members:
+            username = member['username']
+            # Test case-insensitive matching
+            managed_account = conn.execute(
+                'SELECT id, username FROM twitter_account WHERE LOWER(username) = LOWER(?)',
+                (username,)
+            ).fetchone()
+            
+            results['matches'].append({
+                'twitter_username': username,
+                'found': managed_account is not None,
+                'db_id': managed_account['id'] if managed_account else None,
+                'db_username': managed_account['username'] if managed_account else None
+            })
+        
+        conn.close()
+        return jsonify(results)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/v1/lists/sync', methods=['POST'])
 def sync_twitter_lists():
     """Sync lists from Twitter for specified list_owner accounts"""
@@ -3276,62 +3380,91 @@ def sync_twitter_lists():
                     ).fetchone()
                     
                     if db_list:
-                        # Get current members from Twitter
-                        members_response = requests.get(
-                            f'https://api.twitter.com/2/lists/{list_id}/members',
-                            headers=headers,
-                            params={
+                        # Get ALL members from Twitter with pagination
+                        all_twitter_members = []
+                        pagination_token = None
+                        
+                        while True:
+                            params = {
                                 'user.fields': 'username',
                                 'max_results': 100
                             }
-                        )
-                        
-                        if members_response.status_code == 200:
-                            members_data = members_response.json()
-                            twitter_members = members_data.get('data', [])
+                            if pagination_token:
+                                params['pagination_token'] = pagination_token
                             
-                            # Get current members from database
-                            current_members = conn.execute('''
-                                SELECT ta.username, lm.account_id
-                                FROM list_membership lm
-                                JOIN twitter_account ta ON lm.account_id = ta.id
-                                WHERE lm.list_id = ?
-                            ''', (db_list['id'],)).fetchall()
+                            members_response = requests.get(
+                                f'https://api.twitter.com/2/lists/{list_id}/members',
+                                headers=headers,
+                                params=params
+                            )
                             
-                            current_usernames = {m['username'].lower() for m in current_members}
-                            twitter_usernames = {m['username'].lower() for m in twitter_members}
-                            
-                            # Find members to add
-                            to_add = twitter_usernames - current_usernames
-                            for username in to_add:
-                                # Check if we manage this account (case-insensitive)
-                                managed_account = conn.execute(
-                                    'SELECT id FROM twitter_account WHERE LOWER(username) = LOWER(?)',
-                                    (username,)
-                                ).fetchone()
+                            if members_response.status_code == 200:
+                                members_data = members_response.json()
+                                batch_members = members_data.get('data', [])
+                                all_twitter_members.extend(batch_members)
                                 
-                                if managed_account:
-                                    try:
-                                        conn.execute('''
-                                            INSERT INTO list_membership (list_id, account_id)
-                                            VALUES (?, ?)
-                                        ''', (db_list['id'], managed_account['id']))
-                                        sync_results['new_memberships'] += 1
-                                    except sqlite3.IntegrityError:
-                                        pass  # Already exists
+                                # Check for next page
+                                meta = members_data.get('meta', {})
+                                pagination_token = meta.get('next_token')
+                                if not pagination_token:
+                                    break
+                            else:
+                                print(f"DEBUG: Failed to get members for list {list_id}: {members_response.status_code}")
+                                break
+                        
+                        twitter_members = all_twitter_members
+                        print(f"DEBUG: List {twitter_list['name']} has {len(twitter_members)} total members")
+                        
+                        # Get current members from database
+                        current_members = conn.execute('''
+                            SELECT ta.username, lm.account_id
+                            FROM list_membership lm
+                            JOIN twitter_account ta ON lm.account_id = ta.id
+                            WHERE lm.list_id = ?
+                        ''', (db_list['id'],)).fetchall()
+                        
+                        current_usernames = {m['username'].lower() for m in current_members}
+                        twitter_usernames = {m['username'].lower() for m in twitter_members}
+                        
+                        # Find members to add
+                        to_add = twitter_usernames - current_usernames
+                        print(f"DEBUG: List {twitter_list['name']} - Twitter members: {twitter_usernames}")
+                        print(f"DEBUG: List {twitter_list['name']} - Current DB members: {current_usernames}")
+                        print(f"DEBUG: List {twitter_list['name']} - To add: {to_add}")
+                        
+                        for username in to_add:
+                            # Check if we manage this account (case-insensitive)
+                            managed_account = conn.execute(
+                                'SELECT id FROM twitter_account WHERE LOWER(username) = LOWER(?)',
+                                (username,)
+                            ).fetchone()
                             
-                            # Find members to remove
-                            to_remove = current_usernames - twitter_usernames
-                            for username in to_remove:
-                                member = next((m for m in current_members if m['username'] == username), None)
-                                if member:
+                            print(f"DEBUG: Checking username '{username}' - Found in DB: {managed_account is not None}")
+                            
+                            if managed_account:
+                                try:
                                     conn.execute('''
-                                        DELETE FROM list_membership 
-                                        WHERE list_id = ? AND account_id = ?
-                                    ''', (db_list['id'], member['account_id']))
-                                    sync_results['removed_memberships'] += 1
-                            
-                            sync_results['total_memberships'] += len(twitter_members)
+                                        INSERT INTO list_membership (list_id, account_id)
+                                        VALUES (?, ?)
+                                    ''', (db_list['id'], managed_account['id']))
+                                    sync_results['new_memberships'] += 1
+                                    print(f"DEBUG: Added {username} (ID: {managed_account['id']}) to list {db_list['id']}")
+                                except sqlite3.IntegrityError as e:
+                                    print(f"DEBUG: Failed to add {username} - already exists or error: {e}")
+                                    pass  # Already exists
+                        
+                        # Find members to remove
+                        to_remove = current_usernames - twitter_usernames
+                        for username in to_remove:
+                            member = next((m for m in current_members if m['username'].lower() == username), None)
+                            if member:
+                                conn.execute('''
+                                    DELETE FROM list_membership 
+                                    WHERE list_id = ? AND account_id = ?
+                                ''', (db_list['id'], member['account_id']))
+                                sync_results['removed_memberships'] += 1
+                        
+                        sync_results['total_memberships'] += len(twitter_members)
         
         conn.commit()
         conn.close()
@@ -3570,7 +3703,7 @@ def get_accounts_by_lists():
                         'username', ta_member.username,
                         'account_type', ta_member.account_type
                     )
-                    ELSE NULL END
+                    ELSE NULL END, '|||'
                 ) as members
             FROM twitter_list tl
             JOIN twitter_account ta_owner ON tl.owner_account_id = ta_owner.id
@@ -3594,20 +3727,28 @@ def get_accounts_by_lists():
             ORDER BY ta.username
         ''').fetchall()
         
+        print(f"DEBUG: Found {len(unassigned_accounts)} unassigned accounts")
+        print(f"DEBUG: Unassigned: {[{'id': a['id'], 'username': a['username']} for a in unassigned_accounts]}")
+        
         conn.close()
         
         # Process results
         lists = []
+        print(f"DEBUG: Processing {len(lists_with_members)} lists")
         for list_row in lists_with_members:
             members = []
+            print(f"DEBUG: List {list_row['name']} - Raw members: {list_row['members']}")
             if list_row['members']:
-                # Parse concatenated JSON strings
-                member_jsons = list_row['members'].split(',')
+                # Parse concatenated JSON strings using ||| separator
+                member_jsons = list_row['members'].split('|||')
                 for member_json in member_jsons:
-                    if member_json and member_json != 'null':
+                    if member_json and member_json.strip() and member_json != 'null':
                         try:
-                            members.append(json.loads(member_json))
-                        except:
+                            member = json.loads(member_json.strip())
+                            members.append(member)
+                            print(f"DEBUG: Parsed member: {member}")
+                        except Exception as e:
+                            print(f"DEBUG: Failed to parse member JSON: {member_json} - Error: {e}")
                             pass
             
             lists.append({
@@ -3630,8 +3771,8 @@ def get_accounts_by_lists():
             'unassigned_accounts': [dict(account) for account in unassigned_accounts],
             'stats': {
                 'total_lists': len(lists),
-                'total_managed_accounts': len(unassigned_accounts) + sum(l['member_count'] for l in lists),
-                'accounts_in_lists': sum(l['member_count'] for l in lists),
+                'total_managed_accounts': len(unassigned_accounts) + sum(len([m for m in l['members'] if m.get('account_type') == 'managed']) for l in lists),
+                'accounts_in_lists': sum(len([m for m in l['members'] if m.get('account_type') == 'managed']) for l in lists),
                 'accounts_not_in_lists': len(unassigned_accounts)
             }
         }
