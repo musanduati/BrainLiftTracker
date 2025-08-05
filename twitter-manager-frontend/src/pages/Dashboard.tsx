@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, TrendingUp, UserX, List } from 'lucide-react';
+import { Users, TrendingUp, UserX } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/common/Card';
-import { Button } from '../components/common/Button';
+import { Card, CardContent } from '../components/common/Card';
 import { useStore } from '../store/useStore';
 import { apiClient } from '../services/api';
 import { formatNumber } from '../utils/format';
 import toast from 'react-hot-toast';
-import { getAvatarColor, getAvatarText } from '../utils/avatar';
 import { TwitterAccount } from '../types';
 import { UserActivityRankings } from '../components/dashboard/UserActivityRankings';
 import { ListActivityRankings } from '../components/dashboard/ListActivityRankings';
@@ -16,7 +14,6 @@ import { ListActivityRankings } from '../components/dashboard/ListActivityRankin
 export const Dashboard: React.FC = () => {
   const { accounts, setAccounts, setTweets, setLoadingAccounts, setLoadingTweets } = useStore();
   const [inactiveAccounts, setInactiveAccounts] = useState<TwitterAccount[]>([]);
-  const [listsCount, setListsCount] = useState(0);
 
   useEffect(() => {
     loadData();
@@ -27,11 +24,10 @@ export const Dashboard: React.FC = () => {
       setLoadingAccounts(true);
       setLoadingTweets(true);
 
-      const [accountsData, tweetsData, threadsData, listsData] = await Promise.all([
+      const [accountsData, tweetsData, threadsData] = await Promise.all([
         apiClient.getAccounts(),
         apiClient.getTweets(),
-        apiClient.getThreads(),
-        apiClient.getLists()
+        apiClient.getThreads()
       ]);
 
       // Filter accounts to only show those with tweets or threads
@@ -51,7 +47,6 @@ export const Dashboard: React.FC = () => {
       setAccounts(accountsWithContent);
       setTweets(tweetsData);
       setInactiveAccounts(accountsWithoutContent);
-      setListsCount(listsData.length);
 
     } catch (error) {
       toast.error('Failed to load dashboard data');
