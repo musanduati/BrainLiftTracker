@@ -46,55 +46,15 @@ def create_scheduled_event():
         "time": "2024-01-01T12:00:00Z"
     }
 
-def create_bulk_url_event(sample_size="small"):
+def create_bulk_url_event():
     """Create a mock event with bulk URL data"""
 
     # Basic Test Account
-    # bulk_urls = [
-    #     {
-    #         "brainlift": "https://workflowy.com/s/wfx-test-sanket/bjSyw1MzswiIsciE",
-    #         "account_id": "3"
-    #     }
-    # ]
-
-    # ALL ACADEMICS ACCOUNTS WITH NO ACCOUNT_ID
     bulk_urls = [
-        { "brainlift": "https://workflowy.com/s/kathryn/j25MB2FgBH6ePEzI" },
-        { "brainlift": "https://workflowy.com/s/sadie/0mJIpdwgZdOzKx4l" },
-        { "brainlift": "https://workflowy.com/s/carl/YRjYzN9uVUNgc4mC" },
-        { "brainlift": "https://workflowy.com/s/zach/Rfif8mB1s2DrEcgp" },
-        { "brainlift": "https://workflowy.com/s/jo-c/ST4X7yCWJc6adTZE" },
-        { "brainlift": "https://workflowy.com/s/ilma/gF4M0kXEwEuRaVSk" },
-        { "brainlift": "https://workflowy.com/s/sarah-m/RZCFEQzerW2KDu9D" },
-        { "brainlift": "https://workflowy.com/s/cesar/QQnHu71UvMemWOLH" },
-        { "brainlift": "https://workflowy.com/s/david-p/lfO09W9ScAPhoeDJ" },
-        { "brainlift": "https://workflowy.com/s/david-b/iDXAnEaXXkj5b4EO" },
-        { "brainlift": "https://workflowy.com/s/pritish/hU19LpZc0kq9iMdd" },
-        { "brainlift": "https://workflowy.com/s/adam/SqKJXEZ9tqCRMeVX" },
-        { "brainlift": "https://workflowy.com/s/vijay/aG0aGE4APpACRBKA" },
-        { "brainlift": "https://workflowy.com/s/julian/loYV9ebII0UQVBEK" },
-        { "brainlift": "https://workflowy.com/s/joseph/xWrHJBsOruOxJc8s" },
-        { "brainlift": "https://workflowy.com/s/nick/feaFk8127hkLjLos" },
-        { "brainlift": "https://workflowy.com/s/alex-wrega/HHKkpEh461iPRCId" },
-        { "brainlift": "https://workflowy.com/s/julia/jOBGBgCcJndn5k9V" },
-        { "brainlift": "https://workflowy.com/s/noel/dIrZr8wCFrrqf0L8" },
-        { "brainlift": "https://workflowy.com/s/ruchi/jSeAN4SAqX0QgtR3" },
-        { "brainlift": "https://workflowy.com/s/abby/0ldrkdhsKFe6D4YV" },
-        { "brainlift": "https://workflowy.com/s/seemant/BLzUCZOYSKYpiGfW" },
-        { "brainlift": "https://workflowy.com/s/piri/Oa9iAeA8gn0tpQ8v" },
-        { "brainlift": "https://workflowy.com/s/bruna/YbGoRh8fOrOjOnbs" },
-        { "brainlift": "https://workflowy.com/s/joshua/35wYD9chVfylv4J5" },
-        { "brainlift": "https://workflowy.com/s/tripti/nwhM8nzxHLF0y3JI" },
-        { "brainlift": "https://workflowy.com/s/anastasiia/Y7znbDR40unlWbpm" },
-        { "brainlift": "https://workflowy.com/s/daniela/cHseifmYgNKZBcRg" },
-        { "brainlift": "https://workflowy.com/s/davi/jwvTF2Q4f6XHgZQW" },
-        { "brainlift": "https://workflowy.com/s/maryann/L7PTsY8EoTisALvD" },
-        { "brainlift": "https://workflowy.com/s/taylor/0khkHjbx5GoHcJHc" },
-        { "brainlift": "https://workflowy.com/s/vidhi/0e03MW0VJcg7JZwN" },
-        { "brainlift": "https://workflowy.com/s/sweety/rXkfzNNkvyuXcIAf" },
-        { "brainlift": "https://workflowy.com/s/alex-quinn/8uyb1T1NlF4eZAvd" },
-        { "brainlift": "https://workflowy.com/s/hari/58c8iWu65z1DdwnD" },
-        { "brainlift": "https://workflowy.com/s/limitless-challenges/QLOCmrfiVOeR9WOt#/fc779bda7458" }
+        {
+            "brainlift": "https://workflowy.com/s/wfx-test-sanket/bjSyw1MzswiIsciE",
+            "account_id": "3" # Optional
+        }
     ]
     
     return {
@@ -240,14 +200,8 @@ def main():
         if mock_event is None:
             return 1
     else:
-        sample_size = "small"
-        # if args.mode == "bulk-medium":
-        #     sample_size = "medium"
-        # elif args.mode == "bulk-large":
-        #     sample_size = "large"
-        
-        print(f"🔗 Testing BULK URL processing ({sample_size} sample)...")
-        mock_event = create_bulk_url_event(sample_size)
+        print(f"🔗 Testing BULK URL processing")
+        mock_event = create_bulk_url_event()
     
     mock_context = create_mock_lambda_context()
     
