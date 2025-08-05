@@ -1,4 +1,5 @@
-from flask import Flask, jsonify, request, redirect
+from flask import Flask, jsonify, request, redirect, send_from_directory
+from flask_cors import CORS
 import sqlite3
 import os
 from dotenv import load_dotenv
@@ -25,6 +26,15 @@ import time
 from collections import defaultdict
 
 app = Flask(__name__)
+# Enable CORS for the frontend
+CORS(app, origins=[
+    "http://localhost:5173", 
+    "http://localhost:5174", 
+    "http://localhost:5175",
+    "http://localhost:3000",
+    "http://98.86.153.32",  # Lightsail IP
+    "*"  # Allow all origins in production - adjust based on your security needs
+], supports_credentials=True)
 
 # Database path
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'twitter_manager.db')
@@ -1232,6 +1242,60 @@ def get_stats():
             }
         })
     
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/user-activity-rankings', methods=['GET'])
+def get_user_activity_rankings():
+    """Get top 10 users ranked by number of tweets and threads"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get top 10 users by total activity (tweets only for now)
+        # TODO: Add thread support when thread table exists
+        rankings = conn.execute('''
+            SELECT 
+                a.id,
+                a.username,
+                COUNT(t.id) as tweet_count,
+                SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_count,
+                SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+                0 as thread_count
+            FROM twitter_account a
+            LEFT JOIN tweet t ON a.id = t.twitter_account_id
+            GROUP BY a.id, a.username
+            HAVING tweet_count > 0
+            ORDER BY tweet_count DESC
+            LIMIT 10
+        ''').fetchall()
+        
+        result = []
+        for rank, user in enumerate(rankings, 1):
+            result.append({
+                'rank': rank,
+                'id': user['id'],
+                'username': user['username'],
+                'displayName': user['username'],  # Use username as display name
+                'profilePicture': None,  # No profile picture in database
+                'tweetCount': user['tweet_count'],
+                'threadCount': user['thread_count'],
+                'totalActivity': user['tweet_count'] + user['thread_count'],
+                'postedCount': user['posted_count'],
+                'pendingCount': user['pending_count'],
+                'failedCount': user['failed_count']
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'rankings': result,
+            'timestamp': datetime.now(UTC).isoformat()
+        })
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -3292,6 +3356,36 @@ def reset_failed_threads():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# Serve frontend files
+@app.route('/')
+def serve_frontend():
+    """Serve the React frontend"""
+    frontend_path = os.path.join(os.path.dirname(__file__), 'twitter-manager-frontend', 'dist')
+    if os.path.exists(os.path.join(frontend_path, 'index.html')):
+        return send_from_directory(frontend_path, 'index.html')
+    else:
+        return jsonify({'message': 'Frontend not built. Run: cd twitter-manager-frontend && npm run build'}), 404
+
+@app.route('/assets/<path:path>')
+def serve_assets(path):
+    """Serve frontend assets"""
+    frontend_path = os.path.join(os.path.dirname(__file__), 'twitter-manager-frontend', 'dist', 'assets')
+    return send_from_directory(frontend_path, path)
+
+# Catch-all route for React Router
+@app.route('/<path:path>')
+def catch_all(path):
+    """Handle React Router routes"""
+    # Don't catch API routes
+    if path.startswith('api/'):
+        return jsonify({'error': 'Not found'}), 404
+    
+    frontend_path = os.path.join(os.path.dirname(__file__), 'twitter-manager-frontend', 'dist')
+    if os.path.exists(os.path.join(frontend_path, 'index.html')):
+        return send_from_directory(frontend_path, 'index.html')
+    else:
+        return jsonify({'error': 'Not found'}), 404
 
 # Add route at Twitter's expected callback URL
 @app.route('/auth/callback', methods=['GET'])

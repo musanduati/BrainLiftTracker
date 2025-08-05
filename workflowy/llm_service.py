@@ -203,15 +203,6 @@ class LMService:
         
         return ""
 
-    async def _perform_single_inference(self, messages: list[dict], lm_type: str) -> str:
-        """Single inference method for compatibility"""
-        request = GenerateSimpleTextRequest(
-            query=messages[-1]["content"] if messages else "",
-            lm_type=lm_type,
-            custom_instructions=messages[0]["content"] if messages and messages[0]["role"] == "system" else ""
-        )
-        return await self.generate_simple_text_using_slm(request)
-
 
 # LLM prompt template for node identification
 EXTRACT_BRAINLIFT_NODE_ID_PROMPT = """

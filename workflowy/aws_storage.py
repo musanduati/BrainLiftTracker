@@ -57,7 +57,6 @@ class AWSStorage:
         return f"s3://{self.bucket_name}/{key}"
     
     def load_previous_state(self, user_name: str) -> Dict:
-        """Replace: load_previous_state(user_dir) """
         try:
             response = self.state_table.get_item(
                 Key={'user_name': user_name}
@@ -83,7 +82,6 @@ class AWSStorage:
             return {"dok4": [], "dok3": []}
     
     def save_current_state(self, user_name: str, state: Dict):
-        """Replace: save_current_state(user_dir, current_state) """
         self.state_table.put_item(
             Item={
                 'user_name': user_name,
@@ -94,7 +92,6 @@ class AWSStorage:
         )
     
     def is_first_run(self, user_name: str) -> bool:
-        """Replace: is_first_run() """
         try:
             response = self.state_table.get_item(
                 Key={'user_name': user_name}
@@ -157,68 +154,6 @@ class AWSStorage:
             logger.error(f"Error loading user account mapping from DynamoDB: {e}")
             logger.info("Falling back to empty mapping")
             return {}
-    
-    def add_workflowy_url(self, url: str, name: str, active: bool = True) -> bool:
-        """
-        Add a new Workflowy URL configuration.
-        
-        Args:
-            url: The Workflowy URL
-            name: Friendly name for the URL
-            active: Whether this URL should be processed
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            # Generate URL ID from name
-            url_id = name.lower().replace(' ', '_').replace('-', '_')
-            
-            self.urls_table.put_item(
-                Item={
-                    'url_id': url_id,
-                    'url': url,
-                    'name': name,
-                    'active': active,
-                    'created_at': datetime.now().isoformat(),
-                    'updated_at': datetime.now().isoformat()
-                }
-            )
-            logger.info(f"✅ Added Workflowy URL: {name} -> {url}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Error adding Workflowy URL: {e}")
-            return False
-    
-    def add_user_account_mapping(self, user_name: str, account_id: int, active: bool = True) -> bool:
-        """
-        Add a new user to account ID mapping.
-        
-        Args:
-            user_name: The user name (should match Workflowy URL name)
-            account_id: The Twitter account ID to use for posting
-            active: Whether this mapping should be used
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.mapping_table.put_item(
-                Item={
-                    'user_name': user_name,
-                    'account_id': account_id,
-                    'active': active,
-                    'created_at': datetime.now().isoformat(),
-                    'updated_at': datetime.now().isoformat()
-                }
-            )
-            logger.info(f"✅ Added user mapping: {user_name} -> Account {account_id}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Error adding user mapping: {e}")
-            return False
 
     def cleanup_old_scraped_content(self, user_name: str, days_to_keep: int = 31):
         """

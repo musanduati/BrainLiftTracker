@@ -510,41 +510,6 @@ class TweetPoster:
         
         return success
 
-    def load_historical_timeline(self) -> Dict:
-        """Load complete historical timeline from all sessions."""
-        timeline_file = Path("demo/data/complete_timeline.json")
-        
-        if timeline_file.exists():
-            try:
-                with open(timeline_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, FileNotFoundError):
-                logger.warning("⚠️ Could not load historical timeline, creating new one")
-        
-        # Return empty timeline structure
-        return {
-            "timeline_version": "1.0",
-            "created_at": datetime.now().isoformat(),
-            "last_updated": datetime.now().isoformat(),
-            "sessions": [],
-            "all_tweets": [],
-            "users": {},
-            "statistics": {
-                "total_runs": 0,
-                "total_tweets": 0,
-                "total_users": 0,
-                "date_range": {
-                    "first_run": None,
-                    "last_run": None
-                },
-                "change_types": {
-                    "added": 0,
-                    "updated": 0,
-                    "deleted": 0
-                }
-            }
-        }
-
     async def process_user(self, session: aiohttp.ClientSession, user_name: str) -> Dict:
         """
         Process tweets for a specific user with AWS data integration.

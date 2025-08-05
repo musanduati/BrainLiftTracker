@@ -8,6 +8,7 @@ from typing import Any, Optional, List, Dict
 from datetime import datetime
 import aiohttp
 import diff_match_patch as dmp_module
+import html
 
 from aws_storage import AWSStorage
 from logger_config import logger
@@ -78,20 +79,10 @@ async def extract_top_level_nodes(item_data_list: list[dict[str, str]]) -> list[
 
     return main_nodes
 
-def get_regex_matching_pattern(node_names: list[str] | str) -> re.Pattern:
-    if isinstance(node_names, str):
-        node_names = [node_names]
-    node_names = [name.strip().lower() for name in node_names]
-    pattern = r"^\s*[\-:;,.]*\s*(" + "|".join(re.escape(name) for name in node_names) + r")\s*[\-:;,.]*\s*$"
-    return re.compile(pattern, re.IGNORECASE)
-
-# Add this function before _extract_node_content (around line 330)
 def _clean_html_content(content: str) -> str:
     """Clean HTML content and convert to markdown (standalone version)."""
     if not content:
         return ""
-    
-    import re
     
     # Remove mention tags
     content = re.sub(r"<mention[^>]*>[^<]*</mention>", "", content)
@@ -108,6 +99,9 @@ def _clean_html_content(content: str) -> str:
     
     # Remove all remaining HTML tags
     content = re.sub(r"<[^>]+>", "", content)
+    
+    # Decode HTML entities (THIS IS THE KEY FIX)
+    content = html.unescape(content)
     
     return content.strip()
 
@@ -194,40 +188,6 @@ async def extract_single_dok_section_llm(item_data_list: list[dict[str, str]], s
     except Exception as e:
         logger.error("Error extracting %s section with LLM: %s", section_prefix, e)
         return ""
-
-def extract_single_dok_section(content: str, section_prefix: str) -> str:
-    """
-    Extract a single DOK section (DOK4 or DOK3) from content.
-    """
-    lines = content.split('\n')
-    filtered_lines = []
-    capturing = False
-    dok_indent_level = 2  # DOK sections are at 2 spaces indentation
-    
-    for line in lines:
-        stripped = line.lstrip()
-        if stripped:
-            indent = len(line) - len(stripped)
-            
-            # Check if this is the target DOK section at the correct level
-            if (indent == dok_indent_level and 
-                stripped.startswith(f'- {section_prefix}')):
-                capturing = True
-                filtered_lines.append(line)
-            
-            # If we're capturing and this line has greater indentation, include it
-            elif capturing and indent > dok_indent_level:
-                filtered_lines.append(line)
-            
-            # If we hit a line at DOK level or less, stop capturing
-            elif capturing and indent <= dok_indent_level:
-                break
-        else:
-            # Empty line - include if we're currently capturing
-            if capturing:
-                filtered_lines.append(line)
-    
-    return '\n'.join(filtered_lines)
 
 def parse_dok_points(dok_content: str, section_name: str) -> List[Dict]:
     """
@@ -349,72 +309,6 @@ def split_content_for_twitter(content: str, max_chars: int = 240) -> List[str]:
     
     return final_chunks
 
-def generate_tweet_data(points: List[Dict]) -> List[Dict]:
-    """
-    Generate tweet-ready data from parsed DOK points.
-    """
-    tweets = []
-    
-    for point in points:
-        section = point["section"]
-        section_title = point["section_title"]
-        point_num = point["point_number"]
-        total_points = point["total_points"]
-        
-        # Combine main content with sub-points
-        combined_content = create_combined_content(
-            point["main_content"], 
-            point["sub_points"]
-        )
-        
-        # Split content if too long
-        content_chunks = split_content_for_twitter(combined_content)
-        
-        # Generate thread ID
-        thread_id = f"{section.lower()}_{point_num:03d}_thread"
-        
-        # Create tweets for each chunk
-        for chunk_idx, chunk in enumerate(content_chunks, 1):
-            is_main_tweet = chunk_idx == 1
-            total_parts = len(content_chunks)
-            
-            # Format content with prefixes and indicators
-            if total_parts == 1:
-                # Standalone tweet
-                formatted_content = f"🔍 {section} ({point_num}/{total_points}): {chunk}"
-            else:
-                # Thread tweet
-                thread_indicator = f"🧵{chunk_idx}/{total_parts}"
-                if is_main_tweet:
-                    formatted_content = f"🔍 {section} ({point_num}/{total_points}): {chunk} {thread_indicator}"
-                else:
-                    formatted_content = f"{chunk} {thread_indicator}"
-            
-            # Create tweet data
-            tweet_data = {
-                "id": f"{section.lower()}_{point_num:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
-                "section": section,
-                "section_title": section_title,
-                "logical_tweet_number": point_num,
-                "thread_part": chunk_idx,
-                "total_thread_parts": total_parts,
-                "thread_id": thread_id,
-                "content_raw": chunk,
-                "content_formatted": formatted_content,
-                "character_count": len(formatted_content),
-                "is_main_tweet": is_main_tweet,
-                "parent_tweet_id": f"{section.lower()}_{point_num:03d}" if not is_main_tweet else None,
-                "status": "pending",
-                "scheduled_for": None,
-                "posted_at": None,
-                "twitter_id": None,
-                "created_at": datetime.now().isoformat()
-            }
-            
-            tweets.append(tweet_data)
-    
-    return tweets
-
 def extract_url_identifier(url: str) -> str:
     """Extract a unique identifier from the URL for file naming."""
     # Extract the share ID from URL like "https://workflowy.com/s/sanket-ghia/ehJL5sj6EXqV4LJR"
@@ -430,29 +324,10 @@ def get_timestamp() -> str:
     """Generate timestamp in YYYYMMDD-HHMMSS format."""
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
-def is_first_run() -> bool:
-    """Check if this is the first run by checking if users directory exists."""
-    users_dir = Path("users")
-    return not users_dir.exists() or not any(users_dir.iterdir())
-
 def create_content_hash(main_content: str, sub_points: List[str]) -> str:
     """Create a hash for DOK point content to identify unique points."""
     combined = main_content + "||" + "||".join(sub_points)
     return hashlib.md5(combined.encode('utf-8')).hexdigest()
-
-def load_previous_state(user_dir: Path) -> Dict:
-    """Load previous DOK state from current_state.json file."""
-    state_file = user_dir / "current_state.json"
-    if state_file.exists():
-        with open(state_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"dok4": [], "dok3": []}
-
-def save_current_state(user_dir: Path, dok_data: Dict):
-    """Save current DOK state for next comparison."""
-    state_file = user_dir / "current_state.json"
-    with open(state_file, "w", encoding="utf-8") as f:
-        json.dump(dok_data, f, indent=2, ensure_ascii=False)
 
 def create_dok_state_from_points(points: List[Dict]) -> List[Dict]:
     """Convert DOK points to state format for comparison."""
@@ -471,9 +346,10 @@ def create_dok_state_from_points(points: List[Dict]) -> List[Dict]:
 
 def create_content_signature(main_content: str, sub_points: List[str]) -> str:
     """Create a normalized content signature for comparison."""
-    # Normalize the content for comparison
-    normalized_main = main_content.strip().lower()
-    normalized_subs = [sub.strip().lower() for sub in sub_points]
+    
+    # Normalize the content for comparison AND decode HTML entities
+    normalized_main = html.unescape(main_content.strip().lower())
+    normalized_subs = [html.unescape(sub.strip().lower()) for sub in sub_points]
     return normalized_main + " " + " ".join(normalized_subs)
 
 def calculate_similarity_score(text1: str, text2: str) -> float:
@@ -905,6 +781,7 @@ class WorkflowyTester:
 
         content = re.sub(r"<a[^>]+>.*?</a>", replace_link, content)
         content = re.sub(r"<[^>]+>", "", content)
+        content = html.unescape(content) # Decode HTML entities
         return content.strip()
 
     def node_to_markdown(self, node: dict[str, Any], breadcrumb: str = "", level: int = 0) -> str:
@@ -1010,6 +887,20 @@ class WorkflowyTester:
             logger.error(f"Error getting raw Workflowy data: {str(e)}")
             raise
 
+    def create_workflowy_node_from_raw_data(self, raw_data: list[dict[str, str]]) -> WorkflowyNode:
+        """
+        Create a WorkflowyNode from raw data without making HTTP requests.
+        This replaces the scrape_workflowy function for efficiency.
+        """
+        # Convert to markdown (same logic as in scrape_workflowy)
+        workflowy_node = self.url_to_markdown(raw_data, is_breadcrumb_format=False)
+        
+        # Clean HTML tags
+        workflowy_node.content = self.remove_unnecessary_html_tags(workflowy_node.content)
+        workflowy_node.timestamp = time.time()
+        
+        return workflowy_node
+    
     async def scrape_workflowy(self, url: str, exclude_node_names: list[str] | None = None) -> WorkflowyNode:
         """
         Main function to scrape Workflowy content.
@@ -1085,31 +976,36 @@ class WorkflowyTester:
             else:
                 previous_state = {"dok4": [], "dok3": []}
             
-            # Scrape content (unchanged)
-            result = await self.scrape_workflowy(url, exclude_node_names)
-            
+            # Scrape raw data once
+            raw_data = await self.scrape_workflowy_raw_data(url, exclude_node_names)
+
+            # Create formatted content locally from raw data (no additional HTTP requests)
+            result = self.create_workflowy_node_from_raw_data(raw_data)
+
             logger.info(f"📄 SCRAPING RESULTS:")
             logger.info(f"\tNode ID: {result.node_id}")
             logger.info(f"\tNode Name: {result.node_name}")
             logger.info(f"\tTotal Content Length: {len(result.content)} characters")
-            
+            # logger.debug(f"\tResult Content: {result.content}")
+
             # Save full content to S3
             content_s3_url = self.storage.save_scraped_content(user_name, result.content, timestamp)
             logger.info(f"✅ Full content saved to S3: {content_s3_url}")
-            
+
             logger.info(f"📋 PROCESSING DOK SECTIONS:")
-            
+
             current_state = {"dok4": [], "dok3": []}
             all_change_tweets = []
-            
-            # Scrape once, use multiple times
-            raw_data = await self.scrape_workflowy_raw_data(url, exclude_node_names)
 
-            # DOK4 processing using the cached raw data
+            # DOK4 processing using the same raw data (no re-scraping needed)
             dok4_content = await extract_single_dok_section_llm(raw_data, "DOK4")
+            # logger.info(f"DOK4 Content: {dok4_content}")
             if dok4_content.strip():
                 dok4_points = parse_dok_points(dok4_content, "DOK4")
+                # logger.info(f"DOK4 Points: {dok4_points}")
                 current_state["dok4"] = create_dok_state_from_points(dok4_points)
+                # logger.info(f"DOK4 Current State: {current_state['dok4']}")
+                # logger.info(f"DOK4 Previous State: {previous_state['dok4']}")
                 
                 if first_run:
                     # First run: just establish baseline, no tweets
@@ -1127,9 +1023,13 @@ class WorkflowyTester:
             
             # DOK3 processing using the same cached raw data  
             dok3_content = await extract_single_dok_section_llm(raw_data, "DOK3")
+            # logger.info(f"DOK3 Content: {dok3_content}")
             if dok3_content.strip():
                 dok3_points = parse_dok_points(dok3_content, "DOK3")
+                # logger.info(f"DOK3 Points: {dok3_points}")
                 current_state["dok3"] = create_dok_state_from_points(dok3_points)
+                # logger.info(f"DOK3 Current State: {current_state['dok3']}")
+                # logger.info(f"DOK3 Previous State: {previous_state['dok3']}")
                 
                 if first_run:
                     # First run: just establish baseline, no tweets
