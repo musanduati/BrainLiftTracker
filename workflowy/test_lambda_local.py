@@ -6,7 +6,6 @@ Supports testing both:
 2. Bulk URL processing (adds to both URLS_CONFIG_TABLE and USER_MAPPING_TABLE)
 """
 
-import os
 import sys
 import json
 import argparse
