@@ -459,22 +459,49 @@ def get_accounts():
         conn = get_db()
         if account_type:
             cursor = conn.execute(
-                'SELECT id, username, status, account_type, created_at FROM twitter_account WHERE account_type = ? ORDER BY created_at DESC',
+                '''SELECT id, username, status, account_type, created_at, 
+                          token_expires_at, refresh_failure_count 
+                   FROM twitter_account 
+                   WHERE account_type = ? 
+                   ORDER BY created_at DESC''',
                 (account_type,)
             )
         else:
-            cursor = conn.execute('SELECT id, username, status, account_type, created_at FROM twitter_account ORDER BY created_at DESC')
+            cursor = conn.execute('''SELECT id, username, status, account_type, created_at,
+                                           token_expires_at, refresh_failure_count 
+                                    FROM twitter_account 
+                                    ORDER BY created_at DESC''')
         accounts = cursor.fetchall()
         conn.close()
         
         result = []
+        current_time = datetime.now(UTC)
+        
         for acc in accounts:
+            # Determine token status
+            token_status = 'healthy'
+            if acc['refresh_failure_count'] and acc['refresh_failure_count'] >= 3:
+                token_status = 'refresh_failed'
+            elif acc['token_expires_at']:
+                expires_at = datetime.fromisoformat(acc['token_expires_at'])
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=UTC)
+                if expires_at < current_time:
+                    token_status = 'expired'
+                elif expires_at - current_time < timedelta(minutes=10):
+                    token_status = 'expiring'
+            elif acc['status'] != 'active':
+                token_status = 'expired'
+                
             result.append({
                 'id': acc['id'],
                 'username': acc['username'],
                 'status': acc['status'],
                 'account_type': acc['account_type'] if 'account_type' in acc.keys() else 'managed',
-                'created_at': acc['created_at']
+                'created_at': acc['created_at'],
+                'token_status': token_status,
+                'token_expires_at': acc['token_expires_at'],
+                'token_refresh_failures': acc['refresh_failure_count'] or 0
             })
         
         return jsonify({

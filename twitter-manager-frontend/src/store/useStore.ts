@@ -62,8 +62,8 @@ interface Notification {
 }
 
 export const useStore = create<AppState>((set) => ({
-  // Theme
-  theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'light',
+  // Theme - default to dark if not set
+  theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'dark',
   toggleTheme: () => set((state) => {
     const newTheme = state.theme === 'light' ? 'dark' : 'light';
     localStorage.setItem('theme', newTheme);

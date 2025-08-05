@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, TrendingUp, UserX } from 'lucide-react';
+import { Users, TrendingUp, UserX, List } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -11,10 +11,12 @@ import toast from 'react-hot-toast';
 import { getAvatarColor, getAvatarText } from '../utils/avatar';
 import { TwitterAccount } from '../types';
 import { UserActivityRankings } from '../components/dashboard/UserActivityRankings';
+import { ListActivityRankings } from '../components/dashboard/ListActivityRankings';
 
 export const Dashboard: React.FC = () => {
   const { accounts, setAccounts, setTweets, setLoadingAccounts, setLoadingTweets } = useStore();
   const [inactiveAccounts, setInactiveAccounts] = useState<TwitterAccount[]>([]);
+  const [listsCount, setListsCount] = useState(0);
 
   useEffect(() => {
     loadData();
@@ -25,10 +27,11 @@ export const Dashboard: React.FC = () => {
       setLoadingAccounts(true);
       setLoadingTweets(true);
 
-      const [accountsData, tweetsData, threadsData] = await Promise.all([
+      const [accountsData, tweetsData, threadsData, listsData] = await Promise.all([
         apiClient.getAccounts(),
         apiClient.getTweets(),
-        apiClient.getThreads()
+        apiClient.getThreads(),
+        apiClient.getLists()
       ]);
 
       // Filter accounts to only show those with tweets or threads
@@ -48,6 +51,7 @@ export const Dashboard: React.FC = () => {
       setAccounts(accountsWithContent);
       setTweets(tweetsData);
       setInactiveAccounts(accountsWithoutContent);
+      setListsCount(listsData.length);
 
     } catch (error) {
       toast.error('Failed to load dashboard data');
@@ -146,53 +150,14 @@ export const Dashboard: React.FC = () => {
         </div>
 
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* User Activity Rankings */}
-          <div className="lg:col-span-2">
-            <UserActivityRankings />
-          </div>
-
-          {/* Inactive Accounts Section */}
-          {inactiveAccounts.length > 0 && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <UserX size={20} className="text-orange-500" />
-                      Inactive Accounts
-                    </CardTitle>
-                    <CardDescription>
-                      {inactiveAccounts.length} account{inactiveAccounts.length !== 1 ? 's' : ''} with no changes
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {inactiveAccounts.slice(0, 5).map((account) => (
-                    <div key={account.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-                      <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-semibold text-sm`}>
-                        {getAvatarText(account.username, account.displayName)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{account.displayName || account.username}</div>
-                        <div className="text-sm text-muted-foreground truncate">@{account.username}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {inactiveAccounts.length > 5 && (
-                  <Link to="/accounts/inactive" className="block text-center mt-4">
-                    <Button variant="secondary" size="sm">
-                      View all {inactiveAccounts.length} inactive accounts
-                    </Button>
-                  </Link>
-                )}
-              </CardContent>
-            </Card>
-          )}
+          <UserActivityRankings />
+          
+          {/* List Activity Rankings */}
+          <ListActivityRankings />
         </div>
+
       </div>
     </>
   );

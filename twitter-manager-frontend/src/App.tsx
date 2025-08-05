@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Accounts } from './pages/Accounts';
 import { AccountDetail } from './pages/AccountDetail';
 import { InactiveAccounts } from './pages/InactiveAccounts';
+import { Lists } from './pages/Lists';
 import { useStore } from './store/useStore';
 
 const queryClient = new QueryClient({
@@ -24,6 +25,11 @@ function App() {
   useEffect(() => {
     // Apply theme on mount and when it changes
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    
+    // If no theme was previously set, save dark as default
+    if (!localStorage.getItem('theme')) {
+      localStorage.setItem('theme', 'dark');
+    }
   }, [theme]);
 
   return (
@@ -35,6 +41,7 @@ function App() {
             <Route path="accounts" element={<Accounts />} />
             <Route path="accounts/:id" element={<AccountDetail />} />
             <Route path="accounts/inactive" element={<InactiveAccounts />} />
+            <Route path="lists" element={<Lists />} />
           </Route>
         </Routes>
       </BrowserRouter>

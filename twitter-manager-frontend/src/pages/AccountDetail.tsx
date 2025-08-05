@@ -202,7 +202,7 @@ export const AccountDetail: React.FC = () => {
       
       <div className="flex gap-3 relative">
         {/* Profile Picture */}
-        <div className="flex-shrink-0 z-10 bg-background">
+        <div className="flex-shrink-0 z-10">
           <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(account?.username || '')} flex items-center justify-center text-white font-semibold text-sm`}>
             {getAvatarText(account?.username || '', account?.displayName)}
           </div>

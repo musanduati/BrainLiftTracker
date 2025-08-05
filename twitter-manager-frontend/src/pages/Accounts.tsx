@@ -55,15 +55,19 @@ export const Accounts: React.FC = () => {
       }));
       setFilteredAccounts(accountsWithLists);
     } else if (selectedListId === 'unassigned') {
-      // Show unassigned accounts
-      setFilteredAccounts(accountsByList.unassigned_accounts || []);
+      // Show unassigned accounts - need to merge with full account data
+      const unassignedWithFullData = accountsByList.unassigned_accounts.map((unassigned: any) => {
+        const fullAccount = accounts.find(a => a.id === unassigned.id);
+        return fullAccount ? { ...fullAccount, listNames: [] } : { ...unassigned, listNames: [] };
+      });
+      setFilteredAccounts(unassignedWithFullData);
     } else {
-      // Show accounts from selected list
+      // Show accounts from selected list - merge with full account data
       const list = accountsByList.lists.find(l => l.id === selectedListId);
-      const accountsWithLists = (list?.members || []).map((member: any) => ({
-        ...member,
-        listNames: [list.name]
-      }));
+      const accountsWithLists = (list?.members || []).map((member: any) => {
+        const fullAccount = accounts.find(a => a.id === member.id);
+        return fullAccount ? { ...fullAccount, listNames: [list.name] } : { ...member, listNames: [list.name] };
+      });
       setFilteredAccounts(accountsWithLists);
     }
   }, [selectedListId, accounts, accountsByList]);
