@@ -1141,11 +1141,6 @@ async def test_multiple_workflowy_urls():
                 # exclude_node_names=["SpikyPOVs", "Private Notes"]
             )
             results.append(result)
-            
-            # Add delay between URLs to be respectful
-            if i < len(workflowy_urls):
-                logger.info(f"⏱️ Waiting 2 seconds before next URL...")
-                await asyncio.sleep(2)
     
     # Final summary
     logger.info(f"{'='*60}")
