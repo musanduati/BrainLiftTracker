@@ -29,6 +29,13 @@ export const AccountCard: React.FC<AccountCardProps> = ({
           {/* Account info */}
           <h3 className="font-semibold text-lg">{account.displayName || account.username}</h3>
           <p className="text-muted-foreground">@{account.username}</p>
+          
+          {/* Lists */}
+          {account.listNames && account.listNames.length > 0 && (
+            <p className="text-sm text-muted-foreground mt-1">
+              {account.listNames.join(', ')}
+            </p>
+          )}
 
           {/* Stats */}
           <div className="flex items-center gap-6 mt-4 text-sm">

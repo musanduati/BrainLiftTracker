@@ -13,6 +13,7 @@ export interface TwitterAccount {
   tokenExpiresAt?: string;
   tokenRefreshFailures?: number;
   tokenStatus?: 'healthy' | 'expiring' | 'expired' | 'refresh_failed';
+  listNames?: string[]; // Optional list of lists this account belongs to
 }
 
 export interface Tweet {

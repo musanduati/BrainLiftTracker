@@ -34,18 +34,37 @@ export const Accounts: React.FC = () => {
     loadAccounts();
   }, []);
 
+  // Helper function to get list names for an account
+  const getAccountListNames = (accountId: number): string[] => {
+    const listNames: string[] = [];
+    accountsByList.lists.forEach(list => {
+      if (list.members?.some((member: any) => member.id === accountId)) {
+        listNames.push(list.name);
+      }
+    });
+    return listNames;
+  };
+
   useEffect(() => {
     // Filter accounts based on selected list
     if (selectedListId === null) {
-      // Show all accounts
-      setFilteredAccounts(accounts);
+      // Show all accounts with list info
+      const accountsWithLists = accounts.map(account => ({
+        ...account,
+        listNames: getAccountListNames(account.id)
+      }));
+      setFilteredAccounts(accountsWithLists);
     } else if (selectedListId === 'unassigned') {
       // Show unassigned accounts
       setFilteredAccounts(accountsByList.unassigned_accounts || []);
     } else {
       // Show accounts from selected list
       const list = accountsByList.lists.find(l => l.id === selectedListId);
-      setFilteredAccounts(list?.members || []);
+      const accountsWithLists = (list?.members || []).map((member: any) => ({
+        ...member,
+        listNames: [list.name]
+      }));
+      setFilteredAccounts(accountsWithLists);
     }
   }, [selectedListId, accounts, accountsByList]);
 

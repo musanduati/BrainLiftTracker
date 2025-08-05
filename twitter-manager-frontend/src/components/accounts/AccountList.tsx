@@ -34,6 +34,13 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts }) => {
               )}
             </div>
             
+            {/* Lists */}
+            {account.listNames && account.listNames.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                Lists: {account.listNames.join(', ')}
+              </p>
+            )}
+            
             <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
               {account.tweetCount !== undefined && account.tweetCount > 0 && (
                 <>
