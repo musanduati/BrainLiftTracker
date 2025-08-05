@@ -3298,15 +3298,15 @@ def sync_twitter_lists():
                                 WHERE lm.list_id = ?
                             ''', (db_list['id'],)).fetchall()
                             
-                            current_usernames = {m['username'] for m in current_members}
-                            twitter_usernames = {m['username'] for m in twitter_members}
+                            current_usernames = {m['username'].lower() for m in current_members}
+                            twitter_usernames = {m['username'].lower() for m in twitter_members}
                             
                             # Find members to add
                             to_add = twitter_usernames - current_usernames
                             for username in to_add:
-                                # Check if we manage this account
+                                # Check if we manage this account (case-insensitive)
                                 managed_account = conn.execute(
-                                    'SELECT id FROM twitter_account WHERE username = ?',
+                                    'SELECT id FROM twitter_account WHERE LOWER(username) = LOWER(?)',
                                     (username,)
                                 ).fetchone()
                                 
