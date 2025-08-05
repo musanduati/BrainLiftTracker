@@ -96,55 +96,6 @@ def create_bulk_url_event(sample_size="small"):
         { "brainlift": "https://workflowy.com/s/hari/58c8iWu65z1DdwnD" },
         { "brainlift": "https://workflowy.com/s/limitless-challenges/QLOCmrfiVOeR9WOt#/fc779bda7458" }
     ]
-
-    
-    # Sample bulk URL data with some having account_id and some not
-    # if sample_size == "small":
-    #     bulk_urls = [
-    #         # {"brainlift": "https://workflowy.com/s/kathryn/j25MB2FgBH6ePEzI", "account_id": "5"},
-    #         # {"brainlift": "https://workflowy.com/s/sadie/0mJIpdwgZdOzKx4l"},  # No account_id - will default to TBA
-    #         # {"brainlift": "https://workflowy.com/s/carl/YRjYzN9uVUNgc4mC", "account_id": "7"}
-
-    #         # {"brainlift": "https://workflowy.com/s/kathryn/j25MB2FgBH6ePEzI"},
-    #         # {"brainlift": "https://workflowy.com/s/sadie/0mJIpdwgZdOzKx4l"},
-    #         # {"brainlift": "https://workflowy.com/s/carl/YRjYzN9uVUNgc4mC"}
-
-    #         {"brainlift": "https://workflowy.com/s/wfx-test-sanket/bjSyw1MzswiIsciE"}
-    #     ]
-    # elif sample_size == "medium":
-    #     bulk_urls = [
-    #         {"brainlift": "https://workflowy.com/s/kathryn/j25MB2FgBH6ePEzI", "account_id": "5"},
-    #         {"brainlift": "https://workflowy.com/s/sadie/0mJIpdwgZdOzKx4l"},
-    #         {"brainlift": "https://workflowy.com/s/carl/YRjYzN9uVUNgc4mC", "account_id": "7"},
-    #         {"brainlift": "https://workflowy.com/s/zach/Rfif8mB1s2DrEcgp", "account_id": "8"},
-    #         {"brainlift": "https://workflowy.com/s/jo-c/ST4X7yCWJc6adTZE"},
-    #         {"brainlift": "https://workflowy.com/s/ilma/gF4M0kXEwEuRaVSk", "account_id": "9"},
-    #         {"brainlift": "https://workflowy.com/s/sarah-m/RZCFEQzerW2KDu9D"},
-    #         {"brainlift": "https://workflowy.com/s/cesar/QQnHu71UvMemWOLH", "account_id": "10"}
-    #     ]
-    # else:  # large
-    #     bulk_urls = [
-    #         {"brainlift": "https://workflowy.com/s/kathryn/j25MB2FgBH6ePEzI", "account_id": "5"},
-    #         {"brainlift": "https://workflowy.com/s/sadie/0mJIpdwgZdOzKx4l"},
-    #         {"brainlift": "https://workflowy.com/s/carl/YRjYzN9uVUNgc4mC", "account_id": "7"},
-    #         {"brainlift": "https://workflowy.com/s/zach/Rfif8mB1s2DrEcgp", "account_id": "8"},
-    #         {"brainlift": "https://workflowy.com/s/jo-c/ST4X7yCWJc6adTZE"},
-    #         {"brainlift": "https://workflowy.com/s/ilma/gF4M0kXEwEuRaVSk", "account_id": "9"},
-    #         {"brainlift": "https://workflowy.com/s/sarah-m/RZCFEQzerW2KDu9D"},
-    #         {"brainlift": "https://workflowy.com/s/cesar/QQnHu71UvMemWOLH", "account_id": "10"},
-    #         {"brainlift": "https://workflowy.com/s/david-p/lfO09W9ScAPhoeDJ", "account_id": "11"},
-    #         {"brainlift": "https://workflowy.com/s/david-b/iDXAnEaXXkj5b4EO"},
-    #         {"brainlift": "https://workflowy.com/s/pritish/hU19LpZc0kq9iMdd", "account_id": "12"},
-    #         {"brainlift": "https://workflowy.com/s/adam/SqKJXEZ9tqCRMeVX"},
-    #         {"brainlift": "https://workflowy.com/s/vijay/aG0aGE4APpACRBKA", "account_id": "13"},
-    #         {"brainlift": "https://workflowy.com/s/julian/loYV9ebII0UQVBEK"},
-    #         {"brainlift": "https://workflowy.com/s/joseph/xWrHJBsOruOxJc8s", "account_id": "14"},
-    #         {"brainlift": "https://workflowy.com/s/nick/feaFk8127hkLjLos"},
-    #         {"brainlift": "https://workflowy.com/s/alex-wrega/HHKkpEh461iPRCId", "account_id": "15"},
-    #         {"brainlift": "https://workflowy.com/s/julia/jOBGBgCcJndn5k9V"},
-    #         {"brainlift": "https://workflowy.com/s/noel/dIrZr8wCFrrqf0L8", "account_id": "16"},
-    #         {"brainlift": "https://workflowy.com/s/ruchi/jSeAN4SAqX0QgtR3"}
-    #     ]
     
     return {
         "httpMethod": "POST",
