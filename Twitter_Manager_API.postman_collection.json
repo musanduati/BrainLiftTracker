@@ -3331,6 +3331,256 @@
 						"description": "Remove an account from a list"
 					},
 					"response": []
+				},
+				{
+					"name": "Get User Lists (Any Username)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/twitter/users/{{username}}/lists",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"twitter",
+								"users",
+								"{{username}}",
+								"lists"
+							]
+						},
+						"description": "Get all lists owned by any Twitter user (not limited to managed accounts)"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/twitter/users/elonmusk/lists",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"twitter",
+										"users",
+										"elonmusk",
+										"lists"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"user\": {\n        \"id\": \"44196397\",\n        \"username\": \"elonmusk\",\n        \"name\": \"Elon Musk\",\n        \"description\": \"...\",\n        \"protected\": false,\n        \"metrics\": {\n            \"followers_count\": 150000000,\n            \"following_count\": 500,\n            \"tweet_count\": 25000,\n            \"listed_count\": 100000\n        }\n    },\n    \"lists\": [\n        {\n            \"id\": \"123456789\",\n            \"name\": \"Tech Leaders\",\n            \"description\": \"Leading figures in technology\",\n            \"private\": false,\n            \"member_count\": 150,\n            \"follower_count\": 25000,\n            \"created_at\": \"2022-01-01T00:00:00.000Z\"\n        }\n    ],\n    \"count\": 1\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Twitter List Members (Any List)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/twitter/lists/{{twitter_list_id}}/members?max_results=50",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"twitter",
+								"lists",
+								"{{twitter_list_id}}",
+								"members"
+							],
+							"query": [
+								{
+									"key": "max_results",
+									"value": "50",
+									"description": "Number of results per page (max 100)"
+								},
+								{
+									"key": "pagination_token",
+									"value": "",
+									"description": "Token for next page of results",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get members of any Twitter list (not limited to managed lists). Supports pagination."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/twitter/lists/123456789/members?max_results=50",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"twitter",
+										"lists",
+										"123456789",
+										"members"
+									],
+									"query": [
+										{
+											"key": "max_results",
+											"value": "50"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"list\": {\n        \"id\": \"123456789\",\n        \"name\": \"Tech Leaders\",\n        \"description\": \"Leading figures in technology\",\n        \"private\": false,\n        \"member_count\": 150,\n        \"follower_count\": 25000,\n        \"created_at\": \"2022-01-01T00:00:00.000Z\",\n        \"owner\": {\n            \"id\": \"44196397\",\n            \"username\": \"elonmusk\",\n            \"name\": \"Elon Musk\"\n        }\n    },\n    \"members\": [\n        {\n            \"id\": \"123456\",\n            \"username\": \"billgates\",\n            \"name\": \"Bill Gates\",\n            \"description\": \"...\",\n            \"created_at\": \"2009-06-01T00:00:00.000Z\",\n            \"protected\": false,\n            \"public_metrics\": {\n                \"followers_count\": 60000000,\n                \"following_count\": 300,\n                \"tweet_count\": 5000,\n                \"listed_count\": 50000\n            },\n            \"verified\": true\n        }\n    ],\n    \"count\": 50,\n    \"pagination\": {\n        \"next_token\": \"abc123xyz\",\n        \"result_count\": 50\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Sync Twitter Lists",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"account_ids\": [],\n    \"include_memberships\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/lists/sync",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists",
+								"sync"
+							]
+						},
+						"description": "Sync lists from Twitter for list_owner accounts. If account_ids is empty, syncs all list_owner accounts."
+					},
+					"response": []
+				},
+				{
+					"name": "Move List Members",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"account_ids\": [1, 2, 3],\n    \"from_list_id\": \"123456789\",\n    \"to_list_id\": \"987654321\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/lists/move-members",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists",
+								"move-members"
+							]
+						},
+						"description": "Move accounts between lists. If from_list_id is not provided, just adds to target list."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Accounts Grouped by Lists",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/by-lists",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"by-lists"
+							]
+						},
+						"description": "Get all managed accounts grouped by their list memberships"
+					},
+					"response": []
 				}
 			]
 		}
@@ -3389,6 +3639,16 @@
 		{
 			"key": "member_account_id",
 			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "username",
+			"value": "elonmusk",
+			"type": "string"
+		},
+		{
+			"key": "twitter_list_id",
+			"value": "123456789",
 			"type": "string"
 		}
 	]

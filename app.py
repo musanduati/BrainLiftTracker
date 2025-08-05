@@ -144,6 +144,23 @@ def decrypt_token(encrypted_token):
     except:
         return encrypted_token  # Return as-is if decryption fails
 
+def check_token_needs_refresh(token_expires_at):
+    """Check if a token needs refresh (within 15 minutes of expiry)"""
+    if not token_expires_at:
+        return False
+    
+    try:
+        expires_at = datetime.fromisoformat(token_expires_at)
+        # Make expires_at timezone-aware if it isn't already
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        
+        # Token needs refresh if within 15 minutes of expiry
+        return datetime.now(UTC) >= expires_at - timedelta(minutes=15)
+    except Exception as e:
+        print(f"Error checking token expiry: {e}")
+        return False
+
 def refresh_twitter_token(account_id, retry_count=0):
     """Refresh an expired Twitter OAuth 2.0 token
     
@@ -2326,6 +2343,7 @@ def get_lists():
         return jsonify({'error': 'Invalid API key'}), 401
     
     owner_account_id = request.args.get('owner_account_id')
+    include_external = request.args.get('include_external', 'false').lower() == 'true'
     
     try:
         conn = get_db()
@@ -2356,6 +2374,12 @@ def get_lists():
                 (lst['id'],)
             ).fetchone()['count']
             
+            # Check for null values in new columns (for backwards compatibility)
+            source = lst['source'] if 'source' in lst.keys() else 'created'
+            is_managed = lst['is_managed'] if 'is_managed' in lst.keys() else 1
+            last_synced_at = lst['last_synced_at'] if 'last_synced_at' in lst.keys() else None
+            external_owner_username = lst['external_owner_username'] if 'external_owner_username' in lst.keys() else None
+            
             result.append({
                 'id': lst['id'],
                 'list_id': lst['list_id'],
@@ -2365,6 +2389,10 @@ def get_lists():
                 'owner_account_id': lst['owner_account_id'],
                 'owner_username': lst['owner_username'],
                 'member_count': member_count,
+                'source': source,
+                'is_managed': bool(is_managed),
+                'last_synced_at': last_synced_at,
+                'external_owner_username': external_owner_username,
                 'created_at': lst['created_at'],
                 'updated_at': lst['updated_at']
             })
@@ -2818,6 +2846,797 @@ def remove_list_member(list_id, account_id):
             'account_id': account_id,
             'username': account['username']
         })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Twitter User Lists Endpoints (for any username, not just managed accounts)
+
+@app.route('/api/v1/twitter/users/<username>/lists', methods=['GET'])
+def get_twitter_user_lists(username):
+    """Get all lists owned by a Twitter user (any user, not just managed accounts)"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        # We need an access token from any managed account to make API calls
+        # Prefer list_owner accounts, but any account will work
+        conn = get_db()
+        account = conn.execute(
+            '''SELECT * FROM twitter_account 
+               WHERE access_token IS NOT NULL 
+               ORDER BY 
+                   CASE WHEN account_type = 'list_owner' THEN 0 ELSE 1 END,
+                   token_expires_at DESC
+               LIMIT 1'''
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'No authenticated Twitter account available'}), 401
+        
+        # Check if token needs refresh
+        if check_token_needs_refresh(account['token_expires_at']):
+            success, result = refresh_twitter_token(account['id'])
+            if success:
+                # Get updated account info
+                account = conn.execute(
+                    'SELECT * FROM twitter_account WHERE id = ?',
+                    (account['id'],)
+                ).fetchone()
+            else:
+                conn.close()
+                return jsonify({'error': f'Token refresh failed: {result}'}), 401
+        
+        conn.close()
+        
+        # Get user ID first
+        access_token = decrypt_token(account['access_token'])
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Get user info
+        user_response = requests.get(
+            f'https://api.twitter.com/2/users/by/username/{username}',
+            headers=headers,
+            params={
+                'user.fields': 'id,name,username,description,created_at,protected,public_metrics'
+            }
+        )
+        
+        if user_response.status_code == 404:
+            return jsonify({'error': f'User @{username} not found'}), 404
+        elif user_response.status_code != 200:
+            return jsonify({
+                'error': 'Failed to get user info',
+                'details': user_response.json()
+            }), user_response.status_code
+        
+        user_data = user_response.json()['data']
+        user_id = user_data['id']
+        
+        # Get lists owned by this user
+        lists_response = requests.get(
+            f'https://api.twitter.com/2/users/{user_id}/owned_lists',
+            headers=headers,
+            params={
+                'list.fields': 'id,name,description,owner_id,member_count,follower_count,private,created_at',
+                'expansions': 'owner_id',
+                'user.fields': 'username,name',
+                'max_results': 100  # Maximum allowed by Twitter API
+            }
+        )
+        
+        if lists_response.status_code != 200:
+            return jsonify({
+                'error': 'Failed to get user lists',
+                'details': lists_response.json()
+            }), lists_response.status_code
+        
+        lists_data = lists_response.json()
+        lists = lists_data.get('data', [])
+        
+        # Format response
+        return jsonify({
+            'user': {
+                'id': user_data['id'],
+                'username': user_data['username'],
+                'name': user_data['name'],
+                'description': user_data.get('description'),
+                'protected': user_data.get('protected', False),
+                'metrics': user_data.get('public_metrics', {})
+            },
+            'lists': lists,
+            'count': len(lists)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/twitter/lists/<list_id>/members', methods=['GET'])
+def get_twitter_list_members(list_id):
+    """Get members of any Twitter list (not just our managed lists)"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        # Get pagination token if provided
+        pagination_token = request.args.get('pagination_token')
+        max_results = min(int(request.args.get('max_results', 100)), 100)  # Max 100 per Twitter API
+        
+        # We need an access token from any managed account
+        conn = get_db()
+        account = conn.execute(
+            '''SELECT * FROM twitter_account 
+               WHERE access_token IS NOT NULL 
+               ORDER BY 
+                   CASE WHEN account_type = 'list_owner' THEN 0 ELSE 1 END,
+                   token_expires_at DESC
+               LIMIT 1'''
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'No authenticated Twitter account available'}), 401
+        
+        # Check if token needs refresh
+        if check_token_needs_refresh(account['token_expires_at']):
+            success, result = refresh_twitter_token(account['id'])
+            if success:
+                # Get updated account info
+                account = conn.execute(
+                    'SELECT * FROM twitter_account WHERE id = ?',
+                    (account['id'],)
+                ).fetchone()
+            else:
+                conn.close()
+                return jsonify({'error': f'Token refresh failed: {result}'}), 401
+        
+        conn.close()
+        
+        # Get list info first
+        access_token = decrypt_token(account['access_token'])
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Get list details
+        list_response = requests.get(
+            f'https://api.twitter.com/2/lists/{list_id}',
+            headers=headers,
+            params={
+                'list.fields': 'id,name,description,owner_id,member_count,follower_count,private,created_at',
+                'expansions': 'owner_id',
+                'user.fields': 'username,name'
+            }
+        )
+        
+        if list_response.status_code == 404:
+            return jsonify({'error': f'List {list_id} not found'}), 404
+        elif list_response.status_code != 200:
+            return jsonify({
+                'error': 'Failed to get list info',
+                'details': list_response.json()
+            }), list_response.status_code
+        
+        list_data = list_response.json()
+        list_info = list_data['data']
+        
+        # Check if list is private
+        if list_info.get('private', False):
+            # For private lists, check if our account is the owner or a member
+            owner_id = list_info.get('owner_id')
+            # This is a simplified check - in a real scenario, you might want to verify membership
+            # For now, we'll attempt to get members and let Twitter API handle the authorization
+            pass
+        
+        # Get list members
+        params = {
+            'user.fields': 'id,name,username,description,created_at,protected,public_metrics,verified',
+            'max_results': max_results
+        }
+        
+        if pagination_token:
+            params['pagination_token'] = pagination_token
+        
+        members_response = requests.get(
+            f'https://api.twitter.com/2/lists/{list_id}/members',
+            headers=headers,
+            params=params
+        )
+        
+        if members_response.status_code != 200:
+            return jsonify({
+                'error': 'Failed to get list members',
+                'details': members_response.json()
+            }), members_response.status_code
+        
+        members_data = members_response.json()
+        members = members_data.get('data', [])
+        meta = members_data.get('meta', {})
+        
+        # Get owner info from includes
+        includes = list_data.get('includes', {})
+        users = includes.get('users', [])
+        owner_info = users[0] if users else None
+        
+        # Format response
+        response = {
+            'list': {
+                'id': list_info['id'],
+                'name': list_info['name'],
+                'description': list_info.get('description'),
+                'private': list_info.get('private', False),
+                'member_count': list_info.get('member_count', 0),
+                'follower_count': list_info.get('follower_count', 0),
+                'created_at': list_info.get('created_at'),
+                'owner': {
+                    'id': list_info.get('owner_id'),
+                    'username': owner_info.get('username') if owner_info else None,
+                    'name': owner_info.get('name') if owner_info else None
+                }
+            },
+            'members': members,
+            'count': len(members),
+            'pagination': {
+                'next_token': meta.get('next_token'),
+                'result_count': meta.get('result_count', len(members))
+            }
+        }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Enhanced List Management Endpoints
+
+@app.route('/api/v1/lists/sync', methods=['POST'])
+def sync_twitter_lists():
+    """Sync lists from Twitter for specified list_owner accounts"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        data = request.get_json() or {}
+        account_ids = data.get('account_ids', [])
+        include_memberships = data.get('include_memberships', True)
+        
+        conn = get_db()
+        
+        # If no account IDs specified, sync all list_owner accounts
+        if not account_ids:
+            list_owners = conn.execute(
+                '''SELECT id FROM twitter_account 
+                   WHERE account_type = 'list_owner' AND access_token IS NOT NULL'''
+            ).fetchall()
+            account_ids = [owner['id'] for owner in list_owners]
+        
+        if not account_ids:
+            conn.close()
+            return jsonify({'error': 'No list_owner accounts found'}), 404
+        
+        sync_results = {
+            'synced_lists': 0,
+            'new_lists': 0,
+            'updated_lists': 0,
+            'total_memberships': 0,
+            'new_memberships': 0,
+            'removed_memberships': 0,
+            'errors': []
+        }
+        
+        for account_id in account_ids:
+            # Get account details
+            account = conn.execute(
+                'SELECT * FROM twitter_account WHERE id = ? AND account_type = "list_owner"',
+                (account_id,)
+            ).fetchone()
+            
+            if not account:
+                sync_results['errors'].append({
+                    'account_id': account_id,
+                    'error': 'Account not found or not a list_owner'
+                })
+                continue
+            
+            # Check if token needs refresh
+            if check_token_needs_refresh(account['token_expires_at']):
+                success, result = refresh_twitter_token(account_id)
+                if success:
+                    # Get updated account info
+                    account = conn.execute(
+                        'SELECT * FROM twitter_account WHERE id = ?',
+                        (account_id,)
+                    ).fetchone()
+                else:
+                    sync_results['errors'].append({
+                        'account_id': account_id,
+                        'username': account['username'],
+                        'error': f'Token refresh failed: {result}'
+                    })
+                    continue
+            
+            # Get lists from Twitter
+            access_token = decrypt_token(account['access_token'])
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json'
+            }
+            
+            # First get user ID
+            user_response = requests.get(
+                f'https://api.twitter.com/2/users/by/username/{account["username"]}',
+                headers=headers
+            )
+            
+            if user_response.status_code != 200:
+                sync_results['errors'].append({
+                    'account_id': account_id,
+                    'username': account['username'],
+                    'error': 'Failed to get user info'
+                })
+                continue
+            
+            user_id = user_response.json()['data']['id']
+            
+            # Get owned lists with pagination support
+            all_lists = []
+            pagination_token = None
+            
+            while True:
+                params = {
+                    'list.fields': 'id,name,description,owner_id,member_count,follower_count,private,created_at',
+                    'max_results': 100
+                }
+                if pagination_token:
+                    params['pagination_token'] = pagination_token
+                
+                lists_response = requests.get(
+                    f'https://api.twitter.com/2/users/{user_id}/owned_lists',
+                    headers=headers,
+                    params=params
+                )
+                
+                if lists_response.status_code != 200:
+                    sync_results['errors'].append({
+                        'account_id': account_id,
+                        'username': account['username'],
+                        'error': 'Failed to get lists'
+                    })
+                    break
+                
+                lists_data = lists_response.json()
+                twitter_lists = lists_data.get('data', [])
+                all_lists.extend(twitter_lists)
+                
+                # Check for next page
+                meta = lists_data.get('meta', {})
+                pagination_token = meta.get('next_token')
+                if not pagination_token:
+                    break
+            
+            # Process all lists
+            twitter_lists = all_lists
+            
+            # Process each list
+            for twitter_list in twitter_lists:
+                list_id = twitter_list['id']
+                
+                # Check if list exists in database
+                existing_list = conn.execute(
+                    'SELECT id FROM twitter_list WHERE list_id = ?',
+                    (list_id,)
+                ).fetchone()
+                
+                if existing_list:
+                    # Update existing list
+                    conn.execute('''
+                        UPDATE twitter_list 
+                        SET name = ?, description = ?, 
+                            mode = ?, last_synced_at = ?,
+                            source = 'synced'
+                        WHERE list_id = ?
+                    ''', (
+                        twitter_list['name'],
+                        twitter_list.get('description'),
+                        'private' if twitter_list.get('private', False) else 'public',
+                        datetime.now(UTC).isoformat(),
+                        list_id
+                    ))
+                    sync_results['updated_lists'] += 1
+                else:
+                    # Insert new list
+                    conn.execute('''
+                        INSERT INTO twitter_list 
+                        (list_id, name, description, mode, owner_account_id, 
+                         source, last_synced_at, is_managed)
+                        VALUES (?, ?, ?, ?, ?, 'synced', ?, 1)
+                    ''', (
+                        list_id,
+                        twitter_list['name'],
+                        twitter_list.get('description'),
+                        'private' if twitter_list.get('private', False) else 'public',
+                        account_id,
+                        datetime.now(UTC).isoformat()
+                    ))
+                    sync_results['new_lists'] += 1
+                
+                sync_results['synced_lists'] += 1
+                
+                # Sync memberships if requested
+                if include_memberships:
+                    # Get list ID from our database
+                    db_list = conn.execute(
+                        'SELECT id FROM twitter_list WHERE list_id = ?',
+                        (list_id,)
+                    ).fetchone()
+                    
+                    if db_list:
+                        # Get current members from Twitter
+                        members_response = requests.get(
+                            f'https://api.twitter.com/2/lists/{list_id}/members',
+                            headers=headers,
+                            params={
+                                'user.fields': 'username',
+                                'max_results': 100
+                            }
+                        )
+                        
+                        if members_response.status_code == 200:
+                            members_data = members_response.json()
+                            twitter_members = members_data.get('data', [])
+                            
+                            # Get current members from database
+                            current_members = conn.execute('''
+                                SELECT ta.username, lm.account_id
+                                FROM list_membership lm
+                                JOIN twitter_account ta ON lm.account_id = ta.id
+                                WHERE lm.list_id = ?
+                            ''', (db_list['id'],)).fetchall()
+                            
+                            current_usernames = {m['username'] for m in current_members}
+                            twitter_usernames = {m['username'] for m in twitter_members}
+                            
+                            # Find members to add
+                            to_add = twitter_usernames - current_usernames
+                            for username in to_add:
+                                # Check if we manage this account
+                                managed_account = conn.execute(
+                                    'SELECT id FROM twitter_account WHERE username = ?',
+                                    (username,)
+                                ).fetchone()
+                                
+                                if managed_account:
+                                    try:
+                                        conn.execute('''
+                                            INSERT INTO list_membership (list_id, account_id)
+                                            VALUES (?, ?)
+                                        ''', (db_list['id'], managed_account['id']))
+                                        sync_results['new_memberships'] += 1
+                                    except sqlite3.IntegrityError:
+                                        pass  # Already exists
+                            
+                            # Find members to remove
+                            to_remove = current_usernames - twitter_usernames
+                            for username in to_remove:
+                                member = next((m for m in current_members if m['username'] == username), None)
+                                if member:
+                                    conn.execute('''
+                                        DELETE FROM list_membership 
+                                        WHERE list_id = ? AND account_id = ?
+                                    ''', (db_list['id'], member['account_id']))
+                                    sync_results['removed_memberships'] += 1
+                            
+                            sync_results['total_memberships'] += len(twitter_members)
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify(sync_results)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/lists/move-members', methods=['POST'])
+def move_list_members():
+    """Move accounts between lists"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        account_ids = data.get('account_ids', [])
+        from_list_id = data.get('from_list_id')
+        to_list_id = data.get('to_list_id')
+        
+        if not account_ids:
+            return jsonify({'error': 'No account_ids provided'}), 400
+        
+        if not to_list_id:
+            return jsonify({'error': 'No to_list_id provided'}), 400
+        
+        conn = get_db()
+        
+        # Get target list details
+        to_list = conn.execute('''
+            SELECT tl.*, ta.username, ta.access_token, ta.token_expires_at
+            FROM twitter_list tl
+            JOIN twitter_account ta ON tl.owner_account_id = ta.id
+            WHERE tl.list_id = ?
+        ''', (to_list_id,)).fetchone()
+        
+        if not to_list:
+            conn.close()
+            return jsonify({'error': 'Target list not found'}), 404
+        
+        if not to_list['is_managed']:
+            conn.close()
+            return jsonify({'error': 'Cannot modify external list'}), 403
+        
+        # Check if token needs refresh
+        if check_token_needs_refresh(to_list['token_expires_at']):
+            success, result = refresh_twitter_token(to_list['owner_account_id'])
+            if not success:
+                conn.close()
+                return jsonify({'error': f'Token refresh failed: {result}'}), 401
+            # Get updated token
+            to_list = conn.execute('''
+                SELECT tl.*, ta.username, ta.access_token
+                FROM twitter_list tl
+                JOIN twitter_account ta ON tl.owner_account_id = ta.id
+                WHERE tl.list_id = ?
+            ''', (to_list_id,)).fetchone()
+        
+        access_token = decrypt_token(to_list['access_token'])
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        results = {
+            'moved': [],
+            'added': [],
+            'removed': [],
+            'failed': []
+        }
+        
+        # Process from_list if provided
+        from_list = None
+        if from_list_id:
+            from_list = conn.execute('''
+                SELECT tl.*, ta.username, ta.access_token, ta.token_expires_at
+                FROM twitter_list tl
+                JOIN twitter_account ta ON tl.owner_account_id = ta.id
+                WHERE tl.list_id = ?
+            ''', (from_list_id,)).fetchone()
+            
+            if not from_list:
+                conn.close()
+                return jsonify({'error': 'Source list not found'}), 404
+            
+            if not from_list['is_managed']:
+                conn.close()
+                return jsonify({'error': 'Cannot modify external list'}), 403
+        
+        # Process each account
+        for account_id in account_ids:
+            account = conn.execute(
+                'SELECT * FROM twitter_account WHERE id = ?',
+                (account_id,)
+            ).fetchone()
+            
+            if not account:
+                results['failed'].append({
+                    'account_id': account_id,
+                    'error': 'Account not found'
+                })
+                continue
+            
+            # Get Twitter user ID
+            user_response = requests.get(
+                f'https://api.twitter.com/2/users/by/username/{account["username"]}',
+                headers=headers
+            )
+            
+            if user_response.status_code != 200:
+                results['failed'].append({
+                    'account_id': account_id,
+                    'username': account['username'],
+                    'error': 'Failed to get Twitter user ID'
+                })
+                continue
+            
+            twitter_user_id = user_response.json()['data']['id']
+            
+            # Remove from source list if specified
+            if from_list:
+                remove_response = requests.delete(
+                    f'https://api.twitter.com/2/lists/{from_list_id}/members/{twitter_user_id}',
+                    headers=headers
+                )
+                
+                if remove_response.status_code == 200:
+                    # Remove from database
+                    from_list_db = conn.execute(
+                        'SELECT id FROM twitter_list WHERE list_id = ?',
+                        (from_list_id,)
+                    ).fetchone()
+                    
+                    if from_list_db:
+                        conn.execute('''
+                            DELETE FROM list_membership 
+                            WHERE list_id = ? AND account_id = ?
+                        ''', (from_list_db['id'], account_id))
+                    
+                    results['removed'].append({
+                        'account_id': account_id,
+                        'username': account['username'],
+                        'from_list': from_list['name']
+                    })
+            
+            # Add to target list
+            add_response = requests.post(
+                f'https://api.twitter.com/2/lists/{to_list_id}/members',
+                headers=headers,
+                json={'user_id': twitter_user_id}
+            )
+            
+            if add_response.status_code == 200:
+                # Add to database
+                to_list_db = conn.execute(
+                    'SELECT id FROM twitter_list WHERE list_id = ?',
+                    (to_list_id,)
+                ).fetchone()
+                
+                if to_list_db:
+                    try:
+                        conn.execute('''
+                            INSERT INTO list_membership (list_id, account_id)
+                            VALUES (?, ?)
+                        ''', (to_list_db['id'], account_id))
+                    except sqlite3.IntegrityError:
+                        pass  # Already exists
+                
+                if from_list:
+                    results['moved'].append({
+                        'account_id': account_id,
+                        'username': account['username'],
+                        'from_list': from_list['name'],
+                        'to_list': to_list['name']
+                    })
+                else:
+                    results['added'].append({
+                        'account_id': account_id,
+                        'username': account['username'],
+                        'to_list': to_list['name']
+                    })
+            else:
+                error_detail = add_response.json().get('detail', 'Unknown error')
+                results['failed'].append({
+                    'account_id': account_id,
+                    'username': account['username'],
+                    'error': error_detail
+                })
+        
+        conn.commit()
+        conn.close()
+        
+        # Calculate summary
+        results['summary'] = {
+            'total_processed': len(account_ids),
+            'successful_moves': len(results['moved']),
+            'successful_adds': len(results['added']),
+            'successful_removes': len(results['removed']),
+            'failures': len(results['failed'])
+        }
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/accounts/by-lists', methods=['GET'])
+def get_accounts_by_lists():
+    """Get accounts grouped by their list memberships"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get all lists with their members
+        lists_with_members = conn.execute('''
+            SELECT 
+                tl.id,
+                tl.list_id,
+                tl.name,
+                tl.description,
+                tl.mode,
+                tl.source,
+                tl.is_managed,
+                tl.last_synced_at,
+                ta_owner.username as owner_username,
+                GROUP_CONCAT(
+                    CASE WHEN ta_member.id IS NOT NULL 
+                    THEN json_object(
+                        'id', ta_member.id,
+                        'username', ta_member.username,
+                        'account_type', ta_member.account_type
+                    )
+                    ELSE NULL END
+                ) as members
+            FROM twitter_list tl
+            JOIN twitter_account ta_owner ON tl.owner_account_id = ta_owner.id
+            LEFT JOIN list_membership lm ON tl.id = lm.list_id
+            LEFT JOIN twitter_account ta_member ON lm.account_id = ta_member.id
+            GROUP BY tl.id
+            ORDER BY tl.name
+        ''').fetchall()
+        
+        # Get accounts not in any list
+        unassigned_accounts = conn.execute('''
+            SELECT 
+                ta.id,
+                ta.username,
+                ta.account_type
+            FROM twitter_account ta
+            WHERE ta.account_type = 'managed'
+            AND ta.id NOT IN (
+                SELECT DISTINCT account_id FROM list_membership
+            )
+            ORDER BY ta.username
+        ''').fetchall()
+        
+        conn.close()
+        
+        # Process results
+        lists = []
+        for list_row in lists_with_members:
+            members = []
+            if list_row['members']:
+                # Parse concatenated JSON strings
+                member_jsons = list_row['members'].split(',')
+                for member_json in member_jsons:
+                    if member_json and member_json != 'null':
+                        try:
+                            members.append(json.loads(member_json))
+                        except:
+                            pass
+            
+            lists.append({
+                'id': list_row['id'],
+                'list_id': list_row['list_id'],
+                'name': list_row['name'],
+                'description': list_row['description'],
+                'mode': list_row['mode'],
+                'source': list_row['source'],
+                'is_managed': bool(list_row['is_managed']),
+                'owner_username': list_row['owner_username'],
+                'last_synced_at': list_row['last_synced_at'],
+                'member_count': len(members),
+                'members': members
+            })
+        
+        # Format response
+        response = {
+            'lists': lists,
+            'unassigned_accounts': [dict(account) for account in unassigned_accounts],
+            'stats': {
+                'total_lists': len(lists),
+                'total_managed_accounts': len(unassigned_accounts) + sum(l['member_count'] for l in lists),
+                'accounts_in_lists': sum(l['member_count'] for l in lists),
+                'accounts_not_in_lists': len(unassigned_accounts)
+            }
+        }
+        
+        return jsonify(response)
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -3732,6 +4551,31 @@ def init_database():
                 FOREIGN KEY (owner_account_id) REFERENCES twitter_account(id)
             )
         ''')
+        
+        # Add new columns for hybrid list system
+        try:
+            conn.execute('ALTER TABLE twitter_list ADD COLUMN source VARCHAR(20) DEFAULT "created"')
+            print("Added source column to twitter_list table")
+        except:
+            pass  # Column already exists
+            
+        try:
+            conn.execute('ALTER TABLE twitter_list ADD COLUMN external_owner_username VARCHAR(255)')
+            print("Added external_owner_username column to twitter_list table")
+        except:
+            pass  # Column already exists
+            
+        try:
+            conn.execute('ALTER TABLE twitter_list ADD COLUMN last_synced_at DATETIME')
+            print("Added last_synced_at column to twitter_list table")
+        except:
+            pass  # Column already exists
+            
+        try:
+            conn.execute('ALTER TABLE twitter_list ADD COLUMN is_managed BOOLEAN DEFAULT 1')
+            print("Added is_managed column to twitter_list table")
+        except:
+            pass  # Column already exists
         
         # Create list_membership table
         conn.execute('''
