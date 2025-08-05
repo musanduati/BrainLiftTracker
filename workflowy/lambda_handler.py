@@ -98,9 +98,6 @@ async def process_and_post():
         if result['status'] == 'success' and result.get('total_change_tweets', 0) > 0:
             users_with_content.append(result['user_name'])
 
-    # **** TMP TESTING, SO THAT WE DON'T POST ****
-    users_with_content = []
-
     if users_with_content:
         logger.info(f"👥 Users with new content to post: {users_with_content}")
         
@@ -117,9 +114,6 @@ async def process_and_post():
                 posting_results.append(user_results)
                 
                 # Add delay between users
-                if user_name != users_with_content[-1]:
-                    logger.info(f"⏱️ Waiting 10 seconds before next user...")
-                    await asyncio.sleep(10)
                     
             except Exception as e:
                 logger.error(f"❌ Error posting tweets for {user_name}: {e}")
