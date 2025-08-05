@@ -257,7 +257,7 @@ def create_combined_content(main_content: str, sub_points: List[str]) -> str:
     
     return combined.strip()
 
-def split_content_for_twitter(content: str, max_chars: int = 240) -> List[str]:
+def split_content_for_twitter(content: str, max_chars: int = 230) -> List[str]:
     """
     Split content into Twitter-sized chunks at sentence boundaries.
     Leaves room for thread indicators and formatting.
