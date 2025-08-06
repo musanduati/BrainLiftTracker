@@ -2940,19 +2940,34 @@ def sync_account_profiles():
                 if response.status_code == 200:
                     user_data = response.json().get('data', {})
                     
-                    # Update account profile in database
-                    conn.execute('''
-                        UPDATE twitter_account 
-                        SET display_name = ?,
-                            profile_picture = ?,
-                            updated_at = ?
-                        WHERE id = ?
-                    ''', (
-                        user_data.get('name', account['username']),
-                        user_data.get('profile_image_url', ''),
-                        datetime.now(UTC).isoformat(),
-                        account['id']
-                    ))
+                    # Check if columns exist before updating (backward compatibility)
+                    cursor = conn.execute("PRAGMA table_info(twitter_account)")
+                    columns = [col[1] for col in cursor.fetchall()]
+                    
+                    if 'display_name' in columns and 'profile_picture' in columns:
+                        # Update account profile in database with new columns
+                        conn.execute('''
+                            UPDATE twitter_account 
+                            SET display_name = ?,
+                                profile_picture = ?,
+                                updated_at = ?
+                            WHERE id = ?
+                        ''', (
+                            user_data.get('name', account['username']),
+                            user_data.get('profile_image_url', ''),
+                            datetime.now(UTC).isoformat(),
+                            account['id']
+                        ))
+                    else:
+                        # Fallback: only update updated_at if columns don't exist
+                        conn.execute('''
+                            UPDATE twitter_account 
+                            SET updated_at = ?
+                            WHERE id = ?
+                        ''', (
+                            datetime.now(UTC).isoformat(),
+                            account['id']
+                        ))
                     
                     results['synced'].append({
                         'username': account['username'],
@@ -4789,6 +4804,19 @@ def init_database():
         try:
             conn.execute("ALTER TABLE twitter_account ADD COLUMN account_type TEXT DEFAULT 'managed'")
             print("Added account_type column to twitter_account table")
+        except:
+            pass  # Column already exists
+        
+        # Add display_name and profile_picture columns for profile sync
+        try:
+            conn.execute('ALTER TABLE twitter_account ADD COLUMN display_name TEXT')
+            print("Added display_name column to twitter_account table")
+        except:
+            pass  # Column already exists
+        
+        try:
+            conn.execute('ALTER TABLE twitter_account ADD COLUMN profile_picture TEXT')
+            print("Added profile_picture column to twitter_account table")
         except:
             pass  # Column already exists
         

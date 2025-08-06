@@ -51,10 +51,6 @@ export const ListMembers: React.FC = () => {
         apiClient.getThreads()
       ]);
 
-      // Debug: Log the list IDs to understand the structure
-      console.log('Looking for list ID:', listId);
-      console.log('Available lists:', listsData.lists.map((l: any) => ({ id: l.id, name: l.name })));
-      
       // Convert both to strings for comparison since URL params are always strings
       const currentList = listsData.lists.find((l: any) => String(l.id) === String(listId));
       
