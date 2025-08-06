@@ -686,6 +686,190 @@
 							"body": "{\n    \"error\": \"Account not found\"\n}"
 						}
 					]
+				},
+				{
+					"name": "Sync Account Profiles",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/accounts/sync-profiles",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"sync-profiles"
+							]
+						},
+						"description": "Batch sync all accounts' profile data (display names and profile pictures) from Twitter"
+					},
+					"response": [
+						{
+							"name": "Profiles Synced Successfully",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/sync-profiles",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"sync-profiles"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Synced 3 of 3 accounts\",\n    \"results\": {\n        \"synced\": [\n            {\n                \"username\": \"ZeroShotFlow\",\n                \"display_name\": \"Zero Shot Flow\",\n                \"profile_picture\": \"https://pbs.twimg.com/profile_images/1234567890/image.jpg\"\n            },\n            {\n                \"username\": \"brainlift_tiger\",\n                \"display_name\": \"BrainLift Tiger\",\n                \"profile_picture\": \"https://pbs.twimg.com/profile_images/1234567891/image.jpg\"\n            },\n            {\n                \"username\": \"brainlift_sideq\",\n                \"display_name\": \"BrainLift Sideq\",\n                \"profile_picture\": \"https://pbs.twimg.com/profile_images/1234567892/image.jpg\"\n            }\n        ],\n        \"failed\": [],\n        \"total\": 3\n    }\n}"
+						},
+						{
+							"name": "Partial Sync (Some Failed)",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/sync-profiles",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"sync-profiles"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Synced 1 of 3 accounts\",\n    \"results\": {\n        \"synced\": [\n            {\n                \"username\": \"ZeroShotFlow\",\n                \"display_name\": \"Zero Shot Flow\",\n                \"profile_picture\": \"https://pbs.twimg.com/profile_images/1234567890/image.jpg\"\n            }\n        ],\n        \"failed\": [\n            {\n                \"username\": \"brainlift_tiger\",\n                \"error\": \"Token refresh failed: HTTP 400\"\n            },\n            {\n                \"username\": \"brainlift_sideq\",\n                \"error\": \"User not found\"\n            }\n        ],\n        \"total\": 3\n    }\n}"
+						},
+						{
+							"name": "No Accounts to Sync",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/sync-profiles",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"sync-profiles"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"No accounts to sync\"\n}"
+						}
+					]
 				}
 			]
 		},

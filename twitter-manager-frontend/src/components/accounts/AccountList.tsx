@@ -20,7 +20,24 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts }) => {
           className="flex items-center gap-4 p-4 bg-card border border-border rounded-lg hover:bg-accent/50 transition-colors"
         >
           {/* Profile picture */}
-          <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold`}>
+          {account.profilePicture ? (
+            <img
+              src={account.profilePicture}
+              alt={account.displayName || account.username}
+              className="w-12 h-12 rounded-full object-cover"
+              onError={(e) => {
+                // Fallback to colored avatar on error
+                const target = e.target as HTMLImageElement;
+                target.style.display = 'none';
+                const fallback = target.nextElementSibling as HTMLElement;
+                if (fallback) fallback.style.display = 'flex';
+              }}
+            />
+          ) : null}
+          <div 
+            className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold ${account.profilePicture ? 'hidden' : ''}`}
+            style={{ display: account.profilePicture ? 'none' : 'flex' }}
+          >
             {getAvatarText(account.username, account.displayName)}
           </div>
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Grid3x3, List, RefreshCw, ArrowLeft } from 'lucide-react';
+import { Grid3x3, List, RefreshCw, ArrowLeft, UserCheck } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { AccountCard } from '../components/accounts/AccountCard';
 import { AccountList } from '../components/accounts/AccountList';
@@ -29,6 +29,7 @@ export const Accounts: React.FC = () => {
     unassigned_accounts: TwitterAccount[];
   }>({ lists: [], unassigned_accounts: [] });
   const [filteredAccounts, setFilteredAccounts] = useState<TwitterAccount[]>([]);
+  const [isSyncingProfiles, setIsSyncingProfiles] = useState(false);
 
   useEffect(() => {
     loadAccounts();
@@ -71,6 +72,29 @@ export const Accounts: React.FC = () => {
       setFilteredAccounts(accountsWithLists);
     }
   }, [selectedListId, accounts, accountsByList]);
+
+  const handleSyncProfiles = async () => {
+    try {
+      setIsSyncingProfiles(true);
+      const result = await apiClient.syncAccountProfiles();
+      
+      if (result.results.synced.length > 0) {
+        toast.success(`Successfully synced ${result.results.synced.length} account profiles`);
+        // Reload accounts to show updated profiles
+        await loadAccounts();
+      }
+      
+      if (result.results.failed.length > 0) {
+        toast.error(`Failed to sync ${result.results.failed.length} accounts`);
+        console.error('Sync failures:', result.results.failed);
+      }
+    } catch (error) {
+      toast.error('Failed to sync account profiles');
+      console.error('Sync profiles error:', error);
+    } finally {
+      setIsSyncingProfiles(false);
+    }
+  };
 
   const loadAccounts = async () => {
     try {
@@ -176,6 +200,17 @@ export const Accounts: React.FC = () => {
               title={accountViewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
             >
               {accountViewMode === 'grid' ? <List size={20} /> : <Grid3x3 size={20} />}
+            </Button>
+            
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSyncProfiles}
+              disabled={isSyncingProfiles || isLoadingAccounts}
+              title="Sync profile pictures and names from Twitter"
+            >
+              <UserCheck size={16} className={`mr-2 ${isSyncingProfiles ? 'animate-spin' : ''}`} />
+              Sync Profiles
             </Button>
             
             <Button

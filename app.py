@@ -2877,6 +2877,112 @@ def remove_list_member(list_id, account_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Batch sync account profiles endpoint
+@app.route('/api/v1/accounts/sync-profiles', methods=['POST'])
+def sync_account_profiles():
+    """Batch sync all accounts' profile data from Twitter"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Get all accounts with access tokens
+        accounts = conn.execute('''
+            SELECT id, username, access_token, refresh_token, token_expires_at 
+            FROM twitter_account 
+            WHERE access_token IS NOT NULL
+        ''').fetchall()
+        
+        if not accounts:
+            conn.close()
+            return jsonify({'message': 'No accounts to sync'}), 200
+        
+        results = {
+            'synced': [],
+            'failed': [],
+            'total': len(accounts)
+        }
+        
+        for account in accounts:
+            try:
+                # Check if token needs refresh
+                if check_token_needs_refresh(account['token_expires_at']):
+                    success, refresh_result = refresh_twitter_token(account['id'])
+                    if not success:
+                        results['failed'].append({
+                            'username': account['username'],
+                            'error': f'Token refresh failed: {refresh_result}'
+                        })
+                        continue
+                    # Get updated token
+                    updated = conn.execute(
+                        'SELECT access_token FROM twitter_account WHERE id = ?',
+                        (account['id'],)
+                    ).fetchone()
+                    access_token = decrypt_token(updated['access_token'])
+                else:
+                    access_token = decrypt_token(account['access_token'])
+                
+                # Fetch user data from Twitter
+                headers = {
+                    'Authorization': f'Bearer {access_token}'
+                }
+                
+                response = requests.get(
+                    f'https://api.twitter.com/2/users/by/username/{account["username"]}',
+                    headers=headers,
+                    params={
+                        'user.fields': 'name,profile_image_url,description,public_metrics,created_at,verified'
+                    }
+                )
+                
+                if response.status_code == 200:
+                    user_data = response.json().get('data', {})
+                    
+                    # Update account profile in database
+                    conn.execute('''
+                        UPDATE twitter_account 
+                        SET display_name = ?,
+                            profile_picture = ?,
+                            updated_at = ?
+                        WHERE id = ?
+                    ''', (
+                        user_data.get('name', account['username']),
+                        user_data.get('profile_image_url', ''),
+                        datetime.now(UTC).isoformat(),
+                        account['id']
+                    ))
+                    
+                    results['synced'].append({
+                        'username': account['username'],
+                        'display_name': user_data.get('name'),
+                        'profile_picture': user_data.get('profile_image_url')
+                    })
+                else:
+                    error_msg = response.json().get('errors', [{'message': 'Unknown error'}])[0].get('message')
+                    results['failed'].append({
+                        'username': account['username'],
+                        'error': error_msg
+                    })
+                    
+            except Exception as e:
+                results['failed'].append({
+                    'username': account['username'],
+                    'error': str(e)
+                })
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': f'Synced {len(results["synced"])} of {results["total"]} accounts',
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # Twitter User Lists Endpoints (for any username, not just managed accounts)
 
 @app.route('/api/v1/twitter/users/<username>/lists', methods=['GET'])

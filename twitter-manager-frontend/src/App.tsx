@@ -8,6 +8,7 @@ import { Accounts } from './pages/Accounts';
 import { AccountDetail } from './pages/AccountDetail';
 import { InactiveAccounts } from './pages/InactiveAccounts';
 import { Lists } from './pages/Lists';
+import { ListMembers } from './pages/ListMembers';
 import { useStore } from './store/useStore';
 
 const queryClient = new QueryClient({
@@ -42,6 +43,7 @@ function App() {
             <Route path="accounts/:id" element={<AccountDetail />} />
             <Route path="accounts/inactive" element={<InactiveAccounts />} />
             <Route path="lists" element={<Lists />} />
+            <Route path="lists/:listId" element={<ListMembers />} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -41,6 +41,18 @@ class TwitterSeleniumAutomation:
         self.password = os.getenv('TWITTER_PASSWORD')
         self.email = os.getenv('TWITTER_EMAIL')  # Sometimes required for verification
         
+        # Get allowed usernames from environment or use defaults
+        # IMPORTANT: Normalize to lowercase for case-insensitive matching
+        allowed_usernames_env = os.getenv('ALLOWED_USERNAMES', '')
+        if allowed_usernames_env:
+            self.allowed_usernames = [u.strip().lower() for u in allowed_usernames_env.split(',')]
+        else:
+            # Default allowed usernames (lowercase for matching)
+            self.allowed_usernames = [
+                'jliemandt', 'opsaiguru', 'aiautodidact',
+                'zeroshotflow', 'munawar2434', 'klair_three', 'klair_two'
+            ]
+        
         if not self.username or not self.password:
             raise ValueError("Twitter credentials not found in environment variables")
         
@@ -548,13 +560,38 @@ class TwitterSeleniumAutomation:
                     return False
             
             # Start the auto-approval with custom configuration
-            config_script = """
-            // Start auto-approval with configuration
-            window.startAutoApproval({
-                delay: 3000,        // 3 seconds between actions
-                maxApprovals: 50,   // Maximum 50 approvals
-                autoScroll: true    // Auto-scroll enabled
-            });
+            # Make sure usernames are passed as an array
+            allowed_usernames_json = json.dumps(self.allowed_usernames)
+            
+            config_script = f"""
+            // CRITICAL: Verify configuration before starting
+            const allowedUsernames = {allowed_usernames_json};
+            
+            console.log('\\n' + '='*50);
+            console.log('🔒 USERNAME FILTER CONFIGURATION');
+            console.log('='*50);
+            console.log('ALLOWED USERNAMES:', allowedUsernames);
+            console.log('List length:', allowedUsernames.length);
+            console.log('Any requests from users NOT in this list will be SKIPPED');
+            console.log('='*50 + '\\n');
+            
+            // Double-check the list contains what we expect
+            if (!allowedUsernames.includes('zeroshotflow')) {{
+                console.error('ERROR: ZeroShotFlow not in list!');
+            }}
+            if (allowedUsernames.includes('lim_uncsrd')) {{
+                console.error('ERROR: lim_uncsrd should NOT be in list!');
+            }}
+            
+            const config = {{
+                delay: 3000,
+                maxApprovals: 50,
+                autoScroll: true,
+                allowedUsernames: allowedUsernames
+            }};
+            
+            console.log('Starting with config:', config);
+            window.startAutoApproval(config);
             """
             self.driver.execute_script(config_script)
             
@@ -571,7 +608,9 @@ class TwitterSeleniumAutomation:
         """Monitor the auto-approval progress"""
         try:
             print("Monitoring approval progress...")
+            print(f"Filtering for usernames: {', '.join(self.allowed_usernames)}")
             last_count = 0
+            last_skipped = 0
             no_change_counter = 0
             
             while True:
@@ -582,26 +621,29 @@ class TwitterSeleniumAutomation:
                 
                 if status:
                     current_count = status.get('approvedCount', 0)
+                    skipped_count = status.get('skippedCount', 0)
                     is_running = status.get('isRunning', False)
                     max_approvals = status.get('maxApprovals', 0)
                     
-                    print(f"Progress: {current_count}/{max_approvals} approved")
+                    # Only print if there's a change
+                    if current_count != last_count or skipped_count != last_skipped:
+                        print(f"Progress: {current_count}/{max_approvals} approved, {skipped_count} skipped (not in allowed list)")
+                        last_count = current_count
+                        last_skipped = skipped_count
                     
                     # Check if completed
                     if not is_running:
-                        print(f"✅ Auto-approval completed! Total approved: {current_count}")
+                        print(f"✅ Auto-approval completed! Total approved: {current_count}, skipped: {skipped_count}")
                         break
                     
-                    # Check if stuck
-                    if current_count == last_count:
+                    # Check if stuck (no new approvals or skips)
+                    if current_count == last_count and skipped_count == last_skipped:
                         no_change_counter += 1
                         if no_change_counter > 6:  # No change for 30 seconds
                             print("⚠️ No progress detected, may have completed all available requests")
                             break
                     else:
                         no_change_counter = 0
-                    
-                    last_count = current_count
                 else:
                     print("⚠️ Could not get approval status")
                     break
@@ -647,9 +689,10 @@ class TwitterSeleniumAutomation:
             print(f"\n❌ Automation error: {str(e)}")
             return False
         finally:
-            # Keep browser open for a bit to see results
+            # Auto-close browser after a short delay
             if not self.headless:
-                input("\nPress Enter to close the browser...")
+                print("\nClosing browser in 3 seconds...")
+                time.sleep(3)
             self.cleanup()
     
     def cleanup(self):
@@ -672,10 +715,22 @@ def main():
         print("TWITTER_USERNAME=your_username")
         print("TWITTER_PASSWORD=your_password")
         print("TWITTER_EMAIL=your_email (optional, for verification)")
+        print("ALLOWED_USERNAMES=user1,user2,user3 (optional, for filtering)")
         return
     
     # Create automation instance
     automation = TwitterSeleniumAutomation(headless=False)
+    
+    # Display configuration
+    print("\n" + "="*50)
+    print("🐦 Twitter Auto-Approver Configuration")
+    print("="*50)
+    print(f"Account: @{automation.username}")
+    print(f"Username Filter: {'Enabled' if automation.allowed_usernames else 'Disabled'}")
+    if automation.allowed_usernames:
+        print(f"Allowed Usernames (lowercase): {', '.join(automation.allowed_usernames)}")
+        print("Note: All usernames are matched case-insensitively")
+    print("="*50 + "\n")
     
     # Run the automation
     automation.run_full_automation()

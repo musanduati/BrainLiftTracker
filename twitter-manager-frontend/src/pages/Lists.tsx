@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, RefreshCw, Plus, Users, Activity } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/common/Card';
@@ -29,6 +29,7 @@ export const Lists: React.FC = () => {
   const [lists, setLists] = useState<ListWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadLists();
@@ -212,6 +213,7 @@ export const Lists: React.FC = () => {
                       variant="secondary"
                       size="sm"
                       className="flex-1"
+                      onClick={() => navigate(`/lists/${list.id}`)}
                     >
                       View Members
                     </Button>

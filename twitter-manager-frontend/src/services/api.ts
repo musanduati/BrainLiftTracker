@@ -225,6 +225,26 @@ class ApiClient {
     return data;
   }
 
+  // Sync account profiles from Twitter
+  async syncAccountProfiles(): Promise<{
+    message: string;
+    results: {
+      synced: Array<{
+        username: string;
+        display_name: string;
+        profile_picture: string;
+      }>;
+      failed: Array<{
+        username: string;
+        error: string;
+      }>;
+      total: number;
+    };
+  }> {
+    const { data } = await this.client.post('/accounts/sync-profiles', {});
+    return data;
+  }
+
   // Get accounts grouped by lists
   async getAccountsByLists(): Promise<{
     lists: Array<{

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Trophy, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../common/Card';
 import { Skeleton } from '../common/Skeleton';
@@ -22,6 +23,7 @@ interface UserRanking {
 export const UserActivityRankings: React.FC = () => {
   const [rankings, setRankings] = useState<UserRanking[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadRankings();
@@ -130,10 +132,15 @@ export const UserActivityRankings: React.FC = () => {
                 const barColor = getBarColor(index);
                 
                 return (
-                  <div key={index} className="space-y-1 group">
+                  <div 
+                    key={index} 
+                    className="space-y-1 group cursor-pointer transition-transform hover:scale-[1.02]"
+                    onClick={() => navigate(`/accounts/${rankings[index].id}`)}
+                    title={`View ${user.name}'s account details`}
+                  >
                     {/* Username and Percentage */}
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-sm font-medium truncate" title={user.name}>
+                      <span className="text-sm font-medium truncate group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
                         {user.name}
                       </span>
                       <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
@@ -142,9 +149,9 @@ export const UserActivityRankings: React.FC = () => {
                     </div>
                     
                     {/* Progress Bar with Hover Tooltip */}
-                    <div className="relative w-full h-5 bg-gray-200/50 dark:bg-gray-800/50 rounded-full overflow-hidden backdrop-blur-sm">
+                    <div className="relative w-full h-5 bg-gray-200/50 dark:bg-gray-800/50 rounded-full overflow-hidden backdrop-blur-sm group-hover:bg-gray-200/70 dark:group-hover:bg-gray-800/70 transition-colors">
                       <div
-                        className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 ease-out shadow-sm"
+                        className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 ease-out shadow-sm group-hover:shadow-md"
                         style={{
                           width: `${percentage}%`,
                           background: `linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%)`,
@@ -152,7 +159,7 @@ export const UserActivityRankings: React.FC = () => {
                       />
                       
                       {/* Hover Tooltip */}
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
                         <span className="bg-gray-900/90 text-white text-xs px-2 py-1 rounded shadow-lg">
                           {user.threads > 0 ? `${user.total} total: ${user.tweets} changes, ${user.threads} threads` : `${user.total} changes`}
                         </span>

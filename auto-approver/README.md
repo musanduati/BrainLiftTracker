@@ -1,6 +1,6 @@
 # Twitter Follow Request Auto-Approver
 
-Automated tool for managing Twitter/X follow requests using Selenium WebDriver with support for 2FA authentication codes.
+Automated tool for managing Twitter/X follow requests using Selenium WebDriver with support for 2FA authentication codes and username filtering.
 
 ## Prerequisites
 
@@ -17,6 +17,11 @@ TWITTER_PASSWORD=your_password
 TWITTER_EMAIL=your_email@example.com  # Optional
 MAX_APPROVALS=50
 DELAY_SECONDS=3
+
+# Username Filtering (Optional)
+# Only approve requests from these usernames (comma-separated)
+# Leave empty to approve all requests
+ALLOWED_USERNAMES=user1,user2,user3
 ```
 
 ### Multiple Accounts
@@ -66,9 +71,10 @@ python batch_automation.py --accounts brainlift_accounts.csv
 1. **Automated Login**: Handles Twitter login with credentials
 2. **2FA Support**: Interactive prompt for authentication codes when required
 3. **Navigation**: Accesses follow requests via More → Follower requests
-4. **Auto-Approval**: Clicks Accept buttons for each request
-5. **Progress Tracking**: Shows real-time approval count
-6. **Batch Processing**: Handles multiple accounts sequentially
+4. **Username Filtering**: Only approves requests from specified usernames (if configured)
+5. **Auto-Approval**: Clicks Accept buttons for matching requests
+6. **Progress Tracking**: Shows real-time approval and skip counts
+7. **Batch Processing**: Handles multiple accounts sequentially
 
 ## Authentication Code Handling
 
@@ -130,9 +136,42 @@ Enter authentication code (or press ENTER to skip): _
 }
 ```
 
+## Username Filtering
+
+The auto-approver now supports filtering follow requests by username. This allows you to:
+
+- **Approve only specific users**: Set `ALLOWED_USERNAMES` to a comma-separated list
+- **Approve all requests**: Leave `ALLOWED_USERNAMES` empty or unset
+- **Case-insensitive matching**: Usernames are matched regardless of case
+
+### Example Configuration
+```env
+# Only approve these specific users
+ALLOWED_USERNAMES=jliemandt,OpsAIGuru,AiAutodidact,ZeroShotFlow,munawar2434,klair_three,klair_two
+```
+
+### Console Output with Filtering
+```
+==================================================
+🐦 Twitter Auto-Approver Configuration
+==================================================
+Account: @your_account
+Username Filter: Enabled
+Allowed Usernames: jliemandt, OpsAIGuru, AiAutodidact, ZeroShotFlow, munawar2434, klair_three, klair_two
+==================================================
+
+Monitoring approval progress...
+Filtering for usernames: jliemandt, OpsAIGuru, AiAutodidact, ZeroShotFlow, munawar2434, klair_three, klair_two
+✅ Approved follow request from @jliemandt (#1)
+⏭️ Skipped follow request from @randomuser (not in allowed list)
+✅ Approved follow request from @OpsAIGuru (#2)
+Progress: 2/50 approved, 1 skipped (not in allowed list)
+```
+
 ## Files
 
-- `twitter_selenium_automation.py` - Core automation logic
+- `twitter_selenium_automation.py` - Core automation logic with username filtering
+- `twitter_auto_approver.js` - JavaScript module for browser-side approval
 - `batch_automation.py` - Multi-account processor
 - `run_automation.py` - Simple single-account runner
 - `selenium_setup.py` - Browser driver configuration

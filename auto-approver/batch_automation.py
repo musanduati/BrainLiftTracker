@@ -190,6 +190,11 @@ class BatchTwitterAutomation:
                 else:
                     result['error'] = "No follow requests found or unable to access them"
             
+            # Always ensure browser is closed after processing
+            if hasattr(automation, 'driver') and automation.driver:
+                automation.cleanup()
+                print(f"✅ Browser closed for @{username}")
+                
         except Exception as e:
             result['error'] = str(e)
             print(f"❌ Error processing @{username}: {str(e)}")
@@ -197,7 +202,7 @@ class BatchTwitterAutomation:
             # Ensure cleanup even on error
             try:
                 if 'automation' in locals() and hasattr(automation, 'driver') and automation.driver:
-                    automation.driver.quit()
+                    automation.cleanup()
                     print(f"   Browser closed for @{username}")
             except:
                 pass
@@ -230,7 +235,7 @@ class BatchTwitterAutomation:
             
             # Wait between accounts to avoid rate limiting
             if i < len(self.accounts):
-                wait_time = 30  # 30 seconds between accounts
+                wait_time = 5  # 5 seconds between accounts
                 print(f"\n⏳ Waiting {wait_time} seconds before next account...")
                 time.sleep(wait_time)
         
