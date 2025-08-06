@@ -459,7 +459,7 @@ def get_accounts():
         conn = get_db()
         if account_type:
             cursor = conn.execute(
-                '''SELECT id, username, status, account_type, created_at, 
+                '''SELECT id, username, display_name, profile_picture, status, account_type, created_at, 
                           token_expires_at, refresh_failure_count 
                    FROM twitter_account 
                    WHERE account_type = ? 
@@ -467,7 +467,7 @@ def get_accounts():
                 (account_type,)
             )
         else:
-            cursor = conn.execute('''SELECT id, username, status, account_type, created_at,
+            cursor = conn.execute('''SELECT id, username, display_name, profile_picture, status, account_type, created_at,
                                            token_expires_at, refresh_failure_count 
                                     FROM twitter_account 
                                     ORDER BY created_at DESC''')
@@ -496,6 +496,8 @@ def get_accounts():
             result.append({
                 'id': acc['id'],
                 'username': acc['username'],
+                'displayName': acc['display_name'] if 'display_name' in acc.keys() else acc['username'],
+                'profilePicture': acc['profile_picture'] if 'profile_picture' in acc.keys() else None,
                 'status': acc['status'],
                 'account_type': acc['account_type'] if 'account_type' in acc.keys() else 'managed',
                 'created_at': acc['created_at'],
@@ -3261,6 +3263,8 @@ def debug_group_concat():
                     THEN json_object(
                         'id', ta_member.id,
                         'username', ta_member.username,
+                        'displayName', COALESCE(ta_member.display_name, ta_member.username),
+                        'profilePicture', ta_member.profile_picture,
                         'account_type', ta_member.account_type
                     )
                     ELSE NULL END, '|||'
@@ -3849,6 +3853,8 @@ def get_accounts_by_lists():
                     THEN json_object(
                         'id', ta_member.id,
                         'username', ta_member.username,
+                        'displayName', COALESCE(ta_member.display_name, ta_member.username),
+                        'profilePicture', ta_member.profile_picture,
                         'account_type', ta_member.account_type
                     )
                     ELSE NULL END, '|||'
@@ -3866,6 +3872,8 @@ def get_accounts_by_lists():
             SELECT 
                 ta.id,
                 ta.username,
+                ta.display_name,
+                ta.profile_picture,
                 ta.account_type
             FROM twitter_account ta
             WHERE ta.account_type = 'managed'
@@ -3875,17 +3883,12 @@ def get_accounts_by_lists():
             ORDER BY ta.username
         ''').fetchall()
         
-        print(f"DEBUG: Found {len(unassigned_accounts)} unassigned accounts")
-        print(f"DEBUG: Unassigned: {[{'id': a['id'], 'username': a['username']} for a in unassigned_accounts]}")
-        
         conn.close()
         
         # Process results
         lists = []
-        print(f"DEBUG: Processing {len(lists_with_members)} lists")
         for list_row in lists_with_members:
             members = []
-            print(f"DEBUG: List {list_row['name']} - Raw members: {list_row['members']}")
             if list_row['members']:
                 # Parse concatenated JSON strings using ||| separator
                 member_jsons = list_row['members'].split('|||')
@@ -3914,9 +3917,20 @@ def get_accounts_by_lists():
             })
         
         # Format response
+        # Format unassigned accounts with camelCase
+        formatted_unassigned = []
+        for account in unassigned_accounts:
+            formatted_unassigned.append({
+                'id': account['id'],
+                'username': account['username'],
+                'displayName': account['display_name'] if account['display_name'] else account['username'],
+                'profilePicture': account['profile_picture'],
+                'account_type': account['account_type']
+            })
+        
         response = {
             'lists': lists,
-            'unassigned_accounts': [dict(account) for account in unassigned_accounts],
+            'unassigned_accounts': formatted_unassigned,
             'stats': {
                 'total_lists': len(lists),
                 'total_managed_accounts': len(unassigned_accounts) + sum(len([m for m in l['members'] if m.get('account_type') == 'managed']) for l in lists),
