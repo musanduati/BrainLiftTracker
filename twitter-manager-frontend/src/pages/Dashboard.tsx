@@ -114,21 +114,23 @@ export const Dashboard: React.FC = () => {
           {statCards.map((stat, index) => {
             const Icon = stat.icon;
             const CardComponent = (
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardContent className="p-6">
+              <Card className="group relative overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1">
+                <CardContent className="p-6 relative z-10">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-muted-foreground">{stat.title}</p>
-                      <p className="text-2xl font-bold mt-1">
+                      <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">{stat.title}</p>
+                      <p className="text-2xl font-bold mt-1 group-hover:scale-105 transition-transform origin-left">
                         {typeof stat.value === 'string' ? stat.value : formatNumber(stat.value)}
                       </p>
                       <p className="text-sm text-muted-foreground mt-1">{stat.description}</p>
                     </div>
-                    <div className={`p-3 rounded-lg ${stat.bgColor}`}>
-                      <Icon size={24} className={stat.color} />
+                    <div className={`p-3 rounded-lg ${stat.bgColor} group-hover:scale-110 transition-transform duration-300`}>
+                      <Icon size={24} className={`${stat.color} group-hover:animate-pulse`} />
                     </div>
                   </div>
                 </CardContent>
+                {/* Gradient overlay on hover */}
+                <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-primary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               </Card>
             );
 
