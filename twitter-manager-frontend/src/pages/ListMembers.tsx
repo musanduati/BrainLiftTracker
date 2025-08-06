@@ -90,7 +90,7 @@ export const ListMembers: React.FC = () => {
         }
         
         let lastActivity = null;
-        const validDates = [lastTweetDate, lastThreadDate].filter(d => d && !isNaN(d.getTime()));
+        const validDates = [lastTweetDate, lastThreadDate].filter((d): d is Date => d !== null && !isNaN(d.getTime()));
         if (validDates.length > 0) {
           lastActivity = new Date(Math.max(...validDates.map(d => d.getTime()))).toISOString();
         }
@@ -205,12 +205,13 @@ export const ListMembers: React.FC = () => {
             const hasActivity = totalActivity > 0;
             
             return (
-              <Card 
-                key={member.id} 
+              <div
+                key={member.id}
                 className="hover:shadow-lg transition-all hover:scale-[1.02] cursor-pointer"
                 onClick={() => handleMemberClick(member.id)}
               >
-                <CardContent className="p-4">
+                <Card>
+                  <CardContent className="p-4">
                   <div className="flex items-start gap-3">
                     {/* Profile Picture */}
                     <div className="flex-shrink-0">
@@ -264,8 +265,9 @@ export const ListMembers: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             );
           })}
         </div>
