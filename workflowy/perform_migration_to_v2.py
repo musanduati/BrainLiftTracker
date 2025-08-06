@@ -155,15 +155,8 @@ class PerformMigrationToV2:
         return analysis
     
     def select_directories_for_migration(self) -> List[str]:
-        """Select 2 directories for test migration."""
+        """Select directories for migration."""
         selected_dirs = [
-            # 'agora',
-            # '2025-05-20t2144-iep',
-            # 'ai-storytelling',
-            # 'alphagt-school-chess',
-            # 'an-offline-local-hig'
-            # 'workflowy-x-integrat'
-            ###################################
             # '2025-05-20t2144-iep',
             # 'agora',
             # 'ai-storytelling',
