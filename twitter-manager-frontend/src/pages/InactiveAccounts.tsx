@@ -12,7 +12,7 @@ import { getAvatarColor, getAvatarText } from '../utils/avatar';
 import { formatRelativeTime } from '../utils/format';
 import toast from 'react-hot-toast';
 
-const ACCOUNTS_PER_PAGE = 12;
+const ACCOUNTS_PER_PAGE = 15;
 
 export const InactiveAccounts: React.FC = () => {
   const [inactiveAccounts, setInactiveAccounts] = useState<TwitterAccount[]>([]);
@@ -78,9 +78,9 @@ export const InactiveAccounts: React.FC = () => {
       <>
         <TopBar />
         <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} className="h-64" />
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {[...Array(10)].map((_, i) => (
+              <Skeleton key={i} className="h-48" />
             ))}
           </div>
         </div>
@@ -137,50 +137,54 @@ export const InactiveAccounts: React.FC = () => {
           </Card>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {paginatedAccounts.map((account) => (
               <Card key={account.id} className="hover:shadow-lg transition-all duration-200">
-                <CardHeader className="pb-4">
+                <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold text-xl`}>
+                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold text-lg`}>
                       {getAvatarText(account.username, account.displayName)}
                     </div>
-                    <Badge variant="outline" className="text-orange-600">
+                    <Badge variant="outline" className="text-orange-600 text-xs">
                       No Content
                     </Badge>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
                     {/* Account Info */}
                     <div>
-                      <h3 className="font-semibold text-lg">{account.displayName || account.username}</h3>
-                      <p className="text-muted-foreground">@{account.username}</p>
+                      <h3 className="font-semibold text-sm truncate" title={account.displayName || account.username}>
+                        {account.displayName || account.username}
+                      </h3>
+                      <p className="text-muted-foreground text-xs truncate" title={`@${account.username}`}>
+                        @{account.username}
+                      </p>
                     </div>
 
-                    {/* Status Info */}
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Clock size={14} className="text-muted-foreground" />
-                        <span className="text-muted-foreground">{getTimeInactive(account.lastActiveAt)}</span>
+                    {/* Status Info - more compact */}
+                    <div className="space-y-1 text-xs">
+                      <div className="flex items-center gap-1">
+                        <Clock size={12} className="text-muted-foreground" />
+                        <span className="text-muted-foreground truncate">{getTimeInactive(account.lastActiveAt)}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar size={14} className="text-muted-foreground" />
-                        <span className="text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Calendar size={12} className="text-muted-foreground" />
+                        <span className="text-muted-foreground truncate">
                           Added {new Date(account.createdAt).toLocaleDateString()}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <div className={`w-2 h-2 rounded-full ${getStatusColor(account.tokenStatus)}`} />
-                        <span className="text-muted-foreground">
-                          Token: {account.tokenStatus?.replace('_', ' ') || 'Unknown'}
+                        <span className="text-muted-foreground truncate">
+                          {account.tokenStatus?.replace('_', ' ') || 'Unknown'}
                         </span>
                       </div>
                     </div>
 
                     {/* Account Type */}
                     {account.accountType === 'list_owner' && (
-                      <Badge variant="secondary" className="w-fit">
+                      <Badge variant="secondary" className="w-fit text-xs">
                         List Owner
                       </Badge>
                     )}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { List } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../common/Card';
 import { Button } from '../common/Button';
@@ -22,6 +22,7 @@ interface ListRanking {
 export const ListActivityRankings: React.FC = () => {
   const [rankings, setRankings] = useState<ListRanking[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadListRankings();
@@ -166,11 +167,16 @@ export const ListActivityRankings: React.FC = () => {
                 const barColor = getBarColor(index);
                 
                 return (
-                  <div key={list.id} className="space-y-1 group">
+                  <div 
+                    key={list.id} 
+                    className="space-y-1 group cursor-pointer transition-transform hover:scale-[1.02]"
+                    onClick={() => navigate(`/lists/${list.id}`)}
+                    title={`View members of ${list.name}`}
+                  >
                     {/* List name and stats */}
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="text-sm font-medium truncate" title={list.name}>
+                        <span className="text-sm font-medium truncate group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
                           {list.name}
                         </span>
                         <span className="text-xs text-muted-foreground">
@@ -183,9 +189,9 @@ export const ListActivityRankings: React.FC = () => {
                     </div>
                     
                     {/* Progress Bar with Hover Tooltip */}
-                    <div className="relative w-full h-5 bg-gray-200/50 dark:bg-gray-800/50 rounded-full overflow-hidden backdrop-blur-sm">
+                    <div className="relative w-full h-5 bg-gray-200/50 dark:bg-gray-800/50 rounded-full overflow-hidden backdrop-blur-sm group-hover:bg-gray-200/70 dark:group-hover:bg-gray-800/70 transition-colors">
                       <div
-                        className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 ease-out shadow-sm"
+                        className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 ease-out shadow-sm group-hover:shadow-md"
                         style={{
                           width: `${percentage}%`,
                           background: `linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%)`,
@@ -193,7 +199,7 @@ export const ListActivityRankings: React.FC = () => {
                       />
                       
                       {/* Hover Tooltip */}
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
                         <span className="bg-gray-900/90 text-white text-xs px-2 py-1 rounded shadow-lg">
                           {list.totalActivity} total activity ({list.activityRate}% member activity rate)
                         </span>

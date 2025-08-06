@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Grid3x3, List, RefreshCw, ArrowLeft, UserCheck } from 'lucide-react';
+import { Grid3x3, List, RefreshCw, ArrowLeft, UserCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { AccountCard } from '../components/accounts/AccountCard';
 import { AccountList } from '../components/accounts/AccountList';
@@ -30,6 +30,8 @@ export const Accounts: React.FC = () => {
   }>({ lists: [], unassigned_accounts: [] });
   const [filteredAccounts, setFilteredAccounts] = useState<TwitterAccount[]>([]);
   const [isSyncingProfiles, setIsSyncingProfiles] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const accountsPerPage = 15;
 
   useEffect(() => {
     loadAccounts();
@@ -46,21 +48,69 @@ export const Accounts: React.FC = () => {
     return listNames;
   };
 
+  // Reset page when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedListId]);
+
   useEffect(() => {
     // Filter accounts based on selected list
     if (selectedListId === null) {
-      // Show all accounts with list info
-      const accountsWithLists = accounts.map(account => ({
-        ...account,
-        listNames: getAccountListNames(account.id)
-      }));
-      setFilteredAccounts(accountsWithLists);
+      // Show ALL accounts from accountsByList when "All" is selected
+      const allAccounts: TwitterAccount[] = [];
+      
+      // Add all accounts from lists
+      accountsByList.lists.forEach(list => {
+        list.members?.forEach((member: any) => {
+          // Check if we already have this account
+          if (!allAccounts.find(a => a.id === member.id)) {
+            // Find the full account data if available
+            const fullAccount = accounts.find(a => a.id === member.id);
+            allAccounts.push({
+              ...member,
+              tweetCount: fullAccount?.tweetCount || 0,
+              threadCount: fullAccount?.threadCount || 0,
+              listNames: getAccountListNames(member.id)
+            });
+          }
+        });
+      });
+      
+      // Add unassigned accounts
+      accountsByList.unassigned_accounts?.forEach((unassigned: any) => {
+        if (!allAccounts.find(a => a.id === unassigned.id)) {
+          const fullAccount = accounts.find(a => a.id === unassigned.id);
+          allAccounts.push({
+            ...unassigned,
+            tweetCount: fullAccount?.tweetCount || 0,
+            threadCount: fullAccount?.threadCount || 0,
+            listNames: []
+          });
+        }
+      });
+      
+      // Sort accounts by total activity (tweets + threads) in descending order
+      allAccounts.sort((a, b) => {
+        const totalA = (a.tweetCount || 0) + (a.threadCount || 0);
+        const totalB = (b.tweetCount || 0) + (b.threadCount || 0);
+        return totalB - totalA;
+      });
+      
+      setFilteredAccounts(allAccounts);
     } else if (selectedListId === 'unassigned') {
       // Show unassigned accounts - need to merge with full account data
       const unassignedWithFullData = accountsByList.unassigned_accounts.map((unassigned: any) => {
         const fullAccount = accounts.find(a => a.id === unassigned.id);
         return fullAccount ? { ...fullAccount, listNames: [] } : { ...unassigned, listNames: [] };
       });
+      
+      // Sort by activity
+      unassignedWithFullData.sort((a, b) => {
+        const totalA = (a.tweetCount || 0) + (a.threadCount || 0);
+        const totalB = (b.tweetCount || 0) + (b.threadCount || 0);
+        return totalB - totalA;
+      });
+      
       setFilteredAccounts(unassignedWithFullData);
     } else {
       // Show accounts from selected list - merge with full account data
@@ -69,9 +119,27 @@ export const Accounts: React.FC = () => {
         const fullAccount = accounts.find(a => a.id === member.id);
         return fullAccount ? { ...fullAccount, listNames: [list.name] } : { ...member, listNames: [list.name] };
       });
+      
+      // Sort by activity
+      accountsWithLists.sort((a: any, b: any) => {
+        const totalA = (a.tweetCount || 0) + (a.threadCount || 0);
+        const totalB = (b.tweetCount || 0) + (b.threadCount || 0);
+        return totalB - totalA;
+      });
+      
       setFilteredAccounts(accountsWithLists);
     }
   }, [selectedListId, accounts, accountsByList]);
+
+  // Calculate paginated accounts
+  const paginatedAccounts = useMemo(() => {
+    const startIndex = (currentPage - 1) * accountsPerPage;
+    const endIndex = startIndex + accountsPerPage;
+    return filteredAccounts.slice(startIndex, endIndex);
+  }, [filteredAccounts, currentPage]);
+
+  // Calculate total pages
+  const totalPages = Math.ceil(filteredAccounts.length / accountsPerPage);
 
   const handleSyncProfiles = async () => {
     try {
@@ -188,9 +256,14 @@ export const Accounts: React.FC = () => {
 
         {/* Header Actions */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-semibold">
-            Twitter Accounts ({filteredAccounts.length})
-          </h2>
+          <div>
+            <h2 className="text-2xl font-semibold">
+              Twitter Accounts ({filteredAccounts.length})
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Sorted by activity (most active first)
+            </p>
+          </div>
           
           <div className="flex gap-2">
             <Button
@@ -243,20 +316,84 @@ export const Accounts: React.FC = () => {
                 ? 'No unassigned accounts found' 
                 : selectedListId 
                   ? 'No accounts in this list' 
-                  : 'No accounts with tweets found'}
+                  : 'No accounts found'}
             </p>
           </div>
-        ) : accountViewMode === 'grid' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredAccounts.map((account) => (
-              <AccountCard
-                key={account.id}
-                account={account}
-              />
-            ))}
-          </div>
         ) : (
-          <AccountList accounts={filteredAccounts} />
+          <>
+            {accountViewMode === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {paginatedAccounts.map((account) => (
+                  <AccountCard
+                    key={account.id}
+                    account={account}
+                  />
+                ))}
+              </div>
+            ) : (
+              <AccountList accounts={paginatedAccounts} />
+            )}
+            
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6 py-4 border-t">
+                <div className="text-sm text-muted-foreground">
+                  Showing {(currentPage - 1) * accountsPerPage + 1} to{' '}
+                  {Math.min(currentPage * accountsPerPage, filteredAccounts.length)} of{' '}
+                  {filteredAccounts.length} accounts
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft size={16} className="mr-1" />
+                    Previous
+                  </Button>
+                  
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={pageNum === currentPage ? 'primary' : 'ghost'}
+                          size="sm"
+                          onClick={() => setCurrentPage(pageNum)}
+                          className="w-8 h-8 p-0"
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                    <ChevronRight size={16} className="ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </>

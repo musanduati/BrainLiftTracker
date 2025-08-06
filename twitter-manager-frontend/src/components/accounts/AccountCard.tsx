@@ -1,11 +1,10 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
 import { TwitterAccount } from '../../types';
 import { Card, CardContent } from '../common/Card';
 import { Badge } from '../common/Badge';
-import { Button } from '../common/Button';
-import { formatNumber, formatRelativeTime, getAccountHealthBadgeClass } from '../../utils/format';
+import { formatNumber } from '../../utils/format';
 import { getAvatarColor, getAvatarText } from '../../utils/avatar';
 
 interface AccountCardProps {
@@ -15,18 +14,23 @@ interface AccountCardProps {
 export const AccountCard: React.FC<AccountCardProps> = ({
   account,
 }) => {
+  const navigate = useNavigate();
 
   return (
-    <Card className="relative overflow-hidden transition-all duration-200 hover:shadow-lg">
-
-      <CardContent className="p-6">
-        <div className="flex flex-col items-center text-center">
-          {/* Profile picture */}
+    <div 
+      className="cursor-pointer transition-transform hover:scale-[1.02] h-full"
+      onClick={() => navigate(`/accounts/${account.id}`)}
+      title={`View ${account.displayName || account.username}'s changes`}
+    >
+      <Card className="relative overflow-hidden transition-all duration-200 hover:shadow-xl h-full flex flex-col">
+        <CardContent className="p-4 flex-1 flex flex-col">
+        <div className="flex flex-col items-center text-center flex-1">
+          {/* Profile picture - smaller */}
           {account.profilePicture ? (
             <img
               src={account.profilePicture}
               alt={account.displayName || account.username}
-              className="w-20 h-20 rounded-full mb-4 object-cover"
+              className="w-16 h-16 rounded-full mb-3 object-cover"
               onError={(e) => {
                 // Fallback to colored avatar on error
                 const target = e.target as HTMLImageElement;
@@ -37,76 +41,58 @@ export const AccountCard: React.FC<AccountCardProps> = ({
             />
           ) : null}
           <div 
-            className={`w-20 h-20 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold text-2xl mb-4 ${account.profilePicture ? 'hidden' : ''}`}
+            className={`w-16 h-16 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold text-xl mb-3 ${account.profilePicture ? 'hidden' : ''}`}
             style={{ display: account.profilePicture ? 'none' : 'flex' }}
           >
             {getAvatarText(account.username, account.displayName)}
           </div>
 
-          {/* Account info */}
-          <h3 className="font-semibold text-lg">{account.displayName || account.username}</h3>
-          <p className="text-muted-foreground">@{account.username}</p>
+          {/* Account info - smaller text */}
+          <h3 className="font-semibold text-sm truncate w-full px-1" title={account.displayName || account.username}>
+            {account.displayName || account.username}
+          </h3>
+          <p className="text-muted-foreground text-xs truncate w-full" title={`@${account.username}`}>
+            @{account.username}
+          </p>
 
-          {/* Stats */}
-          <div className="flex items-center gap-6 mt-4 text-sm">
-            {account.tweetCount !== undefined && account.tweetCount > 0 && (
-              <div className="text-center">
-                <p className="font-semibold text-xl">{formatNumber(account.tweetCount)}</p>
-                <p className="text-muted-foreground">Changes</p>
-              </div>
-            )}
-            {account.threadCount !== undefined && account.threadCount > 0 && (
-              <div className="text-center">
-                <p className="font-semibold text-xl">{formatNumber(account.threadCount)}</p>
-                <p className="text-muted-foreground">Threads</p>
-              </div>
-            )}
+          {/* Stats - smaller and always show both for consistent height */}
+          <div className="flex items-center gap-4 mt-3 text-xs h-12">
+            <div className="text-center">
+              <p className="font-semibold text-lg">{formatNumber(account.tweetCount || 0)}</p>
+              <p className="text-muted-foreground text-xs">Changes</p>
+            </div>
+            <div className="text-center">
+              <p className="font-semibold text-lg">{formatNumber(account.threadCount || 0)}</p>
+              <p className="text-muted-foreground text-xs">Threads</p>
+            </div>
           </div>
 
-          {/* Lists */}
+          {/* Lists - smaller */}
           {account.listNames && account.listNames.length > 0 && (
-            <div className="text-sm text-muted-foreground mt-3">
+            <div className="text-xs text-muted-foreground mt-2 truncate w-full px-1" title={account.listNames.join(', ')}>
               {account.listNames.join(', ')}
             </div>
           )}
 
-          {/* Status badges */}
-          <div className="flex flex-wrap gap-2 mt-4">
+          {/* Status badges - smaller */}
+          <div className="flex flex-wrap gap-1 mt-3 justify-center min-h-[24px]">
             {/* Account type */}
             {account.accountType === 'list_owner' && (
-              <Badge variant="secondary">List Owner</Badge>
+              <Badge variant="secondary" className="text-xs py-0 px-1">List Owner</Badge>
             )}
 
-            {/* Token status */}
-            <Badge className={getAccountHealthBadgeClass(account.tokenStatus)}>
-              {account.tokenStatus === 'healthy' && <CheckCircle size={12} className="mr-1" />}
-              {account.tokenStatus === 'refresh_failed' && <AlertCircle size={12} className="mr-1" />}
-              {account.tokenStatus === 'healthy' ? 'Connected' : account.tokenStatus?.replace('_', ' ') || 'Unknown'}
-            </Badge>
+            {/* Token status - simplified */}
+            {account.tokenStatus === 'refresh_failed' && (
+              <Badge className="bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400 text-xs py-0 px-1">
+                <AlertCircle size={10} className="mr-1" />
+                Failed
+              </Badge>
+            )}
           </div>
 
-          {/* Last active */}
-          {account.lastActiveAt && (
-            <p className="text-xs text-muted-foreground mt-2">
-              Active {formatRelativeTime(account.lastActiveAt)}
-            </p>
-          )}
-
-          {/* Actions */}
-          <div className="flex flex-col gap-2 w-full mt-6">
-            <Link to={`/accounts/${account.id}`} className="w-full">
-              <Button
-                variant="primary"
-                size="sm"
-                className="w-full"
-              >
-                <Eye size={16} className="mr-2" />
-                View Changes
-              </Button>
-            </Link>
-          </div>
         </div>
       </CardContent>
     </Card>
+    </div>
   );
 };

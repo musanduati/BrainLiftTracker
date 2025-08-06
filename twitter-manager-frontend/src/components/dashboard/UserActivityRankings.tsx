@@ -49,7 +49,7 @@ export const UserActivityRankings: React.FC = () => {
   const chartData = rankings.map(user => {
     const activityCount = user.totalActivity || user.tweetCount;
     return {
-      name: user.username,
+      name: user.displayName || user.username,
       tweets: user.tweetCount,
       threads: user.threadCount || 0,
       total: activityCount,
@@ -136,7 +136,7 @@ export const UserActivityRankings: React.FC = () => {
                     key={index} 
                     className="space-y-1 group cursor-pointer transition-transform hover:scale-[1.02]"
                     onClick={() => navigate(`/accounts/${rankings[index].id}`)}
-                    title={`View ${user.name}'s account details`}
+                    title={`View ${rankings[index].displayName || rankings[index].username}'s account details`}
                   >
                     {/* Username and Percentage */}
                     <div className="flex items-center justify-between gap-4">

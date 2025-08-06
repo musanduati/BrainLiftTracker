@@ -144,8 +144,6 @@ export const AccountDetail: React.FC = () => {
   const totalChanges = totalThreadChanges + totalIndividualChanges;
   const totalPosted = threads.reduce((sum, thread) => sum + thread.posted_count, 0) + 
     individualTweets.filter(t => t.status === 'posted').length;
-  const totalPending = threads.reduce((sum, thread) => sum + thread.pending_count, 0) +
-    individualTweets.filter(t => t.status === 'pending').length;
 
   // Calculate engagement stats (mock data for now)
   const engagementRate = 2.4;
@@ -282,11 +280,6 @@ export const AccountDetail: React.FC = () => {
                         {thread.posted_count} posted
                       </Badge>
                     )}
-                    {thread.pending_count > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        {thread.pending_count} pending
-                      </Badge>
-                    )}
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -406,12 +399,6 @@ export const AccountDetail: React.FC = () => {
                     <span className="font-semibold">{totalPosted}</span>
                     <span className="text-muted-foreground ml-1">Posted</span>
                   </div>
-                  {totalPending > 0 && (
-                    <div>
-                      <span className="font-semibold text-yellow-600">{totalPending}</span>
-                      <span className="text-muted-foreground ml-1">Pending</span>
-                    </div>
-                  )}
                   <div className="flex items-center gap-1 text-muted-foreground">
                     <Calendar size={14} />
                     <span>Joined {new Date(account.createdAt).toLocaleDateString()}</span>
