@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Activity, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Users, Activity, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -30,11 +30,14 @@ interface ListDetails {
   members: ListMember[];
 }
 
+const MEMBERS_PER_PAGE = 16; // 4x4 grid
+
 export const ListMembers: React.FC = () => {
   const { listId } = useParams<{ listId: string }>();
   const navigate = useNavigate();
   const [list, setList] = useState<ListDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     loadListDetails();
@@ -120,14 +123,25 @@ export const ListMembers: React.FC = () => {
     navigate(`/accounts/${memberId}`);
   };
 
+  // Calculate paginated members
+  const paginatedMembers = useMemo(() => {
+    if (!list) return [];
+    const startIndex = (currentPage - 1) * MEMBERS_PER_PAGE;
+    const endIndex = startIndex + MEMBERS_PER_PAGE;
+    return list.members.slice(startIndex, endIndex);
+  }, [list, currentPage]);
+
+  // Calculate total pages
+  const totalPages = list ? Math.ceil(list.members.length / MEMBERS_PER_PAGE) : 0;
+
   if (loading) {
     return (
       <>
         <TopBar />
         <div className="p-6">
           <Skeleton className="h-32 mb-6" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {[...Array(8)].map((_, i) => (
               <Skeleton key={i} className="h-32" />
             ))}
           </div>
@@ -195,8 +209,8 @@ export const ListMembers: React.FC = () => {
         </div>
 
         {/* Members Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {list.members.map((member) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {paginatedMembers.map((member) => {
             const totalActivity = (member.tweetCount || 0) + (member.threadCount || 0);
             const hasActivity = totalActivity > 0;
             
@@ -267,6 +281,66 @@ export const ListMembers: React.FC = () => {
             );
           })}
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-6 py-4 border-t">
+            <div className="text-sm text-muted-foreground">
+              Showing {(currentPage - 1) * MEMBERS_PER_PAGE + 1} to{' '}
+              {Math.min(currentPage * MEMBERS_PER_PAGE, list.members.length)} of{' '}
+              {list.members.length} members
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft size={16} className="mr-1" />
+                Previous
+              </Button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={pageNum === currentPage ? 'primary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className="w-8 h-8 p-0"
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight size={16} className="ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {list.members.length === 0 && (
           <div className="text-center py-12">
