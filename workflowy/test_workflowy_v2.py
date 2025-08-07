@@ -4,32 +4,647 @@ Updated to use project-based identification instead of URL-derived parameters.
 Eliminates dependency on username parsing from URLs.
 """
 
+import hashlib
 import json
 import asyncio
 import aiohttp
-import hashlib
 import re
 import html
 import time
 from datetime import datetime
-from typing import List, Dict, Optional, Any
+from typing import Any, List, Dict
+import diff_match_patch as dmp_module
 from aws_storage_v2 import AWSStorageV2
-from project_id_utils import is_valid_project_id, normalize_project_id
+from project_id_utils import normalize_project_id
 from logger_config import logger
 from llm_service import extract_node_id_using_llm, get_lm_service
-from test_workflowy import (
-    # Import existing utility functions that don't depend on user_name
-    extract_single_dok_section_llm,
-    parse_dok_points,
-    get_timestamp,
-    create_dok_state_from_points,
-    advanced_compare_dok_states,
-    generate_advanced_change_tweets,
-    WorkflowyNode,
-    InitializationData,
-    extract_top_level_nodes
-)
 
+class AuxiliaryProject:
+    def __init__(self, shareId: str):
+        self.shareId = shareId
+
+class ProjectTreeData:
+    def __init__(self, auxiliaryProjectTreeInfos: list):
+        self.auxiliaryProjectTreeInfos = [
+            AuxiliaryProject(info.get('shareId', '')) if isinstance(info, dict) else 
+            AuxiliaryProject(info.shareId) if hasattr(info, 'shareId') else
+            info 
+            for info in auxiliaryProjectTreeInfos
+        ]
+
+class InitializationData:
+    def __init__(self, projectTreeData: dict):
+        self.projectTreeData = ProjectTreeData(
+            projectTreeData.get('auxiliaryProjectTreeInfos', [])
+        )
+
+    def transform(self) -> list[str]:
+        return [info.shareId for info in self.projectTreeData.auxiliaryProjectTreeInfos]
+
+class WorkflowyNode:
+    def __init__(self, node_id: str, node_name: str, content: str, timestamp: float = None):
+        self.node_id = node_id
+        self.node_name = node_name
+        self.content = content
+        self.timestamp = timestamp
+
+def _clean_html_content(content: str) -> str:
+    """Clean HTML content and convert to markdown (standalone version)."""
+    if not content:
+        return ""
+    
+    # Remove mention tags
+    content = re.sub(r"<mention[^>]*>[^<]*</mention>", "", content)
+
+    # Convert hyperlinks to markdown format
+    def replace_link(match):
+        href = re.search(r'href=["\'](.*?)["\']', match.group(0))
+        text = re.sub(r"<[^>]+>", "", match.group(0))
+        if href:
+            return f"[{text.strip()}]({href.group(1)})"
+        return text.strip()
+
+    content = re.sub(r"<a[^>]+>.*?</a>", replace_link, content)
+    
+    # Remove all remaining HTML tags
+    content = re.sub(r"<[^>]+>", "", content)
+    
+    # Decode HTML entities (THIS IS THE KEY FIX)
+    content = html.unescape(content)
+    
+    return content.strip()
+
+def _extract_node_content(item_data_list: list[dict[str, str]], node_id: str, header_prefix: str) -> str:
+    """
+    Extract content for a specific node and its children in markdown format.
+    Now with HTML tag cleaning!
+    
+    Args:
+        item_data_list: List of item data from Workflowy
+        node_id: ID of the node to extract
+        header_prefix: Prefix for the section header
+        
+    Returns:
+        str: Formatted content for the node (cleaned of HTML tags)
+    """
+    def get_node_by_id(target_id: str) -> dict | None:
+        return next((item for item in item_data_list if item["id"] == target_id), None)
+    
+    def get_children(parent_id: str) -> list[dict]:
+        return [item for item in item_data_list if item.get("prnt") == parent_id]
+    
+    def format_node_content(node: dict, indent_level: int = 0) -> str:
+        indent = "  " * indent_level
+        
+        # Clean HTML tags from node name
+        node_name = _clean_html_content(node.get('nm', '').strip())
+        content = f"{indent}- {node_name}\n"
+        
+        # Add note content if present (also clean HTML)
+        if node.get('no'):
+            note_content = _clean_html_content(node['no'].strip())
+            content += f"{indent}  {note_content}\n"
+        
+        # Recursively add children
+        children = get_children(node["id"])
+        for child in sorted(children, key=lambda x: x.get("pr", 0)):
+            content += format_node_content(child, indent_level + 1)
+            
+        return content
+    
+    # Get the main node
+    main_node = get_node_by_id(node_id)
+    if not main_node:
+        return ""
+    
+    # Start with header (clean HTML from main node name)
+    main_node_name = _clean_html_content(main_node.get('nm', '').strip())
+    result = f"{header_prefix} - {main_node_name}\n"
+    
+    # Add children content
+    children = get_children(node_id)
+    for child in sorted(children, key=lambda x: x.get("pr", 0)):
+        result += format_node_content(child, 2)  # Start with 2-space indent for DOK children
+    
+    return result
+
+async def extract_single_dok_section_llm(item_data_list: list[dict[str, str]], section_prefix: str) -> str:
+    """
+    Extract a single DOK section using LLM-based node identification.
+    
+    Args:
+        item_data_list: List of item data from Workflowy
+        section_prefix: "DOK4" or "DOK3"
+        
+    Returns:
+        str: Content for the specified DOK section
+    """
+    try:
+        # Get top-level nodes
+        main_nodes = await extract_top_level_nodes(item_data_list)
+        logger.info(f"Main nodes: {main_nodes}")
+        
+        # Find the specific DOK node using LLM
+        dok_node_id = await extract_node_id_using_llm(section_prefix, main_nodes)
+        logger.info(f"Dok node id: {dok_node_id}")
+        if dok_node_id:
+            return _extract_node_content(item_data_list, dok_node_id, f"  - {section_prefix}")
+
+        else:
+            logger.warning("Could not find %s node", section_prefix)
+            return ""
+            
+    except Exception as e:
+        logger.error("Error extracting %s section with LLM: %s", section_prefix, e)
+        return ""
+
+def parse_dok_points(dok_content: str, section_name: str) -> List[Dict]:
+    """
+    Parse DOK content into structured main points with sub-points.
+    """
+    lines = dok_content.split('\n')
+    points = []
+    current_point = None
+    main_indent = 4  # Main points are at 4 spaces
+    sub_indent = 6   # Sub-points start at 6+ spaces
+    
+    # Extract section title
+    section_title = ""
+    for line in lines:
+        if line.strip().startswith(f'- {section_name}'):
+            # Extract title after the hyphen (e.g., "DOK4 - SPOV" -> "SPOV")
+            title_match = re.search(rf'- {section_name}\s*-\s*(.+)', line.strip())
+            if title_match:
+                section_title = title_match.group(1).strip()
+            break
+    
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped:
+            indent = len(line) - len(stripped)
+            
+            # Main point (4 spaces indentation)
+            if indent == main_indent and stripped.startswith('- '):
+                # Save previous point if exists
+                if current_point:
+                    points.append(current_point)
+                
+                # Start new point
+                main_text = stripped[2:].strip()  # Remove "- "
+                current_point = {
+                    "main_content": main_text,
+                    "sub_points": []
+                }
+            
+            # Sub-point (6+ spaces indentation)
+            elif current_point and indent >= sub_indent and stripped.startswith('- '):
+                sub_text = stripped[2:].strip()  # Remove "- "
+                current_point["sub_points"].append(sub_text)
+    
+    # Don't forget the last point
+    if current_point:
+        points.append(current_point)
+    
+    # Add metadata to each point
+    for i, point in enumerate(points, 1):
+        point.update({
+            "section": section_name,
+            "section_title": section_title,
+            "point_number": i,
+            "total_points": len(points)
+        })
+    
+    return points
+
+def get_timestamp() -> str:
+    """Generate timestamp in YYYYMMDD-HHMMSS format."""
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+def create_content_hash(main_content: str, sub_points: List[str]) -> str:
+    """Create a hash for DOK point content to identify unique points."""
+    combined = main_content + "||" + "||".join(sub_points)
+    return hashlib.md5(combined.encode('utf-8')).hexdigest()
+
+def create_dok_state_from_points(points: List[Dict]) -> List[Dict]:
+    """Convert DOK points to state format for comparison."""
+    state_points = []
+    for point in points:
+        state_point = {
+            "content_hash": create_content_hash(point["main_content"], point["sub_points"]),
+            "main_content": point["main_content"],
+            "sub_points": point["sub_points"],
+            "section": point["section"],
+            "section_title": point["section_title"],
+            "point_number": point["point_number"]
+        }
+        state_points.append(state_point)
+    return state_points
+
+def create_content_signature(main_content: str, sub_points: List[str]) -> str:
+    """Create a normalized content signature for comparison."""
+    
+    # Normalize the content for comparison AND decode HTML entities
+    normalized_main = html.unescape(main_content.strip().lower())
+    normalized_subs = [html.unescape(sub.strip().lower()) for sub in sub_points]
+    return normalized_main + " " + " ".join(normalized_subs)
+
+def calculate_similarity_score(text1: str, text2: str) -> float:
+    """Calculate similarity score between two texts using diff-match-patch."""
+    dmp = dmp_module.diff_match_patch()
+    diffs = dmp.diff_main(text1, text2)
+    dmp.diff_cleanupSemantic(diffs)
+    
+    # Calculate similarity based on unchanged vs total text
+    total_chars = max(len(text1), len(text2))
+    if total_chars == 0:
+        return 1.0
+    
+    unchanged_chars = 0
+    for op, text in diffs:
+        if op == dmp.DIFF_EQUAL:
+            unchanged_chars += len(text)
+    
+    return unchanged_chars / total_chars
+
+def detect_content_changes(prev_text: str, curr_text: str, threshold: float = 0.7) -> Dict:
+    """
+    Detect what type of change occurred between two texts.
+    
+    Args:
+        prev_text: Previous version of text
+        curr_text: Current version of text  
+        threshold: Similarity threshold to consider content as "updated" vs "replaced"
+        
+    Returns:
+        Dict with change info including type and details
+    """
+    dmp = dmp_module.diff_match_patch()
+    diffs = dmp.diff_main(prev_text, curr_text)
+    dmp.diff_cleanupSemantic(diffs)
+    
+    similarity = calculate_similarity_score(prev_text, curr_text)
+    
+    # Analyze the diffs to understand change nature
+    additions = []
+    deletions = []
+    unchanged = []
+    
+    for op, text in diffs:
+        if op == dmp.DIFF_INSERT:
+            additions.append(text)
+        elif op == dmp.DIFF_DELETE:
+            deletions.append(text)
+        elif op == dmp.DIFF_EQUAL:
+            unchanged.append(text)
+    
+    # Determine change type based on similarity and diff patterns
+    if similarity >= threshold:
+        change_type = "updated"
+    elif similarity < 0.3:
+        change_type = "replaced"  # Major rewrite
+    else:
+        change_type = "modified"  # Significant changes but recognizable
+    
+    return {
+        "change_type": change_type,
+        "similarity_score": similarity,
+        "additions": additions,
+        "deletions": deletions,
+        "unchanged": unchanged,
+        "diff_summary": f"Added: {len(''.join(additions))} chars, Deleted: {len(''.join(deletions))} chars"
+    }
+
+def advanced_compare_dok_states(previous_state: List[Dict], current_state: List[Dict]) -> Dict:
+    """
+    Advanced comparison using diff-match-patch for better change detection.
+    """
+    # Create lookup dictionaries with normalized content
+    prev_signatures = {}
+    curr_signatures = {}
+    
+    # Build signature maps
+    for point in previous_state:
+        signature = create_content_signature(point["main_content"], point["sub_points"])
+        prev_signatures[signature] = point
+    
+    for point in current_state:
+        signature = create_content_signature(point["main_content"], point["sub_points"])
+        curr_signatures[signature] = point
+    
+    # Exact matches (unchanged content)
+    exact_matches = set(prev_signatures.keys()) & set(curr_signatures.keys())
+    logger.info(f"Exact matches: {exact_matches}")
+    
+    # Clearly added content (new signatures)
+    clearly_added = []
+    for signature in curr_signatures:
+        if signature not in prev_signatures:
+            clearly_added.append(curr_signatures[signature])
+    logger.info(f"Clearly added: {clearly_added}")
+
+    # Clearly deleted content (missing signatures) 
+    clearly_deleted = []
+    for signature in prev_signatures:
+        if signature not in curr_signatures:
+            clearly_deleted.append(prev_signatures[signature])
+    logger.info(f"Clearly deleted: {clearly_deleted}")
+
+    # Advanced similarity matching for potential updates
+    updated = []
+    added = []
+    deleted = []
+    
+    # For each "deleted" item, check if it's similar to any "added" item
+    for deleted_point in clearly_deleted[:]:  # Copy list to modify during iteration
+        best_match = None
+        best_similarity = 0
+        best_match_signature = None
+        
+        deleted_signature = create_content_signature(
+            deleted_point["main_content"], 
+            deleted_point["sub_points"]
+        )
+        
+        for added_point in clearly_added[:]:  # Copy list to modify during iteration
+            added_signature = create_content_signature(
+                added_point["main_content"],
+                added_point["sub_points"]
+            )
+            
+            similarity = calculate_similarity_score(deleted_signature, added_signature)
+            
+            if similarity > best_similarity and similarity > 0.5:  # 50% similarity threshold
+                best_match = added_point
+                best_similarity = similarity
+                best_match_signature = added_signature
+        
+        if best_match:
+            # This is an update, not add/delete
+            change_details = detect_content_changes(deleted_signature, best_match_signature)
+            
+            updated.append({
+                "previous": deleted_point,
+                "current": best_match,
+                "similarity_score": best_similarity,
+                "change_details": change_details
+            })
+            
+            # Remove from add/delete lists
+            clearly_deleted.remove(deleted_point)
+            clearly_added.remove(best_match)
+    
+    # Remaining items are truly added/deleted
+    added.extend(clearly_added)
+    deleted.extend(clearly_deleted)
+    
+    return {
+        "added": added,
+        "updated": updated,
+        "deleted": deleted,
+        "stats": {
+            "unchanged": len(exact_matches),
+            "added": len(added),
+            "updated": len(updated),
+            "deleted": len(deleted)
+        }
+    }
+
+def create_combined_content(main_content: str, sub_points: List[str]) -> str:
+    """Combine main point with sub-points into one text block."""
+    combined = main_content
+    
+    if sub_points:
+        for sub_point in sub_points:
+            combined += f" {sub_point}"
+    
+    return combined.strip()
+
+def split_content_for_twitter(content: str, max_chars: int = 230) -> List[str]:
+    """
+    Split content into Twitter-sized chunks at sentence boundaries.
+    Leaves room for thread indicators and formatting.
+    """
+    if len(content) <= max_chars:
+        return [content]
+    
+    # Try to split at sentence boundaries first
+    sentences = re.split(r'(?<=[.!?])\s+', content)
+    
+    chunks = []
+    current_chunk = ""
+    
+    for sentence in sentences:
+        # If adding this sentence would exceed limit, start new chunk
+        if current_chunk and len(current_chunk + " " + sentence) > max_chars:
+            chunks.append(current_chunk.strip())
+            current_chunk = sentence
+        else:
+            if current_chunk:
+                current_chunk += " " + sentence
+            else:
+                current_chunk = sentence
+    
+    # Add the last chunk
+    if current_chunk:
+        chunks.append(current_chunk.strip())
+    
+    # If any individual chunk is still too long, split by words
+    final_chunks = []
+    for chunk in chunks:
+        if len(chunk) <= max_chars:
+            final_chunks.append(chunk)
+        else:
+            # Split long chunk by words
+            words = chunk.split()
+            word_chunk = ""
+            for word in words:
+                if word_chunk and len(word_chunk + " " + word) > max_chars:
+                    final_chunks.append(word_chunk.strip())
+                    word_chunk = word
+                else:
+                    if word_chunk:
+                        word_chunk += " " + word
+                    else:
+                        word_chunk = word
+            if word_chunk:
+                final_chunks.append(word_chunk.strip())
+    
+    return final_chunks
+
+def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: bool = False) -> List[Dict]:
+    """
+    Generate tweets with advanced change detection information.
+    """
+    tweets = []
+    timestamp = datetime.now().isoformat()
+    
+    # Handle first run - all content is "added"
+    if is_first_run:
+        for point in changes.get("added", []):
+            combined_content = create_combined_content(point["main_content"], point["sub_points"])
+            content_chunks = split_content_for_twitter(combined_content)
+            
+            thread_id = f"{section.lower()}_added_{point['point_number']:03d}_thread"
+            
+            for chunk_idx, chunk in enumerate(content_chunks, 1):
+                is_main_tweet = chunk_idx == 1
+                total_parts = len(content_chunks)
+                
+                # Add ADDED prefix for first run
+                if total_parts == 1:
+                    formatted_content = f"🟢 ADDED: {section} ({point['point_number']}): {chunk}"
+                else:
+                    thread_indicator = f"🧵{chunk_idx}/{total_parts}"
+                    if is_main_tweet:
+                        formatted_content = f"🟢 ADDED: {section} ({point['point_number']}): {chunk} {thread_indicator}"
+                    else:
+                        formatted_content = f"{chunk} {thread_indicator}"
+                
+                tweet_data = {
+                    "id": f"{section.lower()}_added_{point['point_number']:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
+                    "section": section,
+                    "change_type": "added",
+                    "logical_tweet_number": point['point_number'],
+                    "thread_part": chunk_idx,
+                    "total_thread_parts": total_parts,
+                    "thread_id": thread_id,
+                    "content_raw": chunk,
+                    "content_formatted": formatted_content,
+                    "character_count": len(formatted_content),
+                    "is_main_tweet": is_main_tweet,
+                    "parent_tweet_id": f"{section.lower()}_added_{point['point_number']:03d}" if not is_main_tweet else None,
+                    "status": "pending",
+                    "created_at": timestamp
+                }
+                tweets.append(tweet_data)
+        return tweets
+    
+    # Handle subsequent runs with advanced change detection
+    tweet_counter = 1
+    
+    # Added points (completely new)
+    for point in changes.get("added", []):
+        combined_content = create_combined_content(point["main_content"], point["sub_points"])
+        content_chunks = split_content_for_twitter(combined_content)
+        
+        thread_id = f"{section.lower()}_added_{tweet_counter:03d}_thread"
+        
+        for chunk_idx, chunk in enumerate(content_chunks, 1):
+            formatted_content = f"🟢 ADDED: {section}: {chunk}"
+            if chunk_idx > 1:
+                formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
+            elif len(content_chunks) > 1:
+                formatted_content += f" 🧵1/{len(content_chunks)}"
+            
+            tweets.append({
+                "id": f"{section.lower()}_added_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
+                "section": section,
+                "change_type": "added",
+                "content_formatted": formatted_content,
+                "thread_id": thread_id,
+                "thread_part": chunk_idx,
+                "total_thread_parts": len(content_chunks),
+                "status": "pending",
+                "created_at": timestamp
+            })
+        tweet_counter += 1
+    
+    # Updated points (with similarity information)
+    for update_info in changes.get("updated", []):
+        current_point = update_info["current"]
+        similarity_score = update_info.get("similarity_score", 0)
+        change_details = update_info.get("change_details", {})
+        
+        combined_content = create_combined_content(current_point["main_content"], current_point["sub_points"])
+        content_chunks = split_content_for_twitter(combined_content)
+        
+        thread_id = f"{section.lower()}_updated_{tweet_counter:03d}_thread"
+        
+        # Add similarity info to the first tweet
+        similarity_indicator = f"({similarity_score:.0%} similarity)"
+        
+        for chunk_idx, chunk in enumerate(content_chunks, 1):
+            if chunk_idx == 1:
+                # Add similarity info to first tweet
+                formatted_content = f"🔄 UPDATED: {section} {similarity_indicator}: {chunk}"
+            else:
+                formatted_content = f"{chunk}"
+                
+            if chunk_idx > 1:
+                formatted_content += f" 🧵{chunk_idx}/{len(content_chunks)}"
+            elif len(content_chunks) > 1:
+                formatted_content += f" 🧵1/{len(content_chunks)}"
+            
+            tweets.append({
+                "id": f"{section.lower()}_updated_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
+                "section": section,
+                "change_type": "updated",
+                "similarity_score": similarity_score,
+                "change_details": change_details,
+                "content_formatted": formatted_content,
+                "thread_id": thread_id,
+                "thread_part": chunk_idx,
+                "total_thread_parts": len(content_chunks),
+                "status": "pending",
+                "created_at": timestamp
+            })
+        tweet_counter += 1
+    
+    # Deleted points
+    for point in changes.get("deleted", []):
+        combined_content = create_combined_content(point["main_content"], point["sub_points"])
+        content_chunks = split_content_for_twitter(combined_content)
+        
+        thread_id = f"{section.lower()}_deleted_{tweet_counter:03d}_thread"
+        
+        for chunk_idx, chunk in enumerate(content_chunks, 1):
+            formatted_content = f"❌ DELETED: {section}: {chunk}"
+            if chunk_idx > 1:
+                formatted_content = f"{chunk} 🧵{chunk_idx}/{len(content_chunks)}"
+            elif len(content_chunks) > 1:
+                formatted_content += f" 🧵1/{len(content_chunks)}"
+
+            tweets.append({
+                "id": f"{section.lower()}_deleted_{tweet_counter:03d}" + (f"_reply{chunk_idx-1}" if chunk_idx > 1 else ""),
+                "section": section,
+                "change_type": "deleted",
+                "content_formatted": formatted_content,
+                "thread_id": thread_id,
+                "thread_part": chunk_idx,
+                "total_thread_parts": len(content_chunks),
+                "status": "pending",
+                "created_at": timestamp
+            })
+        tweet_counter += 1
+    
+    return tweets
+
+async def extract_top_level_nodes(item_data_list: list[dict[str, str]]) -> list[dict[str, str]]:
+    """
+    Extract the main nodes such as: Purpose, Owner, Experts, SPOVs, Knowledge Tree from a project's BrainLift
+
+    Args:
+        item_data_list: List of item data from Workflowy
+
+    Returns:
+        List of dictionaries containing node names and their IDs
+        [{"name": "Purpose", "id": "123"}, {"name": "Experts", "id": "456"}, ...]
+    """
+    # Find the root node (node with no parent or parent key doesn't exist)
+    root_node = next((item for item in item_data_list if "prnt" not in item or item.get("prnt") is None), None)
+
+    if not root_node:
+        logger.error("No root node found")
+        return []
+
+    # Get all direct children of the root node
+    main_nodes = []
+    for item in item_data_list:
+        if item.get("prnt") == root_node["id"]:
+            main_nodes.append({"name": item["nm"], "id": item["id"]})
+            logger.debug(f"Found main node: {item['nm']}")
+
+    return main_nodes
 
 class WorkflowyTesterV2:
     """
