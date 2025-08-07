@@ -6,6 +6,7 @@ Supports both bulk URL processing and scheduled content processing.
 
 import json
 import asyncio
+import os
 from test_workflowy_v2 import WorkflowyTesterV2
 from post_tweets_v2 import TweetPosterV2
 from aws_storage_v2 import AWSStorageV2
@@ -21,10 +22,7 @@ def lambda_handler(event, context):
     """
     
     # Determine environment from event or context
-    environment = event.get('environment', 'test')
-
-    # TODO: REMOVE THIS
-    environment = 'test'
+    environment = os.getenv('ENVIRONMENT', 'test')
     
     # Check if this is a bulk URL processing request
     if is_bulk_url_request_v2(event):
