@@ -569,8 +569,8 @@ class TweetPosterV2:
                     
                     # Delay between projects
                     if i < len(projects):
-                        logger.info(f"⏱️ Waiting 10 seconds before next project...")
-                        await asyncio.sleep(10)
+                        logger.info(f"⏱️ Waiting 3 seconds before next project...")
+                        await asyncio.sleep(3)
                         
                 except Exception as e:
                     error_result = {

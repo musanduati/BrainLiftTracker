@@ -102,11 +102,6 @@ async def process_and_post_v2(environment: str = 'test'):
             
             result = await tester.process_single_project(project_id)
             processing_results.append(result)
-            
-            # Add delay between projects to be respectful
-            if i < len(projects):
-                logger.info(f"⏱️ Waiting 2 seconds before next project...")
-                await asyncio.sleep(2)
     
     # Step 3: Post tweets for projects that had new content
     logger.info(f"🐦 STEP 3: Posting tweets...")
@@ -135,8 +130,8 @@ async def process_and_post_v2(environment: str = 'test'):
                 
                 # Add delay between projects
                 if project_id != projects_with_content[-1]:
-                    logger.info(f"⏱️ Waiting 10 seconds before next project...")
-                    await asyncio.sleep(10)
+                    logger.info(f"⏱️ Waiting 3 seconds before next project...")
+                    await asyncio.sleep(3)
                     
             except Exception as e:
                 logger.error(f"❌ Error posting tweets for project {project_id}: {e}")

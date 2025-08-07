@@ -312,11 +312,6 @@ class WorkflowyTesterV2:
             
             result = await self.process_single_project(project_id, exclude_node_names)
             results.append(result)
-            
-            # Add delay between projects to be respectful
-            if i < len(projects):
-                logger.info(f"⏱️ Waiting 2 seconds before next project...")
-                await asyncio.sleep(2)
         
         return results
     
