@@ -132,7 +132,7 @@ def display_posting_results(result):
             
             # Show individual project results
             if processing_results:
-                logger.info("\n📋 Individual Project Results:")
+                logger.info("📋 Individual Project Results:")
                 for i, result in enumerate(processing_results):
                     project_id = result.get('project_id', 'Unknown')
                     status = result.get('status', 'Unknown')
@@ -167,9 +167,8 @@ def display_posting_results(result):
                             error = result.get('error', 'Unknown error')
                             logger.info(f"  ❌ {project_id}: {error}")
         
-        # Handle legacy HTTP response format
+        # Handle HTTP response format
         elif 'statusCode' in result:
-            # Original handling code for legacy format
             logger.info(f"Status Code: {result.get('statusCode', 'Unknown')}")
             
             body = result.get('body', '{}')
@@ -180,11 +179,71 @@ def display_posting_results(result):
                     pass
             
             if isinstance(body, dict):
-                logger.info(f"Operation: {body.get('operation', 'Unknown')}")
-                logger.info(f"Environment: {body.get('environment', 'Unknown')}")
-                logger.info(f"Projects Processed: {body.get('projects_processed', 0)}")
-                logger.info(f"Total Tweets Posted: {body.get('total_tweets_posted', 0)}")
-                logger.info(f"Total Tweets Failed: {body.get('total_tweets_failed', 0)}")
+                # Check if this is the new V2 format with 'processing' and 'posting' objects
+                if 'processing' in body and 'posting' in body:
+                    processing = body.get('processing', {})
+                    posting = body.get('posting', {})
+                    
+                    processing_results = processing.get('results', [])
+                    posting_results = posting.get('results', [])
+                    
+                    # Calculate summary statistics
+                    total_projects = processing.get('total_processed', 0)
+                    successful_projects = processing.get('successful', 0)
+                    failed_projects = processing.get('failed', 0)
+                    
+                    total_tweets_posted = sum(r.get('posted_tweets', 0) for r in posting_results)
+                    total_tweets_failed = sum(r.get('failed_tweets', 0) for r in posting_results)
+                    
+                    logger.info(f"Operation: Project-based Processing + Tweet Posting (V2)")
+                    logger.info(f"Environment: {body.get('environment', 'Unknown')}")
+                    logger.info(f"Projects Processed: {total_projects}")
+                    logger.info(f"Total Tweets Posted: {total_tweets_posted}")
+                    logger.info(f"Total Tweets Failed: {total_tweets_failed}")
+                    
+                    # Show individual project results
+                    if processing_results:
+                        logger.info("📋 Individual Project Results:")
+                        for i, result in enumerate(processing_results):
+                            project_id = result.get('project_id', 'Unknown')
+                            status = result.get('status', 'Unknown')
+                            project_name = result.get('project_name', 'Unknown')
+                            
+                            if status == 'success':
+                                dok4_points = result.get('dok4_points', 0)
+                                dok3_points = result.get('dok3_points', 0)
+                                total_change_tweets = result.get('total_change_tweets', 0)
+                                first_run = result.get('first_run', False)
+                                
+                                logger.info(f"  ✅ {project_name} ({project_id})")
+                                logger.info(f"     DOK4: {dok4_points} points, DOK3: {dok3_points} points")
+                                logger.info(f"     Change tweets: {total_change_tweets}, First run: {first_run}")
+                            else:
+                                error = result.get('error', 'Unknown error')
+                                logger.info(f"  ❌ {project_name} ({project_id}): {error}")
+                        
+                        # Show posting results
+                        if posting_results and posting_results[0].get('project_id') != 'none':
+                            logger.info("🐦 Tweet Posting Results:")
+                            for result in posting_results:
+                                project_id = result.get('project_id', 'Unknown')
+                                status = result.get('status', 'Unknown')
+                                
+                                if status == 'success':
+                                    posted = result.get('posted_tweets', 0)
+                                    failed = result.get('failed_tweets', 0)
+                                    total = result.get('total_tweets', 0)
+                                    logger.info(f"  🐦 {project_id}: {posted}/{total} posted, {failed} failed")
+                                else:
+                                    error = result.get('error', 'Unknown error')
+                                    logger.info(f"  ❌ {project_id}: {error}")
+                else:
+                    # Legacy format handling
+                    logger.info(f"Operation: {body.get('operation', 'Unknown')}")
+                    logger.info(f"Environment: {body.get('environment', 'Unknown')}")
+                    logger.info(f"Projects Processed: {body.get('projects_processed', 0)}")
+                    logger.info(f"Total Tweets Posted: {body.get('total_tweets_posted', 0)}")
+                    logger.info(f"Total Tweets Failed: {body.get('total_tweets_failed', 0)}")
             else:
                 logger.info(f"Response Body: {body}")
         else:
@@ -217,7 +276,7 @@ def display_bulk_url_results(result):
             # Show successful projects
             successful_projects = body.get('successful_projects', [])
             if successful_projects:
-                logger.info("\n✅ Successfully Created Projects:")
+                logger.info("✅ Successfully Created Projects:")
                 for project in successful_projects:
                     project_id = project.get('project_id', 'Unknown')
                     name = project.get('name', 'Unknown')
@@ -227,7 +286,7 @@ def display_bulk_url_results(result):
             # Show failed projects
             failed_projects = body.get('failed_projects', [])
             if failed_projects:
-                logger.info("\n❌ Failed Projects:")
+                logger.info("❌ Failed Projects:")
                 for project in failed_projects:
                     url = project.get('url', 'Unknown')
                     error = project.get('error', 'Unknown error')
