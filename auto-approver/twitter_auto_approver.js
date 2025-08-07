@@ -145,10 +145,11 @@ class TwitterAutoApprover {
 
     // Check if a username is in the allowed list
     isUsernameAllowed(username) {
-        // SECURITY: If no filter is set, DENY by default for safety
+        // SECURITY: Always require an allow list - no bypass possible
         if (!this.config.allowedUsernames || this.config.allowedUsernames.length === 0) {
             console.error('❌ SECURITY: No username filter configured - DENYING ALL for safety');
-            console.error('To approve requests, you must explicitly provide an allowedUsernames list');
+            console.error('To approve requests, you MUST provide an allowedUsernames list');
+            console.error('No bypass options available for security reasons');
             return false;  // DENY by default when no filter is configured
         }
         
@@ -181,7 +182,7 @@ class TwitterAutoApprover {
         }
 
         // Wait a bit for dynamic content to load
-        console.log('Looking for accept buttons in modal...');
+
 
         // Multiple selectors to handle different Twitter UI versions
         const selectors = [
@@ -218,7 +219,6 @@ class TwitterAutoApprover {
                 
                 if (acceptButtons.length > 0) {
                     buttons = acceptButtons;
-                    console.log(`Found ${buttons.length} accept buttons using selector: ${selector}`);
                     break;
                 }
             }
@@ -232,21 +232,10 @@ class TwitterAutoApprover {
                 return text === 'Accept' || text === 'Approve';
             });
             
-            if (buttons.length > 0) {
-                console.log(`Found ${buttons.length} accept buttons using text matching`);
-            }
+
         }
 
-        // Debug output
-        if (buttons.length === 0) {
-            console.log('No accept buttons found. All buttons in modal:');
-            const allButtons = modal.querySelectorAll('button, div[role="button"], span[role="button"]');
-            Array.from(allButtons).slice(0, 10).forEach((btn, i) => {
-                console.log(`Button ${i}: "${btn.textContent}" | data-testid="${btn.getAttribute('data-testid')}" | aria-label="${btn.getAttribute('aria-label')}"`);
-            });
-        }
 
-        console.log(`Total accept buttons found: ${buttons.length}`);
         return buttons;
     }
 
@@ -302,55 +291,77 @@ class TwitterAutoApprover {
             return [];
         }
 
-        console.log('Looking for follow request entries...');
+
         
         // First try to find all Accept buttons
         const entries = [];
         const acceptButtons = [];
         
-        // Find all potential accept buttons
-        const allButtons = modal.querySelectorAll('button');
-        for (const button of allButtons) {
-            const text = (button.textContent || '').trim();
-            
-            // Look for "Accept" text specifically (case-sensitive to match Twitter's UI)
-            // Skip disabled buttons (already clicked)
-            if ((text === 'Accept' || text === 'Approve') && !button.disabled) {
-                acceptButtons.push(button);
+        // Find all potential accept buttons with multiple selectors
+        const buttonSelectors = [
+            'button[data-testid*="accept"]',
+            'button[data-testid*="Accept"]',
+            'button[aria-label*="Accept"]',
+            'button[aria-label*="Approve"]',
+            'div[role="button"][data-testid*="accept"]',
+            'div[role="button"][aria-label*="Accept"]',
+            'button',
+            'div[role="button"]'
+        ];
+        
+        for (const selector of buttonSelectors) {
+            const buttons = modal.querySelectorAll(selector);
+            for (const button of buttons) {
+                const text = (button.textContent || '').trim();
+                const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
+                
+                // Look for Accept button, but not Decline
+                if ((text === 'Accept' || text === 'Approve' || 
+                     ariaLabel.includes('accept') || ariaLabel.includes('approve')) && 
+                    !text.includes('Decline') && !ariaLabel.includes('decline') && 
+                    !button.disabled) {
+                    acceptButtons.push(button);
+                }
             }
+            if (acceptButtons.length > 0) break;
         }
         
-        console.log(`Found ${acceptButtons.length} accept buttons`);
+
         
-        // For each accept button, find its associated username using position-based method
+        // For each accept button, find its associated username using multiple methods
         for (const button of acceptButtons) {
             let username = null;
             
-            // Method 1: Find the link on the same row as the button
-            const buttonRect = button.getBoundingClientRect();
-            const allLinks = modal.querySelectorAll('a[href^="/"]');
+            // Method 1: Use the extractUsernameFromRequest method
+            username = this.extractUsernameFromRequest(button);
+
             
-            let closestLink = null;
-            let closestDistance = Infinity;
-            
-            allLinks.forEach(link => {
-                const linkRect = link.getBoundingClientRect();
-                const distance = Math.abs(linkRect.top - buttonRect.top);
-                if (distance < closestDistance && distance < 100) { // Same row if within 100px
-                    closestDistance = distance;
-                    closestLink = link;
-                }
-            });
-            
-            if (closestLink) {
-                const href = closestLink.getAttribute('href') || '';
-                if (href.match(/^\/[A-Za-z0-9_]+$/)) {
-                    username = href.substring(1); // Remove leading /
-                    console.log(`Found username via position: ${username}`);
+            // Method 2: Find the link on the same row as the button
+            if (!username) {
+                const buttonRect = button.getBoundingClientRect();
+                const allLinks = modal.querySelectorAll('a[href^="/"]');
+                
+                let closestLink = null;
+                let closestDistance = Infinity;
+                
+                allLinks.forEach(link => {
+                    const linkRect = link.getBoundingClientRect();
+                    const distance = Math.abs(linkRect.top - buttonRect.top);
+                    if (distance < closestDistance && distance < 100) { // Same row if within 100px
+                        closestDistance = distance;
+                        closestLink = link;
+                    }
+                });
+                
+                if (closestLink) {
+                    const href = closestLink.getAttribute('href') || '';
+                    if (href.match(/^\/[A-Za-z0-9_]+$/)) {
+                        username = href.substring(1); // Remove leading /
+                    }
                 }
             }
             
-            // Method 2: Fallback - look for @ mentions in parent container
+            // Method 3: Look for @ mentions in parent container
             if (!username) {
                 let searchElement = button;
                 let attempts = 0;
@@ -371,6 +382,20 @@ class TwitterAutoApprover {
                 }
             }
             
+            // Method 4: Look for username in nearby text elements
+            if (!username) {
+                const nearbyElements = modal.querySelectorAll('span, div, a');
+                for (const element of nearbyElements) {
+                    const text = element.textContent || '';
+                    const atMatch = text.match(/@([A-Za-z0-9_]+)/);
+                    if (atMatch) {
+                        username = atMatch[1];
+                        console.log(`Found username via nearby element: ${username}`);
+                        break;
+                    }
+                }
+            }
+            
             if (username) {
                 // Normalize username to lowercase for comparison
                 const normalizedUsername = username.toLowerCase();
@@ -385,7 +410,7 @@ class TwitterAutoApprover {
                 if (this.config.allowedUsernames && this.config.allowedUsernames.length > 0) {
                     console.log('Skipping due to active filter and no username');
                 } else {
-                    // SECURITY: Do not add entries without username
+                    // SECURITY: Do not add entry without username
                     console.log('❌ Cannot add entry without username - skipping for safety');
                 }
             }
@@ -551,19 +576,20 @@ window.startAutoApproval = (config = {}) => {
     // CRITICAL: Ensure config is properly passed
     console.log('Starting auto-approval with config:', config);
     
-    // Validate the config
-    if (config.allowedUsernames && config.allowedUsernames.length > 0) {
-        console.log('🔒 USERNAME FILTER IS ACTIVE');
-        console.log('Will ONLY approve:', config.allowedUsernames);
-    } else {
+    // SECURITY: Always require an allow list - no bypass possible
+    if (!config.allowedUsernames || config.allowedUsernames.length === 0) {
         console.error('🚨 SECURITY ERROR: NO USERNAME FILTER PROVIDED!');
         console.error('The auto-approver will DENY ALL requests for safety.');
-        console.error('To approve requests, you must provide an allowedUsernames list.');
+        console.error('To approve requests, you MUST provide an allowedUsernames list');
+        console.error('No bypass options available for security reasons');
         const shouldContinue = confirm('No username filter provided. The script will DENY all requests. Continue anyway?');
         if (!shouldContinue) {
             console.log('User cancelled due to missing username filter');
             return null;
         }
+    } else {
+        console.log('🔒 USERNAME FILTER IS ACTIVE');
+        console.log('Will ONLY approve:', config.allowedUsernames);
     }
     
     window.twitterAutoApprover = new TwitterAutoApprover(config);

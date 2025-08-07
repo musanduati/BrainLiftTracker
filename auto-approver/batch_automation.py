@@ -137,13 +137,40 @@ class BatchTwitterAutomation:
                     max_approvals = account.get('max_approvals', 50)
                     delay_seconds = account.get('delay_seconds', 3)
                     
+                    # Get allowed usernames from environment or use defaults
+                    allowed_usernames_env = os.getenv('ALLOWED_USERNAMES', '')
+                    if allowed_usernames_env:
+                        allowed_usernames = [u.strip().lower() for u in allowed_usernames_env.split(',')]
+                    else:
+                        # Default allowed usernames (lowercase for matching)
+                        allowed_usernames = [
+                            'jliemandt', 'opsaiguru', 'aiautodidact',
+                            'zeroshotflow', 'munawar2434', 'klair_three', 'klair_two'
+                        ]
+                    
+                    allowed_usernames_json = json.dumps(allowed_usernames)
+                    
                     config_script = f"""
+                    // CRITICAL: Verify configuration before starting
+                    const allowedUsernames = {allowed_usernames_json};
+                    
+                    console.log('\\n' + '='*50);
+                    console.log('🔒 USERNAME FILTER CONFIGURATION');
+                    console.log('='*50);
+                    console.log('ALLOWED USERNAMES:', allowedUsernames);
+                    console.log('List length:', allowedUsernames.length);
+                    console.log('Any requests from users NOT in this list will be SKIPPED');
+                    console.log('='*50 + '\\n');
+                    
                     window.startAutoApproval({{
                         delay: {delay_seconds * 1000},
                         maxApprovals: {max_approvals},
-                        autoScroll: true
+                        autoScroll: true,
+                        allowedUsernames: allowedUsernames
                     }});
                     """
+                    
+
                     automation.driver.execute_script(config_script)
                     
                     print(f"✅ Auto-approver started for @{username} (max: {max_approvals}, delay: {delay_seconds}s)")

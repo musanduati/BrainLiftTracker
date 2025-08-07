@@ -18,9 +18,8 @@ TWITTER_EMAIL=your_email@example.com  # Optional
 MAX_APPROVALS=50
 DELAY_SECONDS=3
 
-# Username Filtering (Optional)
+# Username Filtering (REQUIRED for security):
 # Only approve requests from these usernames (comma-separated)
-# Leave empty to approve all requests
 ALLOWED_USERNAMES=user1,user2,user3
 ```
 
@@ -136,17 +135,18 @@ Enter authentication code (or press ENTER to skip): _
 }
 ```
 
-## Username Filtering
+## Username Filtering (SECURITY REQUIREMENT)
 
-The auto-approver now supports filtering follow requests by username. This allows you to:
+The auto-approver **requires** filtering follow requests by username for security. This ensures:
 
 - **Approve only specific users**: Set `ALLOWED_USERNAMES` to a comma-separated list
-- **Approve all requests**: Leave `ALLOWED_USERNAMES` empty or unset
 - **Case-insensitive matching**: Usernames are matched regardless of case
+- **Default deny for safety**: If no filter is configured, all requests are denied by default
+- **No bypass possible**: There is no way to approve all requests without an allow list
 
 ### Example Configuration
 ```env
-# Only approve these specific users
+# Only approve these specific users (REQUIRED)
 ALLOWED_USERNAMES=jliemandt,OpsAIGuru,AiAutodidact,ZeroShotFlow,munawar2434,klair_three,klair_two
 ```
 
@@ -176,5 +176,51 @@ Progress: 2/50 approved, 1 skipped (not in allowed list)
 - `run_automation.py` - Simple single-account runner
 - `selenium_setup.py` - Browser driver configuration
 - `requirements_selenium.txt` - Python dependencies
+
+## Security Features
+
+### Mandatory Allow List
+- **No bypass possible**: The auto-approver will never approve requests from users not in the allow list
+- **Default deny**: If no allow list is configured, all requests are denied
+- **Case-insensitive matching**: Usernames are normalized to lowercase for consistent matching
+- **Explicit configuration required**: You must explicitly set `ALLOWED_USERNAMES` to approve any requests
+
+### Security Logging
+- All username checks are logged with clear allow/deny results
+- Console shows exactly which usernames are being checked against the allow list
+- Failed username extractions are logged and requests are denied for safety
+
+### Configuration Validation
+- The system validates that an allow list is provided before starting
+- Clear error messages if no allow list is configured
+- No silent failures - all security decisions are logged
+
+## Troubleshooting
+
+### No Approvals Made
+If the auto-approver runs but doesn't approve any requests:
+
+1. **Check username filter**: Ensure `ALLOWED_USERNAMES` is set correctly
+2. **Verify usernames**: Check that the usernames in your allow list match exactly (case-insensitive)
+3. **Check console logs**: Look for username extraction and filtering messages in browser console
+4. **Verify allow list**: Make sure the usernames in your allow list are correct
+
+### Authentication Issues
+- If 2FA is required, the tool will prompt for codes
+- Check that credentials are correct in your `.env` file or CSV/JSON
+- Ensure the account has follow requests pending
+
+### Browser Issues
+- Try different browsers (chrome, firefox, edge)
+- Run in non-headless mode to see what's happening
+- Check that ChromeDriver/FirefoxDriver is installed and in PATH
+
+### Recent Fixes
+- **Fixed**: Username filter not being passed to JavaScript in batch mode
+- **Fixed**: Default deny behavior when no filter configured
+- **Removed**: `APPROVE_ALL` option for security (allow list is now mandatory)
+- **Improved**: Username extraction logic with multiple fallback methods
+- **Enhanced**: Better error handling and logging
+- **Security**: No bypass possible - allow list is always enforced
 
 Use responsibly and in compliance with Twitter's Terms of Service.
