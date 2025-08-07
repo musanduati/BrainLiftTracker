@@ -145,10 +145,11 @@ class TwitterAutoApprover {
 
     // Check if a username is in the allowed list
     isUsernameAllowed(username) {
-        // If no filter is set, approve all
+        // SECURITY: If no filter is set, DENY by default for safety
         if (!this.config.allowedUsernames || this.config.allowedUsernames.length === 0) {
-            console.log('No username filter configured, approving all');
-            return true;
+            console.error('❌ SECURITY: No username filter configured - DENYING ALL for safety');
+            console.error('To approve requests, you must explicitly provide an allowedUsernames list');
+            return false;  // DENY by default when no filter is configured
         }
         
         // Check if username is in the allowed list (case-insensitive)
@@ -384,10 +385,8 @@ class TwitterAutoApprover {
                 if (this.config.allowedUsernames && this.config.allowedUsernames.length > 0) {
                     console.log('Skipping due to active filter and no username');
                 } else {
-                    entries.push({ 
-                        username: null, 
-                        button: button
-                    });
+                    // SECURITY: Do not add entries without username
+                    console.log('❌ Cannot add entry without username - skipping for safety');
                 }
             }
         }
@@ -477,43 +476,30 @@ class TwitterAutoApprover {
                             await this.sleep(500);
                             continue;
                         } else {
-                            // No filter, but couldn't get username - log warning but proceed
-                            console.warn('Could not extract username, but no filter active - proceeding');
-                            const success = await this.clickButton(button);
-                            if (success) {
-                                this.approvedCount++;
-                                console.log(`✅ Approved follow request (username unknown) (#${this.approvedCount})`);
-                                await this.sleep(this.config.delay);
-                            }
+                            // SECURITY: Never approve without username verification
+                            console.warn('❌ Could not extract username - denying for safety');
+                            console.warn('Never approve requests without verifying username');
+                            this.skippedCount++;
+                            await this.sleep(500);
                             continue;
                         }
                     }
                     
-                    // Check if filter is enabled
-                    if (!this.config.allowedUsernames || this.config.allowedUsernames.length === 0) {
+                    // SECURITY: Always check username against allow list
+                    const isAllowed = this.isUsernameAllowed(username);
+                    
+                    if (isAllowed) {
                         const success = await this.clickButton(button);
                         if (success) {
                             this.approvedCount++;
-                            console.log(`✅ Approved @${username} (no filter) (#${this.approvedCount})`);
+                            console.log(`✅ Approved @${username} (#${this.approvedCount})`);
                             await this.sleep(this.config.delay);
                         }
                     } else {
-                        // Filter is active - check if username is allowed
-                        const isAllowed = this.isUsernameAllowed(username);
-                        
-                        if (isAllowed) {
-                            const success = await this.clickButton(button);
-                            if (success) {
-                                this.approvedCount++;
-                                console.log(`✅ Approved @${username} (#${this.approvedCount})`);
-                                await this.sleep(this.config.delay);
-                            }
-                        } else {
-                            this.skippedCount++;
-                            console.log(`⏭️ Skipped @${username} (not in allowed list)`);
-                            // Small delay before processing next
-                            await this.sleep(500);
-                        }
+                        this.skippedCount++;
+                        console.log(`⏭️ Skipped @${username} (not in allowed list)`);
+                        // Small delay before processing next
+                        await this.sleep(500);
                     }
                 } catch (error) {
                     console.error('Error processing request:', error);
@@ -570,7 +556,14 @@ window.startAutoApproval = (config = {}) => {
         console.log('🔒 USERNAME FILTER IS ACTIVE');
         console.log('Will ONLY approve:', config.allowedUsernames);
     } else {
-        console.warn('⚠️ NO USERNAME FILTER - Will approve ALL requests!');
+        console.error('🚨 SECURITY ERROR: NO USERNAME FILTER PROVIDED!');
+        console.error('The auto-approver will DENY ALL requests for safety.');
+        console.error('To approve requests, you must provide an allowedUsernames list.');
+        const shouldContinue = confirm('No username filter provided. The script will DENY all requests. Continue anyway?');
+        if (!shouldContinue) {
+            console.log('User cancelled due to missing username filter');
+            return null;
+        }
     }
     
     window.twitterAutoApprover = new TwitterAutoApprover(config);
