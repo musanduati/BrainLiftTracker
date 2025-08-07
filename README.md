@@ -14,6 +14,8 @@ A Flask-based RESTful API for managing multiple Twitter accounts and posting con
 - **Twitter Lists**: Create and manage Twitter lists with multiple main accounts
 - **List Membership**: Add/remove accounts to/from lists with bulk operations
 - **Account Types**: Designate accounts as list owners or managed accounts
+- **Twitter Metrics**: Real-time display of account metrics including followers, following, and tweet counts
+- **Followers Count**: Display follower and following counts for each account (list view requires elevated API access)
 - **Encryption**: Secure storage of credentials using Fernet encryption
 - **Automatic Token Refresh**: OAuth tokens refresh automatically when expired
 - **Token Health Monitoring**: Track token expiry and health status across all accounts
@@ -116,6 +118,68 @@ X-API-Key: your-api-key
 ```http
 GET /api/v1/accounts/{account_id}
 X-API-Key: your-api-key
+```
+
+Returns account details with Twitter metrics:
+```json
+{
+    "id": 1,
+    "username": "johndoe",
+    "status": "active",
+    "account_type": "managed",
+    "display_name": "John Doe",
+    "profile_picture": "https://pbs.twimg.com/profile_images/...",
+    "follower_count": 1234,
+    "following_count": 567,
+    "tweet_count": 890,
+    "verified": false,
+    "description": "Software developer and tech enthusiast",
+    "twitter_user_id": "1234567890",
+    "twitter_metrics": {
+        "followers_count": 1234,
+        "following_count": 567,
+        "tweet_count": 890,
+        "listed_count": 12
+    }
+}
+```
+
+#### Get Account Followers
+```http
+GET /api/v1/accounts/{account_id}/followers
+X-API-Key: your-api-key
+```
+
+**Note**: This endpoint requires elevated Twitter API access with `follows.read` scope. It will return 403 Forbidden with standard API access level.
+
+Query Parameters:
+- `max_results` (optional): Number of followers to return per page (default: 20, max: 100)
+- `pagination_token` (optional): Token for pagination to get next/previous page
+
+Returns paginated list of followers with detailed information (when available):
+```json
+{
+    "followers": [
+        {
+            "id": "987654321",
+            "username": "follower1",
+            "name": "Jane Smith",
+            "profile_image_url": "https://pbs.twimg.com/profile_images/...",
+            "description": "AI researcher and data scientist",
+            "verified": true,
+            "followers_count": 5678,
+            "following_count": 432,
+            "tweet_count": 3456,
+            "created_at": "2019-05-20T14:45:00.000Z"
+        }
+    ],
+    "pagination": {
+        "next_token": "NEXT_TOKEN_HERE",
+        "previous_token": null,
+        "result_count": 20
+    },
+    "total_count": 20
+}
 ```
 
 

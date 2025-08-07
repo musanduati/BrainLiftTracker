@@ -9,6 +9,14 @@ A modern, beautiful React frontend for managing multiple Twitter accounts, inspi
   - Account health indicators (token status)
   - Quick actions (refresh token, view tweets, post new tweet)
   - Batch account selection for operations
+  - **Twitter Metrics**: Real-time follower/following counts and verified status
+
+- **Account Details Page**
+  - Comprehensive account profile with avatar and stats
+  - Display of follower and following counts
+  - Thread and individual tweet history
+  - Performance metrics and activity timeline
+  - Content filtering by type (threads, changes)
 
 - **Tweet Management**
   - Twitter-like feed layout

@@ -60,13 +60,46 @@ class ApiClient {
       accountType: data.account_type || 'managed',
       authorized: data.status === 'active',
       followerCount: data.follower_count,
+      followingCount: data.following_count,
       tweetCount: data.tweet_count,
       createdAt: data.created_at,
       lastActiveAt: data.last_active_at,
       tokenExpiresAt: data.token_expires_at,
       tokenRefreshFailures: data.token_refresh_failures,
       tokenStatus: data.token_status || (data.status === 'active' ? 'healthy' : 'expired'),
+      verified: data.verified,
+      description: data.description,
+      twitterUserId: data.twitter_user_id,
     };
+  }
+  
+  async getAccountFollowers(id: number, paginationToken?: string, maxResults: number = 20): Promise<{
+    followers: Array<{
+      id: string;
+      username: string;
+      name: string;
+      profile_image_url?: string;
+      description?: string;
+      verified: boolean;
+      followers_count: number;
+      following_count: number;
+      tweet_count: number;
+      created_at: string;
+    }>;
+    pagination: {
+      next_token?: string;
+      previous_token?: string;
+      result_count: number;
+    };
+    total_count: number;
+  }> {
+    const params: any = { max_results: maxResults };
+    if (paginationToken) {
+      params.pagination_token = paginationToken;
+    }
+    
+    const { data } = await this.client.get(`/accounts/${id}/followers`, { params });
+    return data;
   }
 
   async deleteAccount(id: number): Promise<void> {

@@ -649,7 +649,7 @@
 								}
 							],
 							"cookie": [],
-							"body": "{\n    \"id\": 2,\n    \"username\": \"ZeroShotFlow\",\n    \"status\": \"active\",\n    \"created_at\": \"2025-07-22T12:31:51.819225\"\n}"
+							"body": "{\n    \"id\": 2,\n    \"username\": \"ZeroShotFlow\",\n    \"status\": \"active\",\n    \"created_at\": \"2025-07-22T12:31:51.819225\",\n    \"account_type\": \"managed\",\n    \"display_name\": \"Zero Shot Flow\",\n    \"profile_picture\": \"https://pbs.twimg.com/profile_images/..._normal.jpg\",\n    \"follower_count\": 1234,\n    \"following_count\": 567,\n    \"tweet_count\": 890,\n    \"verified\": false,\n    \"description\": \"AI and machine learning enthusiast\",\n    \"twitter_user_id\": \"1234567890\",\n    \"twitter_metrics\": {\n        \"followers_count\": 1234,\n        \"following_count\": 567,\n        \"tweet_count\": 890,\n        \"listed_count\": 12\n    }\n}"
 						},
 						{
 							"name": "Account Not Found",
@@ -684,6 +684,167 @@
 							],
 							"cookie": [],
 							"body": "{\n    \"error\": \"Account not found\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Account Followers",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/followers?max_results=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"followers"
+							],
+							"query": [
+								{
+									"key": "max_results",
+									"value": "20",
+									"description": "Number of followers to return (max 100)"
+								},
+								{
+									"key": "pagination_token",
+									"value": "",
+									"description": "Token for pagination (optional)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get paginated list of followers for a specific account. Returns detailed follower information including profile images, descriptions, and metrics."
+					},
+					"response": [
+						{
+							"name": "Followers List",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/2/followers?max_results=20",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"2",
+										"followers"
+									],
+									"query": [
+										{
+											"key": "max_results",
+											"value": "20"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"followers\": [\n        {\n            \"id\": \"987654321\",\n            \"username\": \"follower1\",\n            \"name\": \"John Doe\",\n            \"profile_image_url\": \"https://pbs.twimg.com/profile_images/..._normal.jpg\",\n            \"description\": \"Tech enthusiast and developer\",\n            \"verified\": false,\n            \"followers_count\": 456,\n            \"following_count\": 234,\n            \"tweet_count\": 1234,\n            \"created_at\": \"2020-01-15T10:30:00.000Z\"\n        },\n        {\n            \"id\": \"876543210\",\n            \"username\": \"follower2\",\n            \"name\": \"Jane Smith\",\n            \"profile_image_url\": \"https://pbs.twimg.com/profile_images/..._normal.jpg\",\n            \"description\": \"AI researcher and data scientist\",\n            \"verified\": true,\n            \"followers_count\": 5678,\n            \"following_count\": 432,\n            \"tweet_count\": 3456,\n            \"created_at\": \"2019-05-20T14:45:00.000Z\"\n        }\n    ],\n    \"pagination\": {\n        \"next_token\": \"NEXT_TOKEN_HERE\",\n        \"previous_token\": null,\n        \"result_count\": 2\n    },\n    \"total_count\": 2\n}"
+						},
+						{
+							"name": "Account Not Authorized",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/1/followers",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"1",
+										"followers"
+									]
+								}
+							},
+							"status": "Forbidden",
+							"code": 403,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"Account not authorized\"\n}"
+						},
+						{
+							"name": "Paginated Request",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/2/followers?max_results=50&pagination_token=NEXT_TOKEN_HERE",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"2",
+										"followers"
+									],
+									"query": [
+										{
+											"key": "max_results",
+											"value": "50"
+										},
+										{
+											"key": "pagination_token",
+											"value": "NEXT_TOKEN_HERE"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"followers\": [\n        \"... next page of followers ...\"\n    ],\n    \"pagination\": {\n        \"next_token\": \"ANOTHER_TOKEN\",\n        \"previous_token\": \"PREV_TOKEN\",\n        \"result_count\": 50\n    },\n    \"total_count\": 50\n}"
 						}
 					]
 				},

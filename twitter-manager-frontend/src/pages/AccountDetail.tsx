@@ -85,6 +85,7 @@ export const AccountDetail: React.FC = () => {
   };
 
 
+
   const toggleThread = async (threadId: string) => {
     // Load thread details if not already loaded
     if (!threadDetails.has(threadId)) {
@@ -388,6 +389,14 @@ export const AccountDetail: React.FC = () => {
                 {/* Stats */}
                 <div className="flex items-center gap-6 mt-4 text-sm">
                   <div>
+                    <span className="font-semibold">{account.followerCount?.toLocaleString() || '0'}</span>
+                    <span className="text-muted-foreground ml-1">Followers</span>
+                  </div>
+                  <div>
+                    <span className="font-semibold">{account.followingCount?.toLocaleString() || '0'}</span>
+                    <span className="text-muted-foreground ml-1">Following</span>
+                  </div>
+                  <div>
                     <span className="font-semibold">{threads.length}</span>
                     <span className="text-muted-foreground ml-1">Threads</span>
                   </div>
@@ -522,6 +531,7 @@ export const AccountDetail: React.FC = () => {
                       .map(renderIndividualChange)}
                   </div>
                 )}
+
 
                 {/* No Content */}
                 {((contentView === 'threads' && filteredThreads.length === 0) ||

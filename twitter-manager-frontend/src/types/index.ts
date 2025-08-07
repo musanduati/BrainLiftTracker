@@ -6,6 +6,7 @@ export interface TwitterAccount {
   accountType: 'managed' | 'list_owner';
   authorized: boolean;
   followerCount?: number;
+  followingCount?: number;
   tweetCount?: number;
   threadCount?: number;
   createdAt: string;
@@ -14,6 +15,9 @@ export interface TwitterAccount {
   tokenRefreshFailures?: number;
   tokenStatus?: 'healthy' | 'expiring' | 'expired' | 'refresh_failed';
   listNames?: string[]; // Optional list of lists this account belongs to
+  verified?: boolean;
+  description?: string;
+  twitterUserId?: string;
 }
 
 export interface Tweet {

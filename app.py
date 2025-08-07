@@ -46,15 +46,13 @@ os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 VALID_API_KEY = os.environ.get('API_KEY')
 if not VALID_API_KEY:
     print("WARNING: No API_KEY found in environment. Please set it in .env file.")
-    print("For testing, you can use: 2043adb52a7468621a9245c94d702e4bed5866b0ec52772f203286f823a50bbb")
     VALID_API_KEY = "test-api-key-replace-in-production"
 
 # Get encryption key from environment
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY')
 if not ENCRYPTION_KEY:
     print("WARNING: No ENCRYPTION_KEY found in environment. Please set it in .env file.")
-    print("Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"")
-    # Use a default for testing only - NEVER use in production
+    # Generate a new key for this session if not provided
     ENCRYPTION_KEY = Fernet.generate_key().decode()
 fernet = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
 
@@ -65,12 +63,10 @@ TWITTER_CLIENT_SECRET = os.environ.get('TWITTER_CLIENT_SECRET')
 if not TWITTER_CLIENT_ID or not TWITTER_CLIENT_SECRET:
     print("WARNING: Twitter API credentials not found in environment.")
     print("Please set TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET in .env file.")
-    print("Get these from: https://developer.twitter.com/en/portal/dashboard")
 TWITTER_CALLBACK_URL = os.environ.get('TWITTER_CALLBACK_URL', 'http://localhost:5555/auth/callback')
 
 if 'localhost' in TWITTER_CALLBACK_URL and os.environ.get('FLASK_ENV') == 'production':
     print("WARNING: Using localhost callback URL in production environment!")
-    print("Please set TWITTER_CALLBACK_URL in .env file to your server's address.")
 
 # Mock mode disabled - we want real Twitter posting
 MOCK_TWITTER_POSTING = False
@@ -158,7 +154,7 @@ def check_token_needs_refresh(token_expires_at):
         # Token needs refresh if within 15 minutes of expiry
         return datetime.now(UTC) >= expires_at - timedelta(minutes=15)
     except Exception as e:
-        print(f"Error checking token expiry: {e}")
+        # Error checking token expiry
         return False
 
 def refresh_twitter_token(account_id, retry_count=0):
@@ -217,7 +213,7 @@ def refresh_twitter_token(account_id, retry_count=0):
         if retry_count > 0:
             import time
             delay = (2 ** retry_count) + (secrets.randbelow(1000) / 1000)
-            print(f"Retry {retry_count}/{max_retries} after {delay:.2f}s delay...")
+            # Retry after exponential backoff delay
             time.sleep(delay)
         
         response = requests.post(token_url, headers=headers, data=data)
@@ -257,7 +253,7 @@ def refresh_twitter_token(account_id, retry_count=0):
             conn.commit()
             conn.close()
             
-            print(f"Successfully refreshed token for account {account['username']}")
+            # Successfully refreshed token
             return True, new_access_token
             
         else:
@@ -281,13 +277,13 @@ def refresh_twitter_token(account_id, retry_count=0):
             conn.commit()
             conn.close()
             
-            print(f"Failed to refresh token for account {account_id}: {error_msg}")
+            # Failed to refresh token
             return False, error_msg
             
     except Exception as e:
         if conn:
             conn.close()
-        print(f"Exception during token refresh: {str(e)}")
+        # Exception during token refresh
         return False, str(e)
 
 def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_refresh=True):
@@ -315,7 +311,7 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_
     if mock_mode_override['enabled']:
         conn.close()
         mock_tweet_id = f"mock_{datetime.now().timestamp()}"
-        print(f"[MOCK MODE] Would post tweet for {account['username']}: {tweet_text}")
+        # Mock mode - not posting to Twitter
         return True, mock_tweet_id
     
     # Check rate limit before attempting to post
@@ -331,7 +327,7 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_
         if token_expires.tzinfo is None:
             token_expires = token_expires.replace(tzinfo=UTC)
         if datetime.now(UTC) >= token_expires - timedelta(minutes=15):
-            print(f"Token for {account['username']} expires soon, refreshing proactively...")
+            # Token expires soon, refreshing proactively
             conn.close()
             success, result = refresh_twitter_token(account_id)
             if success:
@@ -342,15 +338,14 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_
                     (account_id,)
                 ).fetchone()
             else:
-                print(f"Proactive refresh failed: {result}")
+                # Proactive refresh failed
     
     try:
         # Decrypt tokens
         access_token = decrypt_token(account['access_token'])
         access_token_secret = decrypt_token(account['access_token_secret']) if account['access_token_secret'] else None
         
-        print(f"Posting tweet for account: {account['username']}")
-        print(f"OAuth type: {'OAuth 2.0' if not access_token_secret or not access_token_secret.strip() else 'OAuth 1.0a'}")
+        # Posting tweet for account
         
         # Check if OAuth 2.0 (no secret) or OAuth 1.0a (with secret)
         if access_token_secret and access_token_secret.strip():
@@ -381,7 +376,7 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_
             if response.status_code == 401 and retry_after_refresh:
                 # Token expired, try to refresh
                 conn.close()
-                print(f"Access token expired for {account['username']}, attempting refresh...")
+                # Access token expired, attempting refresh
                 success, new_token = refresh_twitter_token(account_id)
                 
                 if success:
@@ -516,7 +511,7 @@ def get_accounts():
 
 @app.route('/api/v1/accounts/<int:account_id>', methods=['GET'])
 def get_account(account_id):
-    """Get specific account"""
+    """Get specific account with Twitter metrics"""
     if not check_api_key():
         return jsonify({'error': 'Invalid API key'}), 401
     
@@ -524,17 +519,187 @@ def get_account(account_id):
         conn = get_db()
         cursor = conn.execute('SELECT * FROM twitter_account WHERE id = ?', (account_id,))
         account = cursor.fetchone()
-        conn.close()
         
         if not account:
+            conn.close()
             return jsonify({'error': 'Account not found'}), 404
         
-        return jsonify({
+        account_data = {
             'id': account['id'],
             'username': account['username'],
             'status': account['status'],
-            'created_at': account['created_at']
-        })
+            'created_at': account['created_at'],
+            'account_type': account['account_type'] if 'account_type' in account.keys() else 'managed',
+            'display_name': account['display_name'] if 'display_name' in account.keys() else None,
+            'profile_picture': account['profile_picture'] if 'profile_picture' in account.keys() else None
+        }
+        
+        # Fetch Twitter metrics if account has access token
+        if account['access_token']:
+            try:
+                # Check if token needs refresh
+                if check_token_needs_refresh(account['token_expires_at']):
+                    success, refresh_result = refresh_twitter_token(account['id'])
+                    if success:
+                        # Get updated token
+                        updated = conn.execute(
+                            'SELECT access_token FROM twitter_account WHERE id = ?',
+                            (account['id'],)
+                        ).fetchone()
+                        access_token = decrypt_token(updated['access_token'])
+                    else:
+                        access_token = decrypt_token(account['access_token'])
+                else:
+                    access_token = decrypt_token(account['access_token'])
+                
+                # Fetch user data from Twitter
+                headers = {
+                    'Authorization': f'Bearer {access_token}'
+                }
+                
+                response = requests.get(
+                    f'https://api.twitter.com/2/users/by/username/{account["username"]}',
+                    headers=headers,
+                    params={
+                        'user.fields': 'name,profile_image_url,description,public_metrics,created_at,verified'
+                    }
+                )
+                
+                if response.status_code == 200:
+                    user_data = response.json().get('data', {})
+                    account_data['twitter_metrics'] = user_data.get('public_metrics', {})
+                    account_data['follower_count'] = user_data.get('public_metrics', {}).get('followers_count', 0)
+                    account_data['following_count'] = user_data.get('public_metrics', {}).get('following_count', 0)
+                    account_data['tweet_count'] = user_data.get('public_metrics', {}).get('tweet_count', 0)
+                    account_data['verified'] = user_data.get('verified', False)
+                    account_data['description'] = user_data.get('description', '')
+                    account_data['twitter_user_id'] = user_data.get('id')
+            except Exception as e:
+                # Error fetching Twitter metrics - continue without metrics
+                # Continue without metrics if fetch fails
+        
+        conn.close()
+        return jsonify(account_data)
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/accounts/<int:account_id>/followers', methods=['GET'])
+def get_account_followers(account_id):
+    """Get paginated list of followers for an account
+    
+    NOTE: This endpoint requires elevated Twitter API access with special approval.
+    It will return 403 Forbidden for most apps. The follower count in the 
+    /accounts/<id> endpoint works without special permissions.
+    """
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        cursor = conn.execute('SELECT * FROM twitter_account WHERE id = ?', (account_id,))
+        account = cursor.fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'Account not found'}), 404
+        
+        if not account['access_token']:
+            conn.close()
+            return jsonify({'error': 'Account not authorized'}), 403
+        
+        # Get pagination parameters
+        page_token = request.args.get('pagination_token')
+        max_results = min(int(request.args.get('max_results', 20)), 100)  # Max 100 per request
+        
+        # Check if token needs refresh
+        if check_token_needs_refresh(account['token_expires_at']):
+            success, refresh_result = refresh_twitter_token(account['id'])
+            if success:
+                # Get updated token
+                updated = conn.execute(
+                    'SELECT access_token FROM twitter_account WHERE id = ?',
+                    (account['id'],)
+                ).fetchone()
+                access_token = decrypt_token(updated['access_token'])
+            else:
+                conn.close()
+                return jsonify({'error': 'Token refresh failed'}), 401
+        else:
+            access_token = decrypt_token(account['access_token'])
+        
+        # First get the Twitter user ID if we don't have it
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+        
+        # Get user ID
+        user_response = requests.get(
+            f'https://api.twitter.com/2/users/by/username/{account["username"]}',
+            headers=headers,
+            params={'user.fields': 'id'}
+        )
+        
+        if user_response.status_code != 200:
+            conn.close()
+            return jsonify({'error': 'Failed to get user info'}), user_response.status_code
+        
+        user_id = user_response.json().get('data', {}).get('id')
+        
+        if not user_id:
+            conn.close()
+            return jsonify({'error': 'User ID not found'}), 404
+        
+        # Fetch followers
+        params = {
+            'user.fields': 'name,username,profile_image_url,description,public_metrics,created_at,verified',
+            'max_results': max_results
+        }
+        
+        if page_token:
+            params['pagination_token'] = page_token
+        
+        followers_response = requests.get(
+            f'https://api.twitter.com/2/users/{user_id}/followers',
+            headers=headers,
+            params=params
+        )
+        
+        conn.close()
+        
+        if followers_response.status_code == 200:
+            data = followers_response.json()
+            followers = data.get('data', [])
+            meta = data.get('meta', {})
+            
+            # Format follower data
+            formatted_followers = []
+            for follower in followers:
+                formatted_followers.append({
+                    'id': follower.get('id'),
+                    'username': follower.get('username'),
+                    'name': follower.get('name'),
+                    'profile_image_url': follower.get('profile_image_url'),
+                    'description': follower.get('description'),
+                    'verified': follower.get('verified', False),
+                    'followers_count': follower.get('public_metrics', {}).get('followers_count', 0),
+                    'following_count': follower.get('public_metrics', {}).get('following_count', 0),
+                    'tweet_count': follower.get('public_metrics', {}).get('tweet_count', 0),
+                    'created_at': follower.get('created_at')
+                })
+            
+            return jsonify({
+                'followers': formatted_followers,
+                'pagination': {
+                    'next_token': meta.get('next_token'),
+                    'previous_token': meta.get('previous_token'),
+                    'result_count': meta.get('result_count', len(followers))
+                },
+                'total_count': meta.get('result_count', len(followers))
+            })
+        else:
+            error_data = followers_response.json()
+            return jsonify({'error': error_data.get('detail', 'Failed to fetch followers')}), followers_response.status_code
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1782,7 +1947,7 @@ def post_tweets_background(job_id, batch_size=10):
                         background_jobs[job_id]['processed'] = total_posted + total_failed
                         
                     except Exception as e:
-                        print(f"Error processing tweet {tweet['id']}: {e}")
+                        # Error processing tweet - skip this one
                         total_failed += 1
                         background_jobs[job_id]['failed'] = total_failed
                         background_jobs[job_id]['processed'] = total_posted + total_failed
@@ -3901,7 +4066,7 @@ def get_accounts_by_lists():
                             members.append(member)
                             print(f"DEBUG: Parsed member: {member}")
                         except Exception as e:
-                            print(f"DEBUG: Failed to parse member JSON: {member_json} - Error: {e}")
+                            # Failed to parse member JSON
                             pass
             
             lists.append({
@@ -4921,7 +5086,8 @@ def init_database():
         conn.close()
         print("Database initialized successfully")
     except Exception as e:
-        print(f"Error initializing database: {e}")
+        # Error initializing database
+        raise e  # Re-raise to prevent app from starting with broken DB
 
 if __name__ == '__main__':
     print(f"Database path: {DB_PATH}")
