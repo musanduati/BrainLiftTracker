@@ -86,30 +86,26 @@ from workflowy.config.environment import EnvironmentConfigV2
 ## Module Organization Details
 
 ### Scraper Module (`core/scraper/`)
-- **main.py** (373 lines) - Main WorkflowyTesterV2 class
-- **models.py** (33 lines) - Data models (WorkflowyNode, etc.)
-- **content_processing.py** (88 lines) - HTML cleaning & content extraction
-- **api_utils.py** (215 lines) - Workflowy API interactions
-- **dok_parser.py** (271 lines) - DOK parsing & state management
-- **tweet_generation.py** (246 lines) - Tweet formatting & generation
-
-**Original:** 1,185 lines → **Now:** ~1,226 lines (better organized)
+- **main.py** - Main WorkflowyTesterV2 class
+- **models.py** - Data models (WorkflowyNode, etc.)
+- **content_processing.py** - HTML cleaning & content extraction
+- **api_utils.py** - Workflowy API interactions
+- **dok_parser.py** - DOK parsing & state management
+- **tweet_generation.py** - Tweet formatting & generation
 
 ### Poster Module (`core/poster/`)
-- **main.py** (285 lines) - Main TweetPosterV2 class
-- **storage_interface.py** (90 lines) - Storage operations
-- **twitter_api.py** (162 lines) - Twitter API client
-- **thread_manager.py** (169 lines) - Thread handling logic
-- **project_processor.py** (204 lines) - Project processing
-
-**Original:** 732 lines → **Now:** ~910 lines (better organized)
+- **main.py** - Main TweetPosterV2 class
+- **storage_interface.py** - Storage operations
+- **twitter_api.py** - Twitter API client
+- **thread_manager.py** - Thread handling logic
+- **project_processor.py** - Project processing
 
 ## Key Changes from Original Structure
 
 ### Modularization Benefits
 1. **Better code organization** - Each file has a single responsibility
 2. **Easier maintenance** - Changes are isolated to specific modules
-3. **Improved readability** - 200-400 lines per file vs 700-1200 lines
+3. **Improved readability** - Lower number of lines per file
 4. **Easier testing** - Can unit test individual modules
 5. **No breaking changes** - Complete backward compatibility maintained
 
