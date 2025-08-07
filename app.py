@@ -339,6 +339,7 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_
                 ).fetchone()
             else:
                 # Proactive refresh failed
+                pass
     
     try:
         # Decrypt tokens
@@ -576,7 +577,7 @@ def get_account(account_id):
                     account_data['twitter_user_id'] = user_data.get('id')
             except Exception as e:
                 # Error fetching Twitter metrics - continue without metrics
-                # Continue without metrics if fetch fails
+                pass
         
         conn.close()
         return jsonify(account_data)
