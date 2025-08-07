@@ -9,26 +9,41 @@ workflowy/
 │
 ├── core/                    # Core business logic
 │   ├── __init__.py
-│   ├── workflowy_scraper.py    # Workflowy content scraping (formerly test_workflowy_v2.py)
-│   ├── tweet_poster.py         # Tweet posting logic (formerly post_tweets_v2.py)
-│   ├── bulk_processor.py       # Bulk URL processing (formerly bulk_url_processor_v2.py)
+│   ├── scraper/            # Modularized scraper components (NEW)
+│   │   ├── __init__.py
+│   │   ├── main.py             # Main WorkflowyTesterV2 class
+│   │   ├── models.py           # Data models
+│   │   ├── content_processing.py  # Content extraction
+│   │   ├── api_utils.py        # API interactions
+│   │   ├── dok_parser.py       # DOK parsing logic
+│   │   └── tweet_generation.py # Tweet generation
+│   ├── poster/             # Modularized poster components (NEW)
+│   │   ├── __init__.py
+│   │   ├── main.py             # Main TweetPosterV2 class
+│   │   ├── storage_interface.py # Storage operations
+│   │   ├── twitter_api.py      # Twitter API client
+│   │   ├── thread_manager.py   # Thread handling
+│   │   └── project_processor.py # Project processing
+│   ├── workflowy_scraper.py    # Backward compatibility wrapper
+│   ├── tweet_poster.py         # Backward compatibility wrapper
+│   ├── bulk_processor.py       # Bulk URL processing
 │   └── llm_service.py          # LLM integration services
 │
 ├── storage/                 # Storage and data layer
 │   ├── __init__.py
-│   ├── aws_storage.py          # AWS S3 & DynamoDB operations (formerly aws_storage_v2.py)
-│   ├── schemas.py              # Database schemas (formerly schema_definitions.py)
-│   └── project_utils.py       # Project ID utilities (formerly project_id_utils.py)
+│   ├── aws_storage.py          # AWS S3 & DynamoDB operations
+│   ├── schemas.py              # Database schemas
+│   └── project_utils.py       # Project ID utilities
 │
 ├── config/                  # Configuration management
 │   ├── __init__.py
-│   ├── environment.py          # Environment configurations (formerly environment_config_v2.py)
-│   └── logger.py              # Logging configuration (formerly logger_config.py)
+│   ├── environment.py          # Environment configurations
+│   └── logger.py              # Logging configuration
 │
 ├── scripts/                 # Utility scripts (not included in Lambda package)
 │   ├── create_tables.py       # DynamoDB table creation
-│   ├── migrate_to_v2.py       # Migration script (formerly perform_migration_to_v2.py)
-│   └── test_lambda_local.py   # Local testing (formerly test_lambda_local_v2.py)
+│   ├── migrate_to_v2.py       # Migration script
+│   └── test_lambda_local.py   # Local testing
 │
 ├── test_data/              # Test data files (not included in Lambda package)
 │   └── bulk_url_upload.json   # Sample bulk URL data
@@ -44,89 +59,71 @@ workflowy/
 Due to the modular structure, imports should be done directly from specific modules to avoid circular dependencies:
 
 ```python
-# Import core classes directly from their modules
+# Import from backward compatibility wrappers (preserves existing code)
 from workflowy.core.workflowy_scraper import WorkflowyTesterV2
 from workflowy.core.tweet_poster import TweetPosterV2
-from workflowy.core.bulk_processor import BulkURLProcessorV2
+
+# Or import from new modular structure
+from workflowy.core.scraper.main import WorkflowyTesterV2
+from workflowy.core.poster.main import TweetPosterV2
+
+# Import specific components
+from workflowy.core.scraper.dok_parser import parse_dok_points
+from workflowy.core.poster.twitter_api import TwitterAPIClient
 
 # Import storage classes
 from workflowy.storage.aws_storage import AWSStorageV2
 
-# Import utility functions from storage
+# Import utility functions
 from workflowy.storage.project_utils import generate_project_id, normalize_project_id
 from workflowy.storage.schemas import get_table_names, validate_project_item
 
 # Import configuration
 from workflowy.config.logger import logger
 from workflowy.config.environment import EnvironmentConfigV2
-
-# Import Lambda handler
-from workflowy.lambda_handler import lambda_handler
 ```
 
-### Import Examples by Use Case
+## Module Organization Details
 
-#### For Lambda Handler:
-```python
-from workflowy.core.workflowy_scraper import WorkflowyTesterV2
-from workflowy.core.tweet_poster import TweetPosterV2
-from workflowy.storage.aws_storage import AWSStorageV2
-from workflowy.core.bulk_processor import is_bulk_url_request_v2, handle_bulk_url_processing_v2
-from workflowy.config.logger import logger
-```
+### Scraper Module (`core/scraper/`)
+- **main.py** (373 lines) - Main WorkflowyTesterV2 class
+- **models.py** (33 lines) - Data models (WorkflowyNode, etc.)
+- **content_processing.py** (88 lines) - HTML cleaning & content extraction
+- **api_utils.py** (215 lines) - Workflowy API interactions
+- **dok_parser.py** (271 lines) - DOK parsing & state management
+- **tweet_generation.py** (246 lines) - Tweet formatting & generation
 
-#### For Scripts:
-```python
-# Add root to path first
-import sys
-from pathlib import Path
-root_dir = Path(__file__).parent.parent.parent  # Navigate to root
-sys.path.insert(0, str(root_dir))
+**Original:** 1,185 lines → **Now:** ~1,226 lines (better organized)
 
-# Then import workflowy modules
-from workflowy.config.logger import logger
-from workflowy.lambda_handler import lambda_handler
-```
+### Poster Module (`core/poster/`)
+- **main.py** (285 lines) - Main TweetPosterV2 class
+- **storage_interface.py** (90 lines) - Storage operations
+- **twitter_api.py** (162 lines) - Twitter API client
+- **thread_manager.py** (169 lines) - Thread handling logic
+- **project_processor.py** (204 lines) - Project processing
 
-## Key Changes from V1 to V2
+**Original:** 732 lines → **Now:** ~910 lines (better organized)
 
-### File Renames
-- `test_workflowy_v2.py` → `core/workflowy_scraper.py`
-- `post_tweets_v2.py` → `core/tweet_poster.py`
-- `bulk_url_processor_v2.py` → `core/bulk_processor.py`
-- `aws_storage_v2.py` → `storage/aws_storage.py`
-- `schema_definitions.py` → `storage/schemas.py`
-- `project_id_utils.py` → `storage/project_utils.py`
-- `environment_config_v2.py` → `config/environment.py`
-- `logger_config.py` → `config/logger.py`
-- `lambda_handler_v2.py` → `lambda_handler.py`
-- `perform_migration_to_v2.py` → `scripts/migrate_to_v2.py`
-- `test_lambda_local_v2.py` → `scripts/test_lambda_local.py`
-- `test_bulk_url_upload.json` → `test_data/bulk_url_upload.json`
+## Key Changes from Original Structure
 
-### Class Names (kept for backward compatibility)
-- `WorkflowyTesterV2` - Main scraper class
-- `TweetPosterV2` - Tweet posting class
-- `BulkURLProcessorV2` - Bulk URL processor
-- `AWSStorageV2` - AWS storage handler
-- `EnvironmentConfigV2` - Environment configuration
+### Modularization Benefits
+1. **Better code organization** - Each file has a single responsibility
+2. **Easier maintenance** - Changes are isolated to specific modules
+3. **Improved readability** - 200-400 lines per file vs 700-1200 lines
+4. **Easier testing** - Can unit test individual modules
+5. **No breaking changes** - Complete backward compatibility maintained
 
-Note: Class names still have V2 suffix to minimize code changes. These can be updated in a future refactoring.
-
-## Benefits of New Structure
-
-1. **Clear separation of concerns** - Core logic, storage, and config are separated
-2. **Better discoverability** - It's immediately clear what each module does
-3. **Cleaner Lambda package** - Scripts and test data are excluded
-4. **No redundant versioning** - Removed unnecessary `_v2` suffixes from filenames
-5. **Proper Python package structure** - With `__init__.py` files for clean imports
-6. **Isolated deprecated code** - V1 remains untouched in its directory
+### Backward Compatibility
+- `workflowy_scraper.py` and `tweet_poster.py` are now thin wrappers
+- All existing imports continue to work
+- No changes required in Lambda handler or other files
+- All functionality preserved exactly as before
 
 ## Lambda Deployment
 
-The Lambda package now includes only necessary production code:
+The Lambda package now includes the new modular structure:
 - Lambda handler at root level of package
-- Core business logic modules
+- Core business logic with scraper/ and poster/ subdirectories
 - Storage and configuration modules
 - Required dependencies (installed via pip)
 
@@ -136,10 +133,7 @@ Scripts and test data are excluded from the Lambda deployment package.
 
 ### From root directory:
 ```bash
-# Test imports
-python test_imports.py
-
-# Create Lambda package
+# Build Lambda package
 ./create_lambda_package_v2.sh
 
 # Test Lambda locally
@@ -152,16 +146,6 @@ python workflowy/scripts/migrate_to_v2.py
 python workflowy/scripts/create_tables.py create --environment test
 ```
 
-### Environment Setup
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Set environment variables
-export ENVIRONMENT=test
-export OPENAI_API_KEY=your_key_here
-```
-
 ## Testing Checklist
 
 - [x] Module imports work correctly
@@ -169,12 +153,15 @@ export OPENAI_API_KEY=your_key_here
 - [x] Scripts can find workflowy modules
 - [x] No circular import issues
 - [x] Lambda package builds successfully
+- [x] Scraper reorganization tested
+- [x] Poster reorganization tested
 - [ ] Deploy and test in AWS Lambda
 - [ ] Run full integration test
 
 ## Notes
 
 - The `__init__.py` files are kept minimal to avoid circular imports
-- Always import classes directly from their modules
+- Always import classes directly from their modules or use backward compatibility wrappers
 - Scripts need to add the root directory to Python path before importing
 - V1 code is preserved but isolated and not updated
+- Both major files (workflowy_scraper.py and tweet_poster.py) are now modularized

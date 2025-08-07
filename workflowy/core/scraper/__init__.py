@@ -1,26 +1,23 @@
 """
-Workflowy Scraper V2 - Main module
-This is now a thin wrapper that imports from the modular scraper package.
-All functionality has been reorganized into the scraper/ subdirectory.
+Workflowy scraper package - modular components for scraping and processing
 """
 
-# Import everything from the scraper package for backward compatibility
-from workflowy.core.scraper import (
-    # Main class
-    WorkflowyTesterV2,
-    extract_single_dok_section_llm,
-    
-    # Models
+# Import main class
+from .main import WorkflowyTesterV2, extract_single_dok_section_llm
+
+# Import models
+from .models import (
     WorkflowyNode,
     AuxiliaryProject,
     ProjectTreeData,
-    InitializationData,
-    
-    # Content processing functions
-    _clean_html_content,
-    _extract_node_content,
-    
-    # DOK parsing functions
+    InitializationData
+)
+
+# Import processing functions
+from .content_processing import _clean_html_content, _extract_node_content
+
+# Import DOK parser functions
+from .dok_parser import (
     parse_dok_points,
     get_timestamp,
     create_content_hash,
@@ -28,28 +25,42 @@ from workflowy.core.scraper import (
     create_content_signature,
     calculate_similarity_score,
     detect_content_changes,
-    advanced_compare_dok_states,
-    
-    # Tweet generation functions
-    create_combined_content,
-    split_content_for_twitter,
-    generate_advanced_change_tweets,
-    
-    # API utilities
-    extract_share_id,
-    extract_top_level_nodes,
+    advanced_compare_dok_states
 )
 
-# Re-export everything for backward compatibility
+# Import tweet generation
+from .tweet_generation import (
+    create_combined_content,
+    split_content_for_twitter,
+    generate_advanced_change_tweets
+)
+
+# Import API utilities
+from .api_utils import (
+    extract_share_id,
+    make_request,
+    get_tree_data,
+    get_initial_data,
+    extract_top_level_nodes,
+    filter_nodes_llm
+)
+
 __all__ = [
+    # Main class
     'WorkflowyTesterV2',
     'extract_single_dok_section_llm',
+    
+    # Models
     'WorkflowyNode',
     'AuxiliaryProject',
     'ProjectTreeData',
     'InitializationData',
+    
+    # Content processing
     '_clean_html_content',
     '_extract_node_content',
+    
+    # DOK parsing
     'parse_dok_points',
     'get_timestamp',
     'create_content_hash',
@@ -58,15 +69,17 @@ __all__ = [
     'calculate_similarity_score',
     'detect_content_changes',
     'advanced_compare_dok_states',
+    
+    # Tweet generation
     'create_combined_content',
     'split_content_for_twitter',
     'generate_advanced_change_tweets',
+    
+    # API utilities
     'extract_share_id',
+    'make_request',
+    'get_tree_data',
+    'get_initial_data',
     'extract_top_level_nodes',
+    'filter_nodes_llm',
 ]
-
-# For testing - import the test function
-if __name__ == "__main__":
-    import asyncio
-    from workflowy.core.scraper.main import test_project_processing
-    asyncio.run(test_project_processing())
