@@ -1,40 +1,52 @@
+"""
+Lambda Handler V2 - Project-based Processing
+Updated to use project-based identification instead of user-based identification.
+Supports both bulk URL processing and scheduled content processing.
+"""
+
 import json
 import asyncio
-from test_workflowy import WorkflowyTester
-from post_tweets import TweetPoster
-from aws_storage import AWSStorage
-from bulk_url_processor import is_bulk_url_request, handle_bulk_url_processing
-from logger_config import logger
+import os
+from workflowy.core.workflowy_scraper import WorkflowyTesterV2
+from workflowy.core.tweet_poster import TweetPosterV2
+from workflowy.storage.aws_storage import AWSStorageV2
+from workflowy.core.bulk_processor import is_bulk_url_request_v2, handle_bulk_url_processing_v2
+from workflowy.config.logger import logger
+
 
 def lambda_handler(event, context):
     """
-    Lambda handler for:
+    Lambda handler V2 for:
     1. Bulk URL processing (when event contains brainlift URLs)
-    2. Scheduled Workflowy processing AND tweet posting (default behavior)
+    2. Scheduled project processing AND tweet posting (default behavior)
     """
     
+    # Determine environment from event or context
+    environment = os.getenv('ENVIRONMENT', 'test')
+    
     # Check if this is a bulk URL processing request
-    if is_bulk_url_request(event):
-        logger.info("🔗 Processing bulk URL upload request")
-        return handle_bulk_url_processing(event)
+    if is_bulk_url_request_v2(event):
+        logger.info("🔗 Processing bulk URL upload request (V2)")
+        return handle_bulk_url_processing_v2(event, environment)
     else:
-        logger.info("🚀 Starting Workflowy processing + Tweet posting in Lambda")
+        logger.info(f"🚀 Starting project-based processing + Tweet posting in Lambda (Environment: {environment})")
         
-        # Run the async processing (existing functionality)
-        results = asyncio.run(process_and_post())
+        # Run the async processing (updated for project-based approach)
+        results = asyncio.run(process_and_post_v2(environment))
         
-        scraping_successful = len([r for r in results['scraping_results'] if r['status'] == 'success'])
-        scraping_failed = len([r for r in results['scraping_results'] if r['status'] == 'error'])
+        scraping_successful = len([r for r in results['processing_results'] if r['status'] == 'success'])
+        scraping_failed = len([r for r in results['processing_results'] if r['status'] == 'error'])
         
         posting_successful = len([r for r in results['posting_results'] if r['status'] == 'success'])
         posting_failed = len([r for r in results['posting_results'] if r['status'] == 'error'])
         
         summary = {
-            'scraping': {
-                'total_processed': len(results['scraping_results']),
+            'environment': environment,
+            'processing': {
+                'total_processed': len(results['processing_results']),
                 'successful': scraping_successful,
                 'failed': scraping_failed,
-                'results': results['scraping_results']
+                'results': results['processing_results']
             },
             'posting': {
                 'total_processed': len(results['posting_results']),
@@ -44,7 +56,7 @@ def lambda_handler(event, context):
             }
         }
         
-        logger.info(f"✅ Scraping complete: {scraping_successful} successful, {scraping_failed} failed")
+        logger.info(f"✅ Processing complete: {scraping_successful} successful, {scraping_failed} failed")
         logger.info(f"✅ Posting complete: {posting_successful} successful, {posting_failed} failed")
         
         return {
@@ -52,110 +64,119 @@ def lambda_handler(event, context):
             'body': json.dumps(summary, default=str)
         }
 
-async def process_and_post():
-    """Process all URLs and then post tweets"""
+
+async def process_and_post_v2(environment: str = 'test'):
+    """Process all projects and then post tweets (project-based approach)."""
     
-    # Step 1: Get URLs from DynamoDB
-    logger.info("📊 STEP 1: Loading configuration from DynamoDB...")
-    storage = AWSStorage()
-    workflowy_urls = storage.get_workflowy_urls()
+    # Step 1: Get active projects from DynamoDB
+    logger.info("📊 STEP 1: Loading active projects from DynamoDB...")
+    storage = AWSStorageV2(environment)
+    projects = storage.get_all_projects()
     
-    if not workflowy_urls:
-        logger.error("❌ No active Workflowy URLs found in DynamoDB!")
+    if not projects:
+        logger.error("❌ No active projects found in DynamoDB!")
         return {
-            'scraping_results': [{
+            'processing_results': [{
                 'status': 'error',
-                'error': 'No active Workflowy URLs configured in DynamoDB'
+                'error': 'No active projects configured in DynamoDB'
             }],
             'posting_results': []
         }
     
-    logger.info(f"📋 Found {len(workflowy_urls)} active URL(s) to process")
-    for url_config in workflowy_urls:
-        logger.info(f"  • {url_config['name']}: {url_config['url']}")
+    logger.info(f"📋 Found {len(projects)} active project(s) to process")
+    for project in projects:
+        logger.info(f"  • {project['name']} ({project['project_id']}): {project['url']}")
     
-    # Step 2: Scrape Workflowy content
-    logger.info("📊 STEP 2: Scraping Workflowy content...")
-    scraping_results = []
+    # Step 2: Process Workflowy content for all projects
+    logger.info("📊 STEP 2: Processing Workflowy content...")
+    processing_results = []
     
-    async with WorkflowyTester() as tester:
-        for i, url_config in enumerate(workflowy_urls, 1):
-            logger.info(f"🔄 SCRAPING URL {i}/{len(workflowy_urls)}: {url_config['name']}")
-            result = await tester.process_single_url(url_config)
-            scraping_results.append(result)
-            # Add delay between URLs to be respectful
-            if i < len(workflowy_urls):
-                logger.info(f"⏱️ Waiting 2 seconds before next URL...")
-                await asyncio.sleep(2)
+    async with WorkflowyTesterV2(environment) as tester:
+        for i, project in enumerate(projects, 1):
+            project_id = project['project_id']
+            project_name = project['name']
+            
+            logger.info(f"🔄 PROCESSING PROJECT {i}/{len(projects)}: {project_name} ({project_id})")
+            
+            result = await tester.process_single_project(project_id)
+            processing_results.append(result)
     
-    # Step 3: Post tweets for users that had new content
+    # Step 3: Post tweets for projects that had new content
     logger.info(f"🐦 STEP 3: Posting tweets...")
     posting_results = []
     
-    # Get list of users who had content processed
-    users_with_content = []
-    for result in scraping_results:
+    # Get list of projects that had content processed
+    projects_with_content = []
+    for result in processing_results:
         if result['status'] == 'success' and result.get('total_change_tweets', 0) > 0:
-            users_with_content.append(result['user_name'])
+            projects_with_content.append(result['project_id'])
 
-    if users_with_content:
-        logger.info(f"👥 Users with new content to post: {users_with_content}")
+    if projects_with_content:
+        logger.info(f"👥 Projects with new content to post: {projects_with_content}")
         
-        # Create TweetPoster and post tweets
-        poster = TweetPoster(posting_mode="all")
+        # Create TweetPoster V2 and post tweets
+        poster = TweetPosterV2(posting_mode="all", environment=environment)
         
-        # Process each user individually for better error handling
-        for user_name in users_with_content:
+        # Process each project individually for better error handling
+        for project_id in projects_with_content:
             try:
-                logger.info(f"🔄 POSTING tweets for {user_name}...")
+                logger.info(f"🔄 POSTING tweets for project {project_id}...")
 
-                # Use the updated run method that can handle individual users
-                user_results = await process_single_user_posting(poster, user_name)
-                posting_results.append(user_results)
+                # Use the project-based posting method
+                project_results = await process_single_project_posting_v2(poster, project_id)
+                posting_results.append(project_results)
                 
-                # Add delay between users
+                # Add delay between projects
+                if project_id != projects_with_content[-1]:
+                    logger.info(f"⏱️ Waiting 3 seconds before next project...")
+                    await asyncio.sleep(3)
                     
             except Exception as e:
-                logger.error(f"❌ Error posting tweets for {user_name}: {e}")
+                logger.error(f"❌ Error posting tweets for project {project_id}: {e}")
                 posting_results.append({
-                    'user': user_name,
+                    'project_id': project_id,
                     'status': 'error',
                     'error': str(e)
                 })
     else:
-        logger.info("ℹ️ No users with new content to post")
+        logger.info("ℹ️ No projects with new content to post")
         posting_results.append({
-            'user': 'none',
+            'project_id': 'none',
             'status': 'success',
             'message': 'No new content to post'
         })
 
-    logger.info(f"📊 Scraping results: {scraping_results}")
+    logger.info(f"📊 Processing results: {processing_results}")
     logger.info(f"👥 Posting results: {posting_results}")
     
     return {
-        'scraping_results': scraping_results,
+        'processing_results': processing_results,
         'posting_results': posting_results
     }
 
-async def process_single_user_posting(poster: TweetPoster, user_name: str):
-    """Post tweets for a single user using AWS storage"""
+
+async def process_single_project_posting_v2(poster: TweetPosterV2, project_id: str):
+    """Post tweets for a single project using project-based storage."""
     
-    # Check if user has account mapping
-    account_id = poster.get_account_id(user_name)
-    if not account_id:
+    # Get project details
+    project = poster.storage.get_project_by_id(project_id)
+    if not project:
         return {
-            'user': user_name,
+            'project_id': project_id,
             'status': 'error',
-            'error': 'No account ID mapping found'
+            'error': 'Project not found'
         }
     
+    project_name = project['name']
+    account_id = project['account_id']
+    
     # Load latest tweets from AWS
-    all_tweets = poster.load_latest_tweets_from_aws(user_name)
+    all_tweets = poster.get_project_tweet_data(project_id)
     
     if not all_tweets:
         return {
-            'user': user_name,
+            'project_id': project_id,
+            'project_name': project_name,
             'status': 'error',
             'error': 'No tweet data found in AWS'
         }
@@ -165,14 +186,15 @@ async def process_single_user_posting(poster: TweetPoster, user_name: str):
     
     if not pending_tweets:
         return {
-            'user': user_name,
+            'project_id': project_id,
+            'project_name': project_name,
             'status': 'success',
             'message': 'No pending tweets to post',
             'total_tweets': len(all_tweets),
             'pending_tweets': 0
         }
     
-    logger.info(f"📊 Found {len(pending_tweets)} pending tweets for {user_name}")
+    logger.info(f"📊 Found {len(pending_tweets)} pending tweets for project {project_id}")
     
     # Create aiohttp session for posting
     import aiohttp
@@ -192,7 +214,7 @@ async def process_single_user_posting(poster: TweetPoster, user_name: str):
         
         for thread_tweets in threads_to_process:
             try:
-                success = await poster.process_single_thread_for_user(session, thread_tweets, account_id)
+                success = await poster.process_single_thread_for_project(session, thread_tweets, account_id)
                 if success:
                     posted_count += len(thread_tweets)
                     logger.info(f"✅ Posted thread with {len(thread_tweets)} tweets")
@@ -208,8 +230,13 @@ async def process_single_user_posting(poster: TweetPoster, user_name: str):
                 failed_count += len(thread_tweets)
                 logger.error(f"❌ Error posting thread: {e}")
         
+        # Save updated tweets back to S3
+        if posted_count > 0 or failed_count > 0:
+            poster.save_updated_tweets_for_project(project_id, all_tweets)
+        
         return {
-            'user': user_name,
+            'project_id': project_id,
+            'project_name': project_name,
             'status': 'success' if posted_count > 0 else 'partial' if failed_count > 0 else 'failed',
             'total_tweets': len(all_tweets),
             'pending_tweets': len(pending_tweets),
@@ -218,3 +245,28 @@ async def process_single_user_posting(poster: TweetPoster, user_name: str):
             'threads_processed': len(threads_to_process),
             'mode': poster.posting_mode
         }
+
+
+if __name__ == "__main__":
+    # Test the updated lambda handler locally
+    import sys
+    
+    # Mock event and context
+    event = {
+        'environment': 'test'
+    }
+    
+    class MockContext:
+        def __init__(self):
+            self.function_name = "test-function"
+            self.memory_limit_in_mb = 512
+            self.invoked_function_arn = "arn:aws:lambda:us-east-1:123456789012:function:test-function"
+            self.aws_request_id = "test-request-id"
+    
+    context = MockContext()
+    
+    # Run the handler
+    result = lambda_handler(event, context)
+    
+    print("Lambda handler result:")
+    print(json.dumps(result, indent=2, default=str))
