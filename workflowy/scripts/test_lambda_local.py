@@ -11,18 +11,20 @@ import sys
 import json
 import argparse
 from pathlib import Path
-from logger_config import logger
 
-# Add the workflowy directory to Python path
-workflowy_dir = Path(__file__).parent / "workflowy"
-sys.path.insert(0, str(workflowy_dir))
+# Add the root directory to Python path BEFORE any workflowy imports
+script_dir = Path(__file__).parent  # scripts directory
+workflowy_dir = script_dir.parent   # workflowy directory
+root_dir = workflowy_dir.parent     # BrainLiftTracker (root)
+sys.path.insert(0, str(root_dir))
 
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
 
-# Import the V2 lambda handler
-from lambda_handler_v2 import lambda_handler
+# NOW we can import from workflowy
+from workflowy.config.logger import logger
+from workflowy.lambda_handler import lambda_handler
 
 def create_mock_lambda_context():
     """Create a mock Lambda context object"""

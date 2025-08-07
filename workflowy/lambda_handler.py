@@ -7,11 +7,11 @@ Supports both bulk URL processing and scheduled content processing.
 import json
 import asyncio
 import os
-from test_workflowy_v2 import WorkflowyTesterV2
-from post_tweets_v2 import TweetPosterV2
-from aws_storage_v2 import AWSStorageV2
-from bulk_url_processor_v2 import is_bulk_url_request_v2, handle_bulk_url_processing_v2
-from logger_config import logger
+from workflowy.core.workflowy_scraper import WorkflowyTesterV2
+from workflowy.core.tweet_poster import TweetPosterV2
+from workflowy.storage.aws_storage import AWSStorageV2
+from workflowy.core.bulk_processor import is_bulk_url_request_v2, handle_bulk_url_processing_v2
+from workflowy.config.logger import logger
 
 
 def lambda_handler(event, context):

@@ -8,7 +8,7 @@ import uuid
 import re
 from typing import Optional, Dict
 from datetime import datetime
-from logger_config import logger
+from workflowy.config.logger import logger
 
 
 def generate_project_id() -> str:
@@ -156,7 +156,7 @@ PROJECT_ID_TOTAL_LENGTH = len(PROJECT_ID_PREFIX) + PROJECT_ID_UUID_LENGTH
 
 if __name__ == "__main__":
     # Basic testing
-    from logger_config import logger
+    from workflowy.config.logger import logger
     
     logger.info("Testing Project ID utilities...")
     

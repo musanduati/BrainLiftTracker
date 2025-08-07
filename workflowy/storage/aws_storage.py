@@ -5,9 +5,9 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
-from logger_config import logger
-from project_id_utils import normalize_project_id
-from schema_definitions import validate_project_item, validate_state_item, get_table_names
+from workflowy.config.logger import logger
+from workflowy.storage.project_utils import normalize_project_id
+from workflowy.storage.schemas import validate_project_item, validate_state_item, get_table_names
 
 load_dotenv()
 
@@ -68,7 +68,7 @@ class AWSStorageV2:
         Returns:
             str: Generated project_id
         """
-        from project_id_utils import create_project_config
+        from workflowy.storage.project_utils import create_project_config
         
         project_config = create_project_config(url, account_id, name)
         project_id = project_config['project_id']

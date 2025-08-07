@@ -12,9 +12,9 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 
-# Add the workflowy directory to Python path
-current_dir = Path(__file__).parent
-sys.path.insert(0, str(current_dir))
+# Add the parent directory (workflowy) to Python path
+workflowy_dir = Path(__file__).parent.parent  # Go up to workflowy directory
+sys.path.insert(0, str(workflowy_dir))
 
 # Setup logging
 import logging
@@ -25,10 +25,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import required modules
-from aws_storage import AWSStorage
-from aws_storage_v2 import AWSStorageV2
-from project_id_utils import generate_project_id, create_project_config
-from environment_config_v2 import apply_environment_config
+from workflowy.v1.aws_storage import AWSStorage  # Legacy V1 storage
+from workflowy.storage.aws_storage import AWSStorageV2
+from workflowy.storage.project_utils import generate_project_id, create_project_config
+from workflowy.config.environment import apply_environment_config
 
 
 class PerformMigrationToV2:
@@ -59,7 +59,7 @@ class PerformMigrationToV2:
     
     def _configure_legacy_storage(self, environment: str):
         """Configure legacy storage to use the correct environment tables."""
-        from environment_config_v2 import EnvironmentConfigV2
+        from workflowy.config.environment import EnvironmentConfigV2
         
         config = EnvironmentConfigV2.get_config(environment)
         

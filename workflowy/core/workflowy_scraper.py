@@ -14,10 +14,10 @@ import time
 from datetime import datetime
 from typing import Any, List, Dict
 import diff_match_patch as dmp_module
-from aws_storage_v2 import AWSStorageV2
-from project_id_utils import normalize_project_id
-from logger_config import logger
-from llm_service import extract_node_id_using_llm, get_lm_service
+from workflowy.storage.aws_storage import AWSStorageV2
+from workflowy.storage.project_utils import normalize_project_id
+from workflowy.config.logger import logger
+from workflowy.core.llm_service import extract_node_id_using_llm, get_lm_service
 
 class AuxiliaryProject:
     def __init__(self, shareId: str):
