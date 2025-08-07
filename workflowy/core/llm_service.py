@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional, List, Dict
 import aiohttp
-from logger_config import logger
+from workflowy.config.logger import logger
 
 def _fallback_node_matching(node_name: str, nodes: list[dict[str, str]]) -> str | None:
     """

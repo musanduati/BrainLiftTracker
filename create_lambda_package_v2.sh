@@ -1,85 +1,117 @@
 #!/bin/bash
 
-echo "🏗️ Building Lambda V2 package with your code..."
+echo "🏗️ Building Lambda package with organized module structure..."
 
 # Clean previous builds
 rm -rf package/
-rm -f workflowy-processor-v2.zip
+rm -f workflowy-processor.zip
 
-# Create package directory
-mkdir package/
+# Create package directory structure
+mkdir -p package/workflowy
 
 # Install dependencies
 echo "📦 Installing dependencies..."
-pip install --target package/ aiohttp boto3 tenacity diff-match-patch dotenv
+pip install --target package/ aiohttp boto3 tenacity diff-match-patch python-dotenv
 
-# Copy your code files (they're directly in workflowy/ directory)
-echo "📄 Copying code files..."
+# Copy the main lambda handler to package root (AWS Lambda expects it here)
+echo "***** 📄 Copying Lambda handler... *****"
+if [ ! -f "workflowy/lambda_handler.py" ]; then
+    echo "❌ ERROR: workflowy/lambda_handler.py not found!"
+    exit 1
+fi
+cp workflowy/lambda_handler.py package/
 
-# Check source files exist first
-if [ ! -f "workflowy/aws_storage_v2.py" ]; then
-    echo "❌ ERROR: workflowy/aws_storage_v2.py not found!"
+# Copy module directories (excluding scripts and test_data)
+echo "***** 📁 Copying module directories... *****"
+
+if [ ! -d "workflowy/core" ]; then
+    echo "❌ ERROR: workflowy/core directory not found!"
+    exit 1
+fi
+cp -r workflowy/core package/workflowy/
+
+# Verify scraper subdirectory was copied
+if [ ! -d "package/workflowy/core/scraper" ]; then
+    echo "❌ ERROR: workflowy/core/scraper subdirectory not found in package!"
     exit 1
 fi
 
-if [ ! -f "workflowy/test_workflowy_v2.py" ]; then
-    echo "❌ ERROR: workflowy/test_workflowy_v2.py not found!"
+# Verify poster subdirectory was copied
+if [ ! -d "package/workflowy/core/poster" ]; then
+    echo "❌ ERROR: workflowy/core/poster subdirectory not found in package!"
     exit 1
 fi
 
-if [ ! -f "workflowy/lambda_handler_v2.py" ]; then
-    echo "❌ ERROR: workflowy/lambda_handler_v2.py not found!"
+# echo "📁 Poster submodule:"
+# ls -la package/workflowy/core/poster/*.py | head -8
+
+# Copy storage module
+if [ ! -d "workflowy/storage" ]; then
+    echo "❌ ERROR: workflowy/storage directory not found!"
     exit 1
 fi
+cp -r workflowy/storage package/workflowy/
 
-if [ ! -f "workflowy/post_tweets_v2.py" ]; then
-    echo "❌ ERROR: workflowy/post_tweets_v2.py not found!"
+# Copy config module
+if [ ! -d "workflowy/config" ]; then
+    echo "❌ ERROR: workflowy/config directory not found!"
     exit 1
 fi
+cp -r workflowy/config package/workflowy/
 
-if [ ! -f "workflowy/llm_service.py" ]; then
-    echo "❌ ERROR: workflowy/llm_service.py not found!"
-    exit 1
-fi
+# Copy __init__.py files
+cp workflowy/__init__.py package/workflowy/
 
-if [ ! -f "workflowy/bulk_url_processor_v2.py" ]; then
-    echo "❌ ERROR: workflowy/bulk_url_processor_v2.py not found!"
-    exit 1
-fi
+# Remove any __pycache__ directories
+find package/ -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
-if [ ! -f "workflowy/schema_definitions.py" ]; then
-    echo "❌ ERROR: workflowy/schema_definitions.py not found!"
-    exit 1
-fi
+# Remove any .pyc files
+find package/ -name "*.pyc" -delete 2>/dev/null || true
 
-if [ ! -f "workflowy/project_id_utils.py" ]; then
-    echo "❌ ERROR: workflowy/project_id_utils.py not found!"
-    exit 1
-fi
+# Verify the structure
+echo "***** 🔍 Verifying package structure: *****"
+echo "===========📁 Main handler:==========="
+ls -la package/lambda_handler.py
 
-# Copy files
-cp workflowy/aws_storage_v2.py package/
-cp workflowy/test_workflowy_v2.py package/
-cp workflowy/lambda_handler_v2.py package/
-cp workflowy/post_tweets_v2.py package/
-cp workflowy/llm_service.py package/
-cp workflowy/logger_config.py package/
-cp workflowy/bulk_url_processor_v2.py package/
-cp workflowy/schema_definitions.py package/
-cp workflowy/project_id_utils.py package/
+echo "===========📁 Core module:==========="
+ls -la package/workflowy/core/*.py | head -5
 
-# Verify files were copied
-echo "🔍 Verifying code files in package:"
-ls -la package/aws_storage_v2.py package/test_workflowy_v2.py package/lambda_handler_v2.py package/post_tweets_v2.py package/llm_service.py package/logger_config.py package/bulk_url_processor_v2.py package/schema_definitions.py package/project_id_utils.py
+echo "===========📁 Scraper submodule:==========="
+ls -la package/workflowy/core/scraper/*.py | head -8
+
+echo "===========📁 Poster submodule:==========="
+ls -la package/workflowy/core/poster/*.py | head -8
+
+echo "===========📁 Storage module:==========="
+ls -la package/workflowy/storage/*.py | head -5
+
+echo "===========📁 Config module:==========="
+ls -la package/workflowy/config/*.py
 
 # Create deployment package
 cd package/
-zip -r ../workflowy-processor-v2.zip .
+echo "📦 Creating zip package..."
+zip -qr ../workflowy-processor.zip .
 cd ..
 
-# Verify the zip contents include your code
-echo "📦 Your code files in zip:"
-unzip -l workflowy-processor-v2.zip | grep -E "(aws_storage_v2|test_workflowy_v2|lambda_handler_v2|post_tweets_v2|llm_service|logger_config|bulk_url_processor_v2|schema_definitions|project_id_utils)\.py"
+# Verify the zip contents - show only our project files, not dependencies
+echo "📦 Package contents (our project files only):"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+unzip -l workflowy-processor.zip | grep -E "(lambda_handler\.py|workflowy/)" | head -50
 
-echo "✅ Package created: workflowy-processor-v2.zip"
-echo "📦 Size: $(du -h workflowy-processor-v2.zip | cut -f1)"
+# Show summary statistics
+echo ""
+echo "📊 Package statistics:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "   Total files in package: $(unzip -l workflowy-processor.zip | tail -1 | awk '{print $2}')"
+echo "   Project files: $(unzip -l workflowy-processor.zip | grep -E "(lambda_handler\.py|workflowy/)" | wc -l | tr -d ' ')"
+echo "   Dependency files: $(unzip -l workflowy-processor.zip | grep -v -E "(lambda_handler\.py|workflowy/)" | grep -E "\.py$|\.so$|\.json$" | wc -l | tr -d ' ')"
+
+echo ""
+echo "✅ Package created: workflowy-processor.zip"
+echo "📦 Size: $(du -h workflowy-processor.zip | cut -f1)"
+echo ""
+echo "📌 Note: Scripts and test data are excluded from the Lambda package"
+echo "   - Scripts directory is for local utilities only"
+echo "   - Test data is not needed in Lambda environment"
+echo "   - Scraper and Poster are now modularized into subdirectories"

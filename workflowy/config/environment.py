@@ -76,11 +76,11 @@ def apply_environment_config(storage_instance, environment: str):
             storage_instance.legacy_mapping_table = storage_instance.dynamodb.Table(config['legacy_mapping_table'])
             storage_instance.legacy_state_table = storage_instance.dynamodb.Table(config['legacy_state_table'])
         except Exception as e:
-            from logger_config import logger
+            from workflowy.config.logger import logger
             logger.warning(f"Legacy tables not available for {environment}: {e}")
     
     # Log the configuration
-    from logger_config import logger
+    from workflowy.config.logger import logger
     logger.info(f"🔧 Applied {environment} configuration:")
     logger.info(f"   🪣 S3 Bucket: {config['bucket_name']}")
     logger.info(f"   📋 URLs Table: {config['urls_config_table']}")

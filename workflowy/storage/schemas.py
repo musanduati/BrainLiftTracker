@@ -4,7 +4,7 @@ Defines the new table structures that eliminate URL dependency.
 """
 
 from typing import Dict, Any
-from logger_config import logger
+from workflowy.config.logger import logger
 
 
 def get_urls_config_table_schema() -> Dict[str, Any]:

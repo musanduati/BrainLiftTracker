@@ -7,9 +7,9 @@ Eliminates dependency on URL-derived parameters for identification.
 import json
 from datetime import datetime
 from typing import List, Dict, Optional
-from aws_storage_v2 import AWSStorageV2
-from project_id_utils import is_valid_project_id
-from logger_config import logger
+from workflowy.storage.aws_storage import AWSStorageV2
+from workflowy.storage.project_utils import is_valid_project_id
+from workflowy.config.logger import logger
 
 
 class BulkURLProcessorV2:
