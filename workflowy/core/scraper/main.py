@@ -40,12 +40,33 @@ async def extract_single_dok_section_llm(item_data_list: list[dict[str, str]], s
     """
     logger.info(f"🔍 Extracting {section_prefix} section...")
     
-    # Get top-level nodes for LLM matching
-    main_nodes = await extract_top_level_nodes(item_data_list)
-    logger.info(f"Found main nodes: {main_nodes}")
+    # Get top-level nodes first
+    top_nodes = await extract_top_level_nodes(item_data_list)
+    
+    # If there's only one top-level node (root), get its children instead
+    nodes_for_llm = []
+    if len(top_nodes) == 1:
+        root_id = top_nodes[0]['id']
+        logger.info(f"Found single root node: {top_nodes[0]['name']}, looking for children...")
+        
+        # Get children of the root node
+        for item in item_data_list:
+            if item.get('prnt') == root_id:
+                node_name = _clean_html_content(item.get('nm', '').strip())
+                if node_name:
+                    nodes_for_llm.append({
+                        'name': node_name,
+                        'id': item['id']
+                    })
+                    logger.debug(f"Found child node: {node_name} (ID: {item['id']})")
+    else:
+        # Multiple top-level nodes, use them directly
+        nodes_for_llm = top_nodes
+    
+    logger.info(f"Found main nodes: {nodes_for_llm}")
     
     # Use LLM to find the correct node ID
-    node_id = await extract_node_id_using_llm(section_prefix, main_nodes)
+    node_id = await extract_node_id_using_llm(section_prefix, nodes_for_llm)
     
     if not node_id:
         logger.warning(f"⚠️ Could not find {section_prefix} section")
@@ -143,14 +164,18 @@ class WorkflowyTesterV2:
             dok4_content = await extract_single_dok_section_llm(raw_data, "DOK4")
             dok3_content = await extract_single_dok_section_llm(raw_data, "DOK3")
             
-            # Process DOK4 section
+            # Process DOK sections
             all_tweets = []
-            current_state = {}
+            # Always initialize current_state with both keys (lowercase)
+            current_state = {
+                'dok4': [],  # Always include, even if empty
+                'dok3': []   # Always include, even if empty
+            }
             
             if dok4_content:
                 logger.info("📝 Processing DOK4 section...")
                 dok4_points = parse_dok_points(dok4_content, "DOK4")
-                current_state['DOK4'] = create_dok_state_from_points(dok4_points)
+                current_state['dok4'] = create_dok_state_from_points(dok4_points)  # Use lowercase key
                 
                 if is_first_run:
                     # First run - all points are "added"
@@ -158,18 +183,20 @@ class WorkflowyTesterV2:
                     dok4_tweets = generate_advanced_change_tweets(changes, "DOK4", is_first_run=True)
                 else:
                     # Compare with previous state
-                    prev_dok4_state = previous_state.get('DOK4', []) if previous_state else []
-                    changes = advanced_compare_dok_states(prev_dok4_state, current_state['DOK4'])
+                    prev_dok4_state = previous_state.get('dok4', []) if previous_state else []  # Use lowercase
+                    changes = advanced_compare_dok_states(prev_dok4_state, current_state['dok4'])
                     dok4_tweets = generate_advanced_change_tweets(changes, "DOK4", is_first_run=False)
                 
                 all_tweets.extend(dok4_tweets)
                 logger.info(f"✅ Generated {len(dok4_tweets)} tweets for DOK4")
+            else:
+                logger.info("⚠️ No DOK4 content found")
             
             # Process DOK3 section
             if dok3_content:
                 logger.info("📝 Processing DOK3 section...")
                 dok3_points = parse_dok_points(dok3_content, "DOK3")
-                current_state['DOK3'] = create_dok_state_from_points(dok3_points)
+                current_state['dok3'] = create_dok_state_from_points(dok3_points)  # Use lowercase key
                 
                 if is_first_run:
                     # First run - all points are "added"
@@ -177,12 +204,14 @@ class WorkflowyTesterV2:
                     dok3_tweets = generate_advanced_change_tweets(changes, "DOK3", is_first_run=True)
                 else:
                     # Compare with previous state
-                    prev_dok3_state = previous_state.get('DOK3', []) if previous_state else []
-                    changes = advanced_compare_dok_states(prev_dok3_state, current_state['DOK3'])
+                    prev_dok3_state = previous_state.get('dok3', []) if previous_state else []  # Use lowercase
+                    changes = advanced_compare_dok_states(prev_dok3_state, current_state['dok3'])
                     dok3_tweets = generate_advanced_change_tweets(changes, "DOK3", is_first_run=False)
                 
                 all_tweets.extend(dok3_tweets)
                 logger.info(f"✅ Generated {len(dok3_tweets)} tweets for DOK3")
+            else:
+                logger.info("⚠️ No DOK3 content found")
             
             # Save results
             timestamp = get_timestamp()
