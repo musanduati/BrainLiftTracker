@@ -100,26 +100,11 @@ from workflowy.config.environment import EnvironmentConfigV2
 - **thread_manager.py** - Thread handling logic
 - **project_processor.py** - Project processing
 
-## Key Changes from Original Structure
-
-### Modularization Benefits
-1. **Better code organization** - Each file has a single responsibility
-2. **Easier maintenance** - Changes are isolated to specific modules
-3. **Improved readability** - Lower number of lines per file
-4. **Easier testing** - Can unit test individual modules
-5. **No breaking changes** - Complete backward compatibility maintained
-
-### Backward Compatibility
-- `workflowy_scraper.py` and `tweet_poster.py` are now thin wrappers
-- All existing imports continue to work
-- No changes required in Lambda handler or other files
-- All functionality preserved exactly as before
-
 ## Lambda Deployment
 
 The Lambda package now includes the new modular structure:
 - Lambda handler at root level of package
-- Core business logic with scraper/ and poster/ subdirectories
+- Core business logic with `scraper/` and `poster/` subdirectories
 - Storage and configuration modules
 - Required dependencies (installed via pip)
 
@@ -135,9 +120,6 @@ Scripts and test data are excluded from the Lambda deployment package.
 # Test Lambda locally
 python workflowy/scripts/test_lambda_local.py posting
 
-# Run migration
-python workflowy/scripts/migrate_to_v2.py
-
 # Create DynamoDB tables
 python workflowy/scripts/create_tables.py create --environment test
 ```
@@ -147,12 +129,11 @@ python workflowy/scripts/create_tables.py create --environment test
 - [x] Module imports work correctly
 - [x] Lambda handler imports resolve
 - [x] Scripts can find workflowy modules
-- [x] No circular import issues
 - [x] Lambda package builds successfully
 - [x] Scraper reorganization tested
 - [x] Poster reorganization tested
-- [ ] Deploy and test in AWS Lambda
-- [ ] Run full integration test
+- [x] Deploy and test in AWS Lambda
+- [x] Run full integration test
 
 ## Notes
 
@@ -160,4 +141,4 @@ python workflowy/scripts/create_tables.py create --environment test
 - Always import classes directly from their modules or use backward compatibility wrappers
 - Scripts need to add the root directory to Python path before importing
 - V1 code is preserved but isolated and not updated
-- Both major files (workflowy_scraper.py and tweet_poster.py) are now modularized
+- Both major files (`workflowy_scraper.py` and `tweet_poster.py`) are now modularized
