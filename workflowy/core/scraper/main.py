@@ -172,23 +172,22 @@ class WorkflowyTesterV2:
                 'dok3': []   # Always include, even if empty
             }
             
+            # Process DOK4 section
             if dok4_content:
                 logger.info("📝 Processing DOK4 section...")
                 dok4_points = parse_dok_points(dok4_content, "DOK4")
                 current_state['dok4'] = create_dok_state_from_points(dok4_points)  # Use lowercase key
                 
-                if is_first_run:
-                    # First run - all points are "added"
-                    changes = {"added": dok4_points, "updated": [], "deleted": []}
-                    dok4_tweets = generate_advanced_change_tweets(changes, "DOK4", is_first_run=True)
-                else:
+                # Only generate tweets if NOT first run
+                if not is_first_run:
                     # Compare with previous state
-                    prev_dok4_state = previous_state.get('dok4', []) if previous_state else []  # Use lowercase
+                    prev_dok4_state = previous_state.get('dok4', []) if previous_state else []
                     changes = advanced_compare_dok_states(prev_dok4_state, current_state['dok4'])
                     dok4_tweets = generate_advanced_change_tweets(changes, "DOK4", is_first_run=False)
-                
-                all_tweets.extend(dok4_tweets)
-                logger.info(f"✅ Generated {len(dok4_tweets)} tweets for DOK4")
+                    all_tweets.extend(dok4_tweets)
+                    logger.info(f"✅ Generated {len(dok4_tweets)} tweets for DOK4")
+                else:
+                    logger.info("🏁 First run - establishing DOK4 baseline, no tweets generated")
             else:
                 logger.info("⚠️ No DOK4 content found")
             
@@ -198,18 +197,16 @@ class WorkflowyTesterV2:
                 dok3_points = parse_dok_points(dok3_content, "DOK3")
                 current_state['dok3'] = create_dok_state_from_points(dok3_points)  # Use lowercase key
                 
-                if is_first_run:
-                    # First run - all points are "added"
-                    changes = {"added": dok3_points, "updated": [], "deleted": []}
-                    dok3_tweets = generate_advanced_change_tweets(changes, "DOK3", is_first_run=True)
-                else:
+                # Only generate tweets if NOT first run
+                if not is_first_run:
                     # Compare with previous state
-                    prev_dok3_state = previous_state.get('dok3', []) if previous_state else []  # Use lowercase
+                    prev_dok3_state = previous_state.get('dok3', []) if previous_state else []
                     changes = advanced_compare_dok_states(prev_dok3_state, current_state['dok3'])
                     dok3_tweets = generate_advanced_change_tweets(changes, "DOK3", is_first_run=False)
-                
-                all_tweets.extend(dok3_tweets)
-                logger.info(f"✅ Generated {len(dok3_tweets)} tweets for DOK3")
+                    all_tweets.extend(dok3_tweets)
+                    logger.info(f"✅ Generated {len(dok3_tweets)} tweets for DOK3")
+                else:
+                    logger.info("🏁 First run - establishing DOK3 baseline, no tweets generated")
             else:
                 logger.info("⚠️ No DOK3 content found")
             
