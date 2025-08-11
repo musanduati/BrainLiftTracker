@@ -213,27 +213,37 @@ class BatchTwitterAutomation:
             
             # Try to save approved followers to the API
             try:
-                # Get approved followers from JavaScript
-                approved_followers = automation.driver.execute_script("""
-                    if (window.approver && window.approver.approvedFollowers) {
-                        return window.approver.approvedFollowers;
-                    }
-                    return [];
-                """)
-                
-                if approved_followers:
-                    print(f"\n[OK] Found {len(approved_followers)} approved followers to save for @{username}")
-                    
-                    # Save followers to API
-                    saved_count = automation.save_approved_followers_to_api(username, approved_followers)
-                    result['followers_saved'] = saved_count
-                    
-                    if saved_count > 0:
-                        print(f"[OK] Successfully saved {saved_count} followers to database for @{username}")
-                    else:
-                        print(f"[WARNING] Could not save followers to database for @{username}")
+                # Check if driver is still active before trying to get followers
+                if hasattr(automation, 'driver') and automation.driver:
+                    try:
+                        # Test if driver is still responsive
+                        automation.driver.current_url
+                        
+                        # Get approved followers from JavaScript
+                        approved_followers = automation.driver.execute_script("""
+                            if (window.approver && window.approver.approvedFollowers) {
+                                return window.approver.approvedFollowers;
+                            }
+                            return [];
+                        """)
+                        
+                        if approved_followers:
+                            print(f"\n[OK] Found {len(approved_followers)} approved followers to save for @{username}")
+                            
+                            # Save followers to API
+                            saved_count = automation.save_approved_followers_to_api(username, approved_followers)
+                            result['followers_saved'] = saved_count
+                            
+                            if saved_count > 0:
+                                print(f"[OK] Successfully saved {saved_count} followers to database for @{username}")
+                            else:
+                                print(f"[WARNING] Could not save followers to database for @{username}")
+                        else:
+                            print(f"[INFO] No followers to save for @{username}")
+                    except:
+                        print(f"[WARNING] Browser closed before followers could be retrieved for @{username}")
                 else:
-                    print(f"[INFO] No followers to save for @{username}")
+                    print(f"[WARNING] No active browser session to retrieve followers for @{username}")
                     
             except Exception as e:
                 print(f"[WARNING] Could not save followers for @{username}: {str(e)}")
