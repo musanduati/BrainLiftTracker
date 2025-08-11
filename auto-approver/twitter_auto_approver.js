@@ -18,6 +18,7 @@ class TwitterAutoApprover {
         this.observer = null;
         this.processedUsernames = new Set(); // Track already processed usernames
         this.noNewRequestsCount = 0; // Track consecutive scrolls with no new requests
+        this.approvedFollowers = []; // Track approved followers with their details
     }
 
     // Wait for a specified amount of time
@@ -75,6 +76,37 @@ class TwitterAutoApprover {
                text.includes('accept') && text.includes('decline');
     }
 
+    // Extract additional user info from request container
+    extractUserInfo(container) {
+        const info = {
+            name: null,
+            id: null
+        };
+        
+        try {
+            // Try to find display name (usually in a different element than username)
+            const nameElement = container.querySelector('span[dir="auto"]:not([class*="@"])');
+            if (nameElement && !nameElement.textContent.startsWith('@')) {
+                info.name = nameElement.textContent.trim();
+            }
+            
+            // Try to extract user ID from links or data attributes
+            const userLink = container.querySelector('a[href*="/"]');
+            if (userLink) {
+                const href = userLink.getAttribute('href');
+                // Twitter IDs are sometimes in data attributes
+                const dataUserId = userLink.getAttribute('data-user-id');
+                if (dataUserId) {
+                    info.id = dataUserId;
+                }
+            }
+        } catch (error) {
+            console.debug('Could not extract additional user info:', error);
+        }
+        
+        return info;
+    }
+    
     // Extract username from a follow request element
     extractUsernameFromRequest(element) {
         // First, find the parent container that contains the whole follow request
@@ -517,6 +549,24 @@ class TwitterAutoApprover {
                         const success = await this.clickButton(button);
                         if (success) {
                             this.approvedCount++;
+                            
+                            // Extract additional user info if available
+                            // Find the container element that has this button
+                            let container = button;
+                            for (let i = 0; i < 10; i++) {
+                                container = container.parentElement;
+                                if (!container || container.querySelector('[data-testid*="UserCell"]')) break;
+                            }
+                            const userInfo = this.extractUserInfo(container);
+                            
+                            // Store approved follower info
+                            this.approvedFollowers.push({
+                                username: username,
+                                name: userInfo.name || null,
+                                twitter_id: userInfo.id || null,
+                                approved_at: new Date().toISOString()
+                            });
+                            
                             console.log(`✅ Approved @${username} (#${this.approvedCount})`);
                             await this.sleep(this.config.delay);
                         }
@@ -563,7 +613,8 @@ class TwitterAutoApprover {
             approvedCount: this.approvedCount,
             skippedCount: this.skippedCount,
             maxApprovals: this.config.maxApprovals,
-            allowedUsernames: this.config.allowedUsernames
+            allowedUsernames: this.config.allowedUsernames,
+            approvedFollowers: this.approvedFollowers
         };
     }
 }

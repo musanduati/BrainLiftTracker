@@ -134,20 +134,11 @@ kill_*.ps1
 *_backup*
 *.old
 
-# Deployment guides (keep private)
-DEPLOY_LIGHTSAIL.md
-DEPLOY_TOKEN_REFRESH_UPDATE.md
-LIGHTSAIL_CONSOLE_UPDATE.md
-TOKEN_REFRESH_SUMMARY.md
+# Deployment and migration scripts
 verify_migration.py
-deploy/QUICK_START.md
 
-# Internal documentation
-prompt.md
-USAGE_EXAMPLES.md
-ADD_TWITTER_ACCOUNT.md
-CLAUDE.md
-SECURITY.md
+# Markdown files
+*.md
 
 # Claude AI settings
 .claude/

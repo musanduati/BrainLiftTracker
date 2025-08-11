@@ -6,6 +6,7 @@ Simplified runner script for Twitter follow request automation
 import os
 import sys
 import json
+import time
 from datetime import datetime
 from selenium_setup import get_chrome_driver, get_firefox_driver, get_edge_driver
 from twitter_selenium_automation import TwitterSeleniumAutomation
@@ -22,7 +23,7 @@ def main():
     
     # Check for credentials
     if not os.getenv('TWITTER_USERNAME') or not os.getenv('TWITTER_PASSWORD'):
-        print("❌ Missing Twitter credentials!")
+        print("[ERROR] Missing Twitter credentials!")
         print("\nPlease create a .env file with:")
         print("  TWITTER_USERNAME=your_username")
         print("  TWITTER_PASSWORD=your_password")
@@ -102,11 +103,50 @@ def main():
                 """
                 automation.driver.execute_script(config_script)
                 
-                print("✅ Auto-approver started with custom settings!")
-                automation.monitor_approval_progress()
+                print("[OK] Auto-approver started with custom settings!")
+                
+                # Monitor and save followers
+                try:
+                    automation.monitor_approval_progress()
+                except Exception as e:
+                    print(f"[WARNING] Monitoring error (this is OK): {str(e)[:100]}")
+                    
+                # Wait for approvals to complete
+                print("[INFO] Waiting for approvals to complete...")
+                time.sleep(10)  # Give it time to finish
+                
+                # Try to get the final status and save followers
+                print("[INFO] Attempting to retrieve approved followers...")
+                try:
+                    # Try different methods to get the status
+                    status = automation.driver.execute_script("""
+                        if (window.getApprovalStatus) {
+                            return window.getApprovalStatus();
+                        } else if (window.twitterAutoApprover) {
+                            return window.twitterAutoApprover.getStatus();
+                        } else {
+                            return null;
+                        }
+                    """)
+                    
+                    if status:
+                        print(f"[INFO] Status retrieved: {status.get('approvedCount', 0)} approved, {status.get('skippedCount', 0)} skipped")
+                        
+                        approved_followers = status.get('approvedFollowers', [])
+                        if approved_followers:
+                            print(f"[INFO] Found {len(approved_followers)} approved followers to save:")
+                            for f in approved_followers:
+                                print(f"       - @{f.get('username', 'unknown')}")
+                            automation.save_approved_followers_to_api(approved_followers)
+                        else:
+                            print("[INFO] No approved followers found in status")
+                    else:
+                        print("[INFO] Could not retrieve status from JavaScript")
+                except Exception as e:
+                    print(f"[ERROR] Failed to retrieve/save followers: {str(e)[:200]}")
                 
             except Exception as e:
-                print(f"❌ Error injecting script: {str(e)}")
+                print(f"[ERROR] Error injecting script: {str(e)}")
                 return False
         
         automation.inject_auto_approver_script = custom_inject
@@ -115,14 +155,14 @@ def main():
         success = automation.run_full_automation()
         
         if success:
-            print("\n✅ Automation completed successfully!")
+            print("\n[OK] Automation completed successfully!")
         else:
-            print("\n❌ Automation encountered errors.")
+            print("\n[ERROR] Automation encountered errors.")
         
     except KeyboardInterrupt:
-        print("\n⚠️ Automation interrupted by user.")
+        print("\n[WARNING] Automation interrupted by user.")
     except Exception as e:
-        print(f"\n❌ Unexpected error: {str(e)}")
+        print(f"\n[ERROR] Unexpected error: {str(e)}")
     
     print(f"\nFinished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 

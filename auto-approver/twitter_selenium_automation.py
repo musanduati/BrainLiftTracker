@@ -8,6 +8,7 @@ For educational and legitimate account management purposes only.
 import os
 import time
 import json
+import requests
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -40,6 +41,10 @@ class TwitterSeleniumAutomation:
         self.username = os.getenv('TWITTER_USERNAME')
         self.password = os.getenv('TWITTER_PASSWORD')
         self.email = os.getenv('TWITTER_EMAIL')  # Sometimes required for verification
+        
+        # API Configuration for saving followers
+        self.api_base_url = os.getenv('API_BASE_URL', 'http://localhost:5555')
+        self.api_key = os.getenv('API_KEY')
         
         # Get allowed usernames from environment or use defaults
         # IMPORTANT: Normalize to lowercase for case-insensitive matching
@@ -143,7 +148,7 @@ class TwitterSeleniumAutomation:
             # Check for authentication code request
             auth_code_required = self.handle_auth_code_if_needed()
             if auth_code_required == "skip":
-                print("⚠️ Authentication code required but not provided, skipping this account")
+                print("[WARNING] Authentication code required but not provided, skipping this account")
                 self.auth_code_skipped = True
                 return False
             
@@ -151,14 +156,14 @@ class TwitterSeleniumAutomation:
             self.wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="primaryColumn"]'))
             )
-            print("✅ Successfully logged into Twitter!")
+            print("[OK] Successfully logged into Twitter!")
             return True
             
         except TimeoutException:
-            print("❌ Login timeout - check your credentials or Twitter's UI may have changed")
+            print("[ERROR] Login timeout - check your credentials or Twitter's UI may have changed")
             return False
         except Exception as e:
-            print(f"❌ Login error: {str(e)}")
+            print(f"[ERROR] Login error: {str(e)}")
             return False
     
     def handle_auth_code_if_needed(self, timeout=60):
@@ -272,7 +277,7 @@ class TwitterSeleniumAutomation:
                             try:
                                 error_elem = self.driver.find_element(By.CSS_SELECTOR, error_sel)
                                 if error_elem.is_displayed():
-                                    print(f"❌ Error: {error_elem.text}")
+                                    print(f"[ERROR] Error: {error_elem.text}")
                                     print("The code may be incorrect. You can try again.")
                                     # Allow retry
                                     continue
@@ -280,7 +285,7 @@ class TwitterSeleniumAutomation:
                                 pass
                     except:
                         # Auth code input disappeared, likely successful
-                        print("✅ Authentication code accepted!")
+                        print("[OK] Authentication code accepted!")
                         return "success"
                     
                     code_entered = True
@@ -313,9 +318,26 @@ class TwitterSeleniumAutomation:
             self.driver.get("https://twitter.com/follower_requests")
             time.sleep(3)
             
+            # CRITICAL FIX: Always refresh to force modal content to load
+            print("Forcing page refresh to load modal content...")
+            self.driver.refresh()
+            time.sleep(4)
+            
+            # Additional trigger: Click somewhere on the page to activate it
+            try:
+                self.driver.execute_script("document.body.click();")
+            except:
+                pass
+            
+            # Try scrolling to trigger lazy loading
+            self.driver.execute_script("window.scrollTo(0, 100);")
+            time.sleep(1)
+            self.driver.execute_script("window.scrollTo(0, 0);")
+            time.sleep(2)
+            
             # Check if we're on the follower requests page
             if "follower_requests" in self.driver.current_url:
-                print("✅ Successfully navigated to follower requests page")
+                print("[OK] Successfully navigated to follower requests page")
                 return True
             
             # Method 2: Navigate via More menu
@@ -342,14 +364,14 @@ class TwitterSeleniumAutomation:
                     
                     more_button.click()
                     more_clicked = True
-                    print("✅ Clicked More menu")
+                    print("[OK] Clicked More menu")
                     time.sleep(2)
                     break
                 except NoSuchElementException:
                     continue
             
             if not more_clicked:
-                print("❌ Could not find More menu button")
+                print("[ERROR] Could not find More menu button")
                 return False
             
             # Look for "Follower requests" in the More menu
@@ -373,7 +395,7 @@ class TwitterSeleniumAutomation:
                     link_text = link.text.lower()
                     if 'follower' in link_text and 'request' in link_text:
                         link.click()
-                        print("✅ Clicked Follower requests link")
+                        print("[OK] Clicked Follower requests link")
                         time.sleep(3)
                         return True
                 except:
@@ -388,13 +410,13 @@ class TwitterSeleniumAutomation:
                         element = self.driver.find_element(By.CSS_SELECTOR, selector)
                     
                     element.click()
-                    print("✅ Clicked Follower requests link")
+                    print("[OK] Clicked Follower requests link")
                     time.sleep(3)
                     return True
                 except NoSuchElementException:
                     continue
             
-            print("❌ Could not find Follower requests option in More menu")
+            print("[ERROR] Could not find Follower requests option in More menu")
             
             # Method 3: Try the old way via profile -> followers (fallback)
             print("\nTrying alternative method via profile...")
@@ -413,7 +435,7 @@ class TwitterSeleniumAutomation:
                 for element in elements:
                     if 'pending' in element.text.lower() or 'request' in element.text.lower():
                         element.click()
-                        print("✅ Found and clicked follow requests via profile")
+                        print("[OK] Found and clicked follow requests via profile")
                         time.sleep(3)
                         return True
             except Exception as e:
@@ -422,10 +444,10 @@ class TwitterSeleniumAutomation:
             return False
             
         except TimeoutException:
-            print("❌ Navigation timeout - the page may not have loaded properly")
+            print("[ERROR] Navigation timeout - the page may not have loaded properly")
             return False
         except Exception as e:
-            print(f"❌ Error navigating to follow requests: {str(e)}")
+            print(f"[ERROR] Error navigating to follow requests: {str(e)}")
             return False
     
     def inject_auto_approver_script(self):
@@ -437,7 +459,7 @@ class TwitterSeleniumAutomation:
             # Check if we're on the follower requests page
             current_url = self.driver.current_url
             if "follower_requests" not in current_url:
-                print("❌ Not on follower requests page")
+                print("[ERROR] Not on follower requests page")
                 return False
             
             print("Checking for follow request popup...")
@@ -449,66 +471,267 @@ class TwitterSeleniumAutomation:
                 modal = self.wait.until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, '[role="dialog"], [aria-modal="true"], .modal'))
                 )
-                print("✅ Found follower requests modal")
+                print("[OK] Found follower requests modal")
             except TimeoutException:
-                print("⚠️ No modal found, checking if requests are on the page directly...")
+                print("[WARNING] No modal found, will check after refresh...")
             
-            print("Injecting auto-approver script...")
+            # Enhanced loading strategy - refresh already done in navigate_to_follow_requests
+            print("Checking for modal content...")
             
-            # Read the auto-approver script with UTF-8 encoding
+            # Step 1: Wait a moment for modal to appear after navigation
+            time.sleep(3)
+            
+            # Step 2: Check if modal is present
+            modal_present = False
+            try:
+                modal = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '[role="dialog"], [aria-modal="true"]'))
+                )
+                modal_present = True
+                print("[OK] Modal found")
+                
+                # Wait specifically for modal content to load
+                print("Waiting for modal content to populate...")
+                
+                # Try clicking inside the modal to activate it
+                try:
+                    self.driver.execute_script("""
+                        const modal = document.querySelector('[role="dialog"], [aria-modal="true"]');
+                        if (modal) {
+                            modal.click();
+                            // Also try clicking the modal body
+                            const modalBody = modal.querySelector('div');
+                            if (modalBody) modalBody.click();
+                        }
+                    """)
+                except:
+                    pass
+                
+                # Wait for actual content
+                time.sleep(3)
+                
+            except:
+                print("[WARNING] Modal not found, trying direct navigation...")
+                self.driver.get("https://twitter.com/follower_requests")
+                time.sleep(3)
+                self.driver.refresh()
+                time.sleep(4)
+                
+                # Check for modal again
+                try:
+                    modal = WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, '[role="dialog"], [aria-modal="true"]'))
+                    )
+                    modal_present = True
+                    print("[OK] Modal appeared after navigation")
+                except:
+                    print("[ERROR] Still no modal, trying one more refresh...")
+                    self.driver.refresh()
+                    time.sleep(5)
+            
+            # Step 3: NOW inject the auto-approver script AFTER refresh
+            print("Step 2: Injecting auto-approver script...")
             script_path = os.path.join(os.path.dirname(__file__), 'twitter_auto_approver.js')
             with open(script_path, 'r', encoding='utf-8') as f:
                 auto_approver_script = f.read()
             
-            # Inject the script
             self.driver.execute_script(auto_approver_script)
+            print("[OK] Script injected")
             
-            # Wait for modal content to load
-            print("Waiting for modal content to load...")
-            time.sleep(5)
+            # Step 4: Wait and check for content with retries
+            print("Step 3: Checking for modal content...")
+            max_retries = 3
+            retry_count = 0
+            content_loaded = False
             
-            # Try to trigger content loading by scrolling
-            print("Attempting to trigger content load...")
-            trigger_script = """
-            // Find the modal
-            const modal = document.querySelector('[role="dialog"], [aria-modal="true"], .modal');
-            if (modal) {
-                // Try to find scrollable container within modal
-                const scrollContainers = modal.querySelectorAll('[data-testid*="scroll"], [class*="scroll"], div[style*="overflow"]');
-                console.log(`Found ${scrollContainers.length} potential scroll containers`);
+            while retry_count < max_retries and not content_loaded:
+                if retry_count > 0:
+                    print(f"Retry {retry_count}/{max_retries}: Attempting to load modal content...")
                 
-                // Scroll each container
-                scrollContainers.forEach(container => {
-                    container.scrollTop = 100;
-                    container.scrollTop = 0;
-                });
+                # Simulate real user interaction with ActionChains
+                from selenium.webdriver.common.action_chains import ActionChains
+                actions = ActionChains(self.driver)
                 
-                // Also try scrolling the modal itself
-                modal.scrollTop = 100;
-                modal.scrollTop = 0;
+                # Move mouse to center of screen and click
+                try:
+                    modal_element = self.driver.find_element(By.CSS_SELECTOR, '[role="dialog"], [aria-modal="true"]')
+                    actions.move_to_element(modal_element).click().perform()
+                    time.sleep(1)
+                except:
+                    pass
                 
-                // Dispatch scroll events
-                modal.dispatchEvent(new Event('scroll'));
+                # Wait for initial load
+                time.sleep(2)
                 
-                // Click somewhere in the modal to ensure it's focused
-                const modalHeader = modal.querySelector('h2, h3, [role="heading"]');
-                if (modalHeader) {
-                    modalHeader.click();
+                # Check for loading indicators and wait for them to disappear
+                wait_for_loading_script = """
+                const waitForLoading = () => {
+                    const loadingIndicators = document.querySelectorAll(
+                        '[aria-label*="Loading"], [class*="loading"], [class*="spinner"], [data-testid="progressBar"]'
+                    );
+                    return loadingIndicators.length === 0;
+                };
+                return waitForLoading();
+                """
+                
+                # Wait up to 10 seconds for loading to complete
+                for _ in range(10):
+                    loading_done = self.driver.execute_script(wait_for_loading_script)
+                    if loading_done:
+                        break
+                    time.sleep(1)
+                
+                # Try to trigger content loading by various methods
+                print("Attempting to trigger content load...")
+                trigger_script = """
+                // Find the modal
+                const modal = document.querySelector('[role="dialog"], [aria-modal="true"], .modal');
+                if (modal) {
+                    // Method 1: Focus and click the modal
+                    modal.focus();
+                    modal.click();
+                    
+                    // Method 2: Try to find and scroll any scrollable containers
+                    const scrollContainers = modal.querySelectorAll(
+                        '[data-testid*="scroll"], [class*="scroll"], div[style*="overflow"], [role="region"]'
+                    );
+                    console.log(`Found ${scrollContainers.length} potential scroll containers`);
+                    
+                    scrollContainers.forEach(container => {
+                        // Trigger scroll events
+                        container.scrollTop = 1;
+                        container.dispatchEvent(new Event('scroll', {bubbles: true}));
+                        container.scrollTop = 0;
+                    });
+                    
+                    // Method 3: Scroll the modal itself
+                    modal.scrollTop = 1;
+                    modal.dispatchEvent(new Event('scroll', {bubbles: true}));
+                    modal.scrollTop = 0;
+                    
+                    // Method 4: Click the modal header to ensure focus
+                    const modalHeader = modal.querySelector('h2, h3, [role="heading"], [aria-label*="Follower"]');
+                    if (modalHeader) {
+                        modalHeader.click();
+                        console.log('Clicked modal header');
+                    }
+                    
+                    // Method 5: Simulate viewport intersection (triggers lazy loading)
+                    const entries = modal.querySelectorAll('*');
+                    entries.forEach(entry => {
+                        if (typeof entry.scrollIntoView === 'function') {
+                            entry.scrollIntoView({block: 'nearest'});
+                        }
+                    });
                 }
-            }
+                
+                // Check current state
+                console.log('Current URL:', window.location.href);
+                const hasDialog = !!document.querySelector('[role="dialog"]');
+                console.log('Dialog present:', hasDialog);
+                
+                return hasDialog;
+                """
+                self.driver.execute_script(trigger_script)
+                
+                # Wait for content to render
+                print("Waiting for content to render...")
+                time.sleep(3)
+                
+                # Check if content has loaded - improved detection
+                check_content_script = """
+                const modal = document.querySelector('[role="dialog"], [aria-modal="true"], .modal');
+                if (modal) {
+                    // Method 1: Look for user cells with various selectors
+                    const userCells = modal.querySelectorAll(
+                        '[data-testid*="UserCell"], ' +
+                        '[data-testid*="user-cell"], ' +
+                        'div[role="button"][data-testid*="follow"], ' +
+                        'div[data-testid*="cell"], ' +
+                        'article[role="article"], ' +
+                        'div[data-testid="cellInnerDiv"], ' +
+                        'button[data-testid*="follow"], ' +
+                        'a[href*="/"][role="link"][tabindex="0"]'
+                    );
+                    
+                    // Method 2: Check for any buttons with "Approve" or "Deny" text
+                    const buttons = Array.from(modal.querySelectorAll('button')).filter(btn => {
+                        const text = btn.textContent.toLowerCase();
+                        return text.includes('approve') || text.includes('deny') || text.includes('follow');
+                    });
+                    
+                    // Method 3: Check for empty state messages
+                    const textElements = Array.from(modal.querySelectorAll('span, div')).filter(el => {
+                        const text = el.textContent.toLowerCase();
+                        return text.includes('no pending') || 
+                               text.includes("don't have") || 
+                               text.includes('no follow') ||
+                               text.includes('requests will appear');
+                    });
+                    
+                    const hasContent = userCells.length > 0 || buttons.length > 0 || textElements.length > 0;
+                    
+                    console.log('Content check:');
+                    console.log(`- User cells: ${userCells.length}`);
+                    console.log(`- Action buttons: ${buttons.length}`);
+                    console.log(`- Text indicators: ${textElements.length}`);
+                    
+                    if (userCells.length > 0) {
+                        console.log('Sample cell text:', userCells[0].innerText.substring(0, 100));
+                    }
+                    
+                    return hasContent;
+                }
+                return false;
+                """
+                content_loaded = self.driver.execute_script(check_content_script)
+                
+                if not content_loaded:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        print(f"[WARNING] Modal appears empty, retrying... ({retry_count}/{max_retries})")
+                        
+                        # Try closing and reopening the modal
+                        close_modal_script = """
+                        const closeButton = document.querySelector(
+                            '[aria-label*="Close"], [data-testid*="close"], button[aria-label="Close"]'
+                        );
+                        if (closeButton) {
+                            closeButton.click();
+                            return true;
+                        }
+                        return false;
+                        """
+                        closed = self.driver.execute_script(close_modal_script)
+                        
+                        if closed:
+                            print("Closed modal, reopening...")
+                            time.sleep(2)
+                            # Navigate to follower requests again
+                            self.driver.get("https://twitter.com/follower_requests")
+                            time.sleep(3)
+                        else:
+                            # Refresh the page
+                            print("Refreshing page...")
+                            self.driver.refresh()
+                            time.sleep(5)
+                            
+                            # Check if modal reopened
+                            try:
+                                modal = self.wait.until(
+                                    EC.presence_of_element_located((By.CSS_SELECTOR, '[role="dialog"], [aria-modal="true"], .modal'))
+                                )
+                                print("[OK] Modal reopened after refresh")
+                            except:
+                                print("[ERROR] Modal did not reopen, navigating directly...")
+                                self.driver.get("https://twitter.com/follower_requests")
+                                time.sleep(3)
+                else:
+                    print("[OK] Modal content loaded successfully")
             
-            // Check if we're truly on the follower_requests page
-            console.log('Current URL:', window.location.href);
-            
-            // Look for any loading indicators
-            const loadingIndicators = document.querySelectorAll('[aria-label*="Loading"], [class*="loading"], [class*="spinner"]');
-            console.log(`Loading indicators found: ${loadingIndicators.length}`);
-            """
-            self.driver.execute_script(trigger_script)
-            
-            # Wait more for content to load after triggering
-            print("Waiting for content after trigger...")
-            time.sleep(5)
+            if not content_loaded:
+                print("[ERROR] Failed to load modal content after all retries")
+                return False
             
             # Debug: Check what's in the modal
             debug_script = """
@@ -544,7 +767,7 @@ class TwitterSeleniumAutomation:
             has_content = self.driver.execute_script(check_content_script)
             
             if not has_content:
-                print("⚠️ Modal appears empty, trying page refresh...")
+                print("[WARNING] Modal appears empty, trying page refresh...")
                 self.driver.refresh()
                 time.sleep(5)
                 
@@ -553,10 +776,10 @@ class TwitterSeleniumAutomation:
                     modal = self.wait.until(
                         EC.presence_of_element_located((By.CSS_SELECTOR, '[role="dialog"], [aria-modal="true"], .modal'))
                     )
-                    print("✅ Modal reopened after refresh")
+                    print("[OK] Modal reopened after refresh")
                     time.sleep(3)
                 except:
-                    print("❌ Modal did not reopen after refresh")
+                    print("[ERROR] Modal did not reopen after refresh")
                     return False
             
             # Start the auto-approval with custom configuration
@@ -595,14 +818,88 @@ class TwitterSeleniumAutomation:
             """
             self.driver.execute_script(config_script)
             
-            print("✅ Auto-approver script injected and started!")
+            print("[OK] Auto-approver script injected and started!")
             
             # Monitor the progress
             self.monitor_approval_progress()
             
         except Exception as e:
-            print(f"❌ Error injecting script: {str(e)}")
+            print(f"[ERROR] Error injecting script: {str(e)}")
             return False
+    
+    def save_approved_followers_to_api(self, approved_followers):
+        """Save approved followers to the API"""
+        if not self.api_key:
+            print("[WARNING] No API key configured, skipping follower save")
+            return
+        
+        try:
+            print(f"\n[SAVING] Saving {len(approved_followers)} approved followers to API...")
+            
+            # Get the correct username from the database (case-sensitive)
+            # First check what username is in the database
+            try:
+                check_response = requests.get(
+                    f"{api_url}/api/v1/accounts",
+                    headers={"X-API-Key": self.api_key},
+                    timeout=10
+                )
+                
+                db_username = self.username  # Default to env username
+                if check_response.status_code == 200:
+                    accounts = check_response.json().get('accounts', [])
+                    for account in accounts:
+                        if account['username'].lower() == self.username.lower():
+                            db_username = account['username']  # Use exact DB capitalization
+                            break
+            except:
+                db_username = self.username
+            
+            # Prepare the batch update data
+            batch_data = {
+                "updates": [
+                    {
+                        "account_username": db_username,
+                        "followers": approved_followers
+                    }
+                ]
+            }
+            
+            # Send to API
+            headers = {
+                "X-API-Key": self.api_key,
+                "Content-Type": "application/json"
+            }
+            
+            # Use the API URL from environment
+            api_url = self.api_base_url
+            response = requests.post(
+                f"{api_url}/api/v1/accounts/batch-update-followers",
+                json=batch_data,
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"[OK] Successfully saved followers to API")
+                print(f"   - Account: {self.username}")
+                print(f"   - Followers saved: {len(approved_followers)}")
+                
+                # Log individual followers
+                for follower in approved_followers:
+                    print(f"   - @{follower['username']} ({follower.get('name', 'N/A')})")
+                    
+            else:
+                print(f"[ERROR] Failed to save followers: {response.status_code}")
+                print(f"   Response: {response.text}")
+                
+        except requests.exceptions.ConnectionError:
+            print("[WARNING] Could not connect to API server (connection refused)")
+            print("   Make sure the Flask API is running on localhost:5555")
+            print(f"   Attempted URL: {api_url}")
+        except Exception as e:
+            print(f"[ERROR] Error saving followers to API: {str(e)}")
     
     def monitor_approval_progress(self):
         """Monitor the auto-approval progress"""
@@ -633,19 +930,25 @@ class TwitterSeleniumAutomation:
                     
                     # Check if completed
                     if not is_running:
-                        print(f"✅ Auto-approval completed! Total approved: {current_count}, skipped: {skipped_count}")
+                        print(f"[OK] Auto-approval completed! Total approved: {current_count}, skipped: {skipped_count}")
+                        
+                        # Save approved followers to API
+                        approved_followers = status.get('approvedFollowers', [])
+                        if approved_followers:
+                            self.save_approved_followers_to_api(approved_followers)
+                        
                         break
                     
                     # Check if stuck (no new approvals or skips)
                     if current_count == last_count and skipped_count == last_skipped:
                         no_change_counter += 1
                         if no_change_counter > 6:  # No change for 30 seconds
-                            print("⚠️ No progress detected, may have completed all available requests")
+                            print("[WARNING] No progress detected, may have completed all available requests")
                             break
                     else:
                         no_change_counter = 0
                 else:
-                    print("⚠️ Could not get approval status")
+                    print("[WARNING] Could not get approval status")
                     break
                     
         except Exception as e:
@@ -659,7 +962,7 @@ class TwitterSeleniumAutomation:
             
             # Login to Twitter
             if not self.login_to_twitter():
-                print("\n❌ Failed to login to Twitter")
+                print("\n[ERROR] Failed to login to Twitter")
                 print("Please check:")
                 print("- Your username and password in .env file")
                 print("- Your internet connection")
@@ -668,7 +971,7 @@ class TwitterSeleniumAutomation:
             
             # Navigate to follow requests
             if not self.navigate_to_follow_requests():
-                print("\n⚠️ Could not access follow requests")
+                print("\n[WARNING] Could not access follow requests")
                 print("\nPossible reasons:")
                 print("1. You don't have any pending follow requests")
                 print("2. Your account is public (only private accounts have follow requests)")
@@ -682,11 +985,11 @@ class TwitterSeleniumAutomation:
             # Inject and run auto-approver
             self.inject_auto_approver_script()
             
-            print("\n✅ Automation completed!")
+            print("\n[OK] Automation completed!")
             return True
             
         except Exception as e:
-            print(f"\n❌ Automation error: {str(e)}")
+            print(f"\n[ERROR] Automation error: {str(e)}")
             return False
         finally:
             # Auto-close browser after a short delay
@@ -709,7 +1012,7 @@ def main():
     missing_vars = [var for var in required_vars if not os.getenv(var)]
     
     if missing_vars:
-        print("❌ Missing required environment variables:")
+        print("[ERROR] Missing required environment variables:")
         print(f"   {', '.join(missing_vars)}")
         print("\nPlease create a .env file with:")
         print("TWITTER_USERNAME=your_username")

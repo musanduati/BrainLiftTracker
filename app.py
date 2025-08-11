@@ -752,6 +752,254 @@ def set_account_type(account_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Follower Management Endpoints
+@app.route('/api/v1/accounts/<int:account_id>/saved-followers', methods=['GET'])
+def get_saved_followers(account_id):
+    """Get saved/approved followers from database"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    try:
+        conn = get_db()
+        
+        # Check if account exists
+        account = conn.execute(
+            'SELECT id, username FROM twitter_account WHERE id = ?',
+            (account_id,)
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'Account not found'}), 404
+        
+        # Get pagination parameters
+        page = int(request.args.get('page', 1))
+        per_page = min(int(request.args.get('per_page', 50)), 100)
+        offset = (page - 1) * per_page
+        
+        # Get status filter
+        status = request.args.get('status', 'active')
+        
+        # Get total count
+        count_result = conn.execute(
+            'SELECT COUNT(*) as count FROM follower WHERE account_id = ? AND status = ?',
+            (account_id, status)
+        ).fetchone()
+        total_count = count_result['count']
+        
+        # Get followers
+        followers = conn.execute('''
+            SELECT 
+                id,
+                follower_username,
+                follower_id,
+                follower_name,
+                approved_at,
+                last_updated,
+                status
+            FROM follower
+            WHERE account_id = ? AND status = ?
+            ORDER BY approved_at DESC
+            LIMIT ? OFFSET ?
+        ''', (account_id, status, per_page, offset)).fetchall()
+        
+        conn.close()
+        
+        # Format response
+        formatted_followers = []
+        for follower in followers:
+            formatted_followers.append({
+                'id': follower['id'],
+                'username': follower['follower_username'],
+                'twitter_id': follower['follower_id'],
+                'name': follower['follower_name'],
+                'approved_at': follower['approved_at'],
+                'last_updated': follower['last_updated'],
+                'status': follower['status']
+            })
+        
+        return jsonify({
+            'account': {
+                'id': account['id'],
+                'username': account['username']
+            },
+            'followers': formatted_followers,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': total_count,
+                'pages': (total_count + per_page - 1) // per_page
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/accounts/<int:account_id>/saved-followers', methods=['POST'])
+def save_follower(account_id):
+    """Save/update a single approved follower"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    data = request.get_json()
+    if not data or 'username' not in data:
+        return jsonify({'error': 'follower username is required'}), 400
+    
+    try:
+        conn = get_db()
+        
+        # Check if account exists
+        account = conn.execute(
+            'SELECT id, username FROM twitter_account WHERE id = ?',
+            (account_id,)
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'Account not found'}), 404
+        
+        # Extract follower data
+        follower_username = data['username']
+        follower_id = data.get('twitter_id')
+        follower_name = data.get('name')
+        status = data.get('status', 'active')
+        
+        # Try to update existing record first
+        cursor = conn.execute('''
+            UPDATE follower 
+            SET follower_id = ?, 
+                follower_name = ?, 
+                status = ?,
+                last_updated = CURRENT_TIMESTAMP
+            WHERE account_id = ? AND follower_username = ?
+        ''', (follower_id, follower_name, status, account_id, follower_username))
+        
+        if cursor.rowcount == 0:
+            # No existing record, insert new one
+            conn.execute('''
+                INSERT INTO follower (account_id, follower_username, follower_id, follower_name, status)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (account_id, follower_username, follower_id, follower_name, status))
+            
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': f'Follower {follower_username} saved successfully',
+            'account': {
+                'id': account['id'],
+                'username': account['username']
+            },
+            'follower': {
+                'username': follower_username,
+                'twitter_id': follower_id,
+                'name': follower_name,
+                'status': status
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/v1/accounts/batch-update-followers', methods=['POST'])
+def batch_update_followers():
+    """Batch update followers for multiple accounts (for automation use)"""
+    if not check_api_key():
+        return jsonify({'error': 'Invalid API key'}), 401
+    
+    data = request.get_json()
+    if not data or 'updates' not in data:
+        return jsonify({'error': 'updates array is required'}), 400
+    
+    updates = data['updates']
+    if not isinstance(updates, list):
+        return jsonify({'error': 'updates must be an array'}), 400
+    
+    try:
+        conn = get_db()
+        results = []
+        errors = []
+        
+        for update in updates:
+            try:
+                # Validate update structure
+                if 'account_username' not in update or 'followers' not in update:
+                    errors.append({
+                        'error': 'Each update must have account_username and followers',
+                        'update': update
+                    })
+                    continue
+                
+                # Get account by username
+                account = conn.execute(
+                    'SELECT id, username FROM twitter_account WHERE username = ?',
+                    (update['account_username'],)
+                ).fetchone()
+                
+                if not account:
+                    errors.append({
+                        'error': f'Account {update["account_username"]} not found',
+                        'update': update
+                    })
+                    continue
+                
+                # Process followers for this account
+                followers_saved = 0
+                for follower in update['followers']:
+                    if not isinstance(follower, dict) or 'username' not in follower:
+                        continue
+                    
+                    follower_username = follower['username']
+                    follower_id = follower.get('twitter_id')
+                    follower_name = follower.get('name')
+                    status = follower.get('status', 'active')
+                    
+                    # Try to update existing record first
+                    cursor = conn.execute('''
+                        UPDATE follower 
+                        SET follower_id = ?, 
+                            follower_name = ?, 
+                            status = ?,
+                            last_updated = CURRENT_TIMESTAMP
+                        WHERE account_id = ? AND follower_username = ?
+                    ''', (follower_id, follower_name, status, account['id'], follower_username))
+                    
+                    if cursor.rowcount == 0:
+                        # No existing record, insert new one
+                        conn.execute('''
+                            INSERT INTO follower (account_id, follower_username, follower_id, follower_name, status)
+                            VALUES (?, ?, ?, ?, ?)
+                        ''', (account['id'], follower_username, follower_id, follower_name, status))
+                    
+                    followers_saved += 1
+                
+                results.append({
+                    'account': account['username'],
+                    'followers_saved': followers_saved
+                })
+                
+            except Exception as e:
+                errors.append({
+                    'error': str(e),
+                    'update': update
+                })
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': 'Batch update completed',
+            'results': results,
+            'errors': errors,
+            'summary': {
+                'accounts_processed': len(results),
+                'total_errors': len(errors)
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/v1/tweet', methods=['POST'])
 def create_tweet():
     """Create a new tweet"""
@@ -5072,6 +5320,28 @@ def init_database():
                 FOREIGN KEY (account_id) REFERENCES twitter_account(id) ON DELETE CASCADE,
                 UNIQUE(list_id, account_id)
             )
+        ''')
+        
+        # Create follower table for tracking approved followers
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS follower (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                follower_username TEXT NOT NULL,
+                follower_id TEXT,
+                follower_name TEXT,
+                approved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+                status TEXT DEFAULT 'active',
+                FOREIGN KEY (account_id) REFERENCES twitter_account(id) ON DELETE CASCADE,
+                UNIQUE(account_id, follower_username)
+            )
+        ''')
+        
+        # Create index for faster lookups
+        conn.execute('''
+            CREATE INDEX IF NOT EXISTS idx_follower_account 
+            ON follower(account_id)
         ''')
         
         # Insert API key from environment if not exists
