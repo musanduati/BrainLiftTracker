@@ -168,11 +168,6 @@ class TweetPosterV2:
                         logger.warning(f"⚠️ Project {project_name}: {failed} tweets failed")
                     else:
                         logger.info(f"ℹ️ Project {project_name}: No tweets to post")
-                    
-                    # Delay between projects
-                    if i < len(projects):
-                        logger.info(f"⏱️ Waiting 3 seconds before next project...")
-                        await asyncio.sleep(3)
                         
                 except Exception as e:
                     error_result = {

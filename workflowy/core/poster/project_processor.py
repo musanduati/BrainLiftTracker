@@ -128,7 +128,7 @@ class ProjectProcessor:
                 
                 # Delay between threads
                 if thread_tweets != threads_to_process[-1]:
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(2)
                     
             except Exception as e:
                 failed_count += len(thread_tweets)
@@ -168,10 +168,6 @@ class ProjectProcessor:
             try:
                 result = await self.process_project(session, project_id)
                 results.append(result)
-                
-                # Delay between projects
-                if project_id != project_ids[-1]:
-                    await asyncio.sleep(10)
                     
             except Exception as e:
                 logger.error(f"❌ Error processing project {project_id}: {e}")
