@@ -102,7 +102,8 @@ class BatchTwitterAutomation:
             'approved_count': 0,
             'error': None,
             'duration_seconds': 0,
-            'timeout': False
+            'timeout': False,
+            'followers_saved': 0
         }
         
         try:
@@ -155,7 +156,7 @@ class BatchTwitterAutomation:
                     const allowedUsernames = {allowed_usernames_json};
                     
                     console.log('\\n' + '='*50);
-                    console.log('🔒 USERNAME FILTER CONFIGURATION');
+                    console.log('[CONFIG] USERNAME FILTER CONFIGURATION');
                     console.log('='*50);
                     console.log('ALLOWED USERNAMES:', allowedUsernames);
                     console.log('List length:', allowedUsernames.length);
@@ -173,7 +174,7 @@ class BatchTwitterAutomation:
 
                     automation.driver.execute_script(config_script)
                     
-                    print(f"✅ Auto-approver started for @{username} (max: {max_approvals}, delay: {delay_seconds}s)")
+                    print(f"[OK] Auto-approver started for @{username} (max: {max_approvals}, delay: {delay_seconds}s)")
                     
                     # Monitor progress and capture results
                     last_count = 0
@@ -201,7 +202,7 @@ class BatchTwitterAutomation:
                             break
                     
                 except Exception as e:
-                    print(f"❌ Error in auto-approver for @{username}: {str(e)}")
+                    print(f"[ERROR] Error in auto-approver for @{username}: {str(e)}")
                     raise
             
             automation.inject_auto_approver_script = custom_inject
@@ -209,6 +210,33 @@ class BatchTwitterAutomation:
             # Run automation for this account
             success = automation.run_full_automation()
             result['success'] = success
+            
+            # Try to save approved followers to the API
+            try:
+                # Get approved followers from JavaScript
+                approved_followers = automation.driver.execute_script("""
+                    if (window.approver && window.approver.approvedFollowers) {
+                        return window.approver.approvedFollowers;
+                    }
+                    return [];
+                """)
+                
+                if approved_followers:
+                    print(f"\n[OK] Found {len(approved_followers)} approved followers to save for @{username}")
+                    
+                    # Save followers to API
+                    saved_count = automation.save_approved_followers_to_api(username, approved_followers)
+                    result['followers_saved'] = saved_count
+                    
+                    if saved_count > 0:
+                        print(f"[OK] Successfully saved {saved_count} followers to database for @{username}")
+                    else:
+                        print(f"[WARNING] Could not save followers to database for @{username}")
+                else:
+                    print(f"[INFO] No followers to save for @{username}")
+                    
+            except Exception as e:
+                print(f"[WARNING] Could not save followers for @{username}: {str(e)}")
             
             if not success and result['approved_count'] == 0:
                 if hasattr(automation, 'auth_code_skipped') and automation.auth_code_skipped:
@@ -220,11 +248,11 @@ class BatchTwitterAutomation:
             # Always ensure browser is closed after processing
             if hasattr(automation, 'driver') and automation.driver:
                 automation.cleanup()
-                print(f"✅ Browser closed for @{username}")
+                print(f"[OK] Browser closed for @{username}")
                 
         except Exception as e:
             result['error'] = str(e)
-            print(f"❌ Error processing @{username}: {str(e)}")
+            print(f"[ERROR] Error processing @{username}: {str(e)}")
             
             # Ensure cleanup even on error
             try:
@@ -250,12 +278,12 @@ class BatchTwitterAutomation:
             print("No accounts to process!")
             return
         
-        print(f"\n🚀 Starting batch automation for {len(self.accounts)} account(s)")
+        print(f"\n[START] Starting batch automation for {len(self.accounts)} account(s)")
         print(f"Browser: {self.browser} (headless: {self.headless})")
         
         # Process each account
         for i, account in enumerate(self.accounts, 1):
-            print(f"\n📊 Progress: {i}/{len(self.accounts)}")
+            print(f"\n[PROGRESS] Progress: {i}/{len(self.accounts)}")
             
             result = self.process_account(account)
             self.results.append(result)
@@ -263,7 +291,7 @@ class BatchTwitterAutomation:
             # Wait between accounts to avoid rate limiting
             if i < len(self.accounts):
                 wait_time = 5  # 5 seconds between accounts
-                print(f"\n⏳ Waiting {wait_time} seconds before next account...")
+                print(f"\n[WAIT] Waiting {wait_time} seconds before next account...")
                 time.sleep(wait_time)
         
         # Generate summary report
@@ -276,21 +304,25 @@ class BatchTwitterAutomation:
         print("="*60)
         
         total_approved = 0
+        total_followers_saved = 0
         successful_accounts = 0
         
         for result in self.results:
             username = result['username']
             approved = result['approved_count']
+            followers_saved = result.get('followers_saved', 0)
             success = result['success']
             duration = result['duration_seconds']
             
             total_approved += approved
+            total_followers_saved += followers_saved
             if success:
                 successful_accounts += 1
             
-            status = "✅" if success else "❌"
+            status = "[OK]" if success else "[FAILED]"
             print(f"\n{status} @{username}:")
             print(f"   - Approved: {approved} requests")
+            print(f"   - Followers saved: {followers_saved}")
             print(f"   - Duration: {duration:.1f} seconds")
             if result['error']:
                 print(f"   - Error: {result['error']}")
@@ -300,6 +332,7 @@ class BatchTwitterAutomation:
         print(f"- Accounts processed: {len(self.results)}")
         print(f"- Successful: {successful_accounts}")
         print(f"- Total approvals: {total_approved}")
+        print(f"- Total followers saved: {total_followers_saved}")
         print(f"- Completion time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         # Save report to file
@@ -310,12 +343,13 @@ class BatchTwitterAutomation:
                     'total_accounts': len(self.results),
                     'successful_accounts': successful_accounts,
                     'total_approvals': total_approved,
+                    'total_followers_saved': total_followers_saved,
                     'completion_time': datetime.now().isoformat()
                 },
                 'results': self.results
             }, f, indent=2)
         
-        print(f"\n📄 Detailed report saved to: {report_file}")
+        print(f"\n[REPORT] Detailed report saved to: {report_file}")
 
 
 def main():

@@ -133,6 +133,7 @@ nul
 kill_*.ps1
 *_backup*
 *.old
+batch_report_*.json
 
 # Deployment and migration scripts
 verify_migration.py
