@@ -125,11 +125,6 @@ async def process_and_post_v2(environment: str = 'test'):
                 # Use the project-based posting method
                 project_results = await process_single_project_posting_v2(poster, project_id)
                 posting_results.append(project_results)
-                
-                # Add delay between projects
-                if project_id != projects_with_content[-1]:
-                    logger.info(f"⏱️ Waiting 3 seconds before next project...")
-                    await asyncio.sleep(3)
                     
             except Exception as e:
                 logger.error(f"❌ Error posting tweets for project {project_id}: {e}")
@@ -224,7 +219,7 @@ async def process_single_project_posting_v2(poster: TweetPosterV2, project_id: s
                 
                 # Delay between threads
                 if thread_tweets != threads_to_process[-1]:
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(2)
                     
             except Exception as e:
                 failed_count += len(thread_tweets)
