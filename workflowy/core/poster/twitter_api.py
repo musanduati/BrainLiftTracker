@@ -5,6 +5,7 @@ Twitter API client for tweet posting
 import aiohttp
 from typing import List, Dict, Optional
 from workflowy.config.logger import logger
+from workflowy.core.scraper.tweet_generation import convert_markdown_urls_to_plain
 
 
 class TwitterAPIClient:
@@ -34,8 +35,11 @@ class TwitterAPIClient:
             int: Tweet ID if successful, None otherwise
         """
         try:
+            # Convert markdown URLs to plain URLs before sending to Twitter
+            processed_text = convert_markdown_urls_to_plain(text)
+            
             payload = {
-                "text": text,
+                "text": processed_text,
                 "account_id": int(account_id)
             }
             
@@ -107,7 +111,9 @@ class TwitterAPIClient:
                     text = str(tweet)
                 
                 if text:
-                    tweet_texts.append(text)
+                    # Convert markdown URLs to plain URLs before adding to payload
+                    processed_text = convert_markdown_urls_to_plain(text)
+                    tweet_texts.append(processed_text)
             
             if not tweet_texts:
                 logger.error("❌ No valid tweet texts found in thread")

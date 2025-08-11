@@ -8,6 +8,33 @@ from typing import List, Dict
 from workflowy.config.logger import logger
 
 
+def convert_markdown_urls_to_plain(text: str) -> str:
+    """
+    Convert markdown-formatted URLs to plain URLs for Twitter compatibility.
+    
+    Converts [text](url) to just url for character efficiency.
+    
+    Args:
+        text: Text that may contain markdown URLs
+        
+    Returns:
+        Text with markdown URLs converted to plain format
+    """
+    # Pattern to match [text](url) markdown links
+    markdown_url_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
+    
+    def replace_markdown_url(match):
+        # link_text = match.group(1)
+        url = match.group(2)
+        
+        # Just use the URL (most character-efficient for Twitter)
+        return url
+    
+    # Replace all markdown URLs with plain URLs
+    converted_text = re.sub(markdown_url_pattern, replace_markdown_url, text)
+    return converted_text
+
+
 def create_combined_content(main_content: str, sub_points: List[str]) -> str:
     """
     Combine main point with sub-points into one text block.
