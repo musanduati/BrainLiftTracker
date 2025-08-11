@@ -831,13 +831,14 @@ class TwitterSeleniumAutomation:
         """Save approved followers to the API"""
         if not self.api_key:
             print("[WARNING] No API key configured, skipping follower save")
-            return
+            return 0
         
         try:
             print(f"\n[SAVING] Saving {len(approved_followers)} approved followers to API...")
             
             # Get the correct username from the database (case-sensitive)
             # First check what username is in the database
+            api_url = self.api_base_url
             try:
                 check_response = requests.get(
                     f"{api_url}/api/v1/accounts",
@@ -871,8 +872,6 @@ class TwitterSeleniumAutomation:
                 "Content-Type": "application/json"
             }
             
-            # Use the API URL from environment
-            api_url = self.api_base_url
             response = requests.post(
                 f"{api_url}/api/v1/accounts/batch-update-followers",
                 json=batch_data,
@@ -889,17 +888,21 @@ class TwitterSeleniumAutomation:
                 # Log individual followers
                 for follower in approved_followers:
                     print(f"   - @{follower['username']} ({follower.get('name', 'N/A')})")
-                    
+                
+                return len(approved_followers)
             else:
                 print(f"[ERROR] Failed to save followers: {response.status_code}")
                 print(f"   Response: {response.text}")
+                return 0
                 
         except requests.exceptions.ConnectionError:
             print("[WARNING] Could not connect to API server (connection refused)")
             print("   Make sure the Flask API is running on localhost:5555")
             print(f"   Attempted URL: {api_url}")
+            return 0
         except Exception as e:
             print(f"[ERROR] Error saving followers to API: {str(e)}")
+            return 0
     
     def monitor_approval_progress(self):
         """Monitor the auto-approval progress"""

@@ -231,7 +231,7 @@ class BatchTwitterAutomation:
                             print(f"\n[OK] Found {len(approved_followers)} approved followers to save for @{username}")
                             
                             # Save followers to API
-                            saved_count = automation.save_approved_followers_to_api(username, approved_followers)
+                            saved_count = automation.save_approved_followers_to_api(approved_followers)
                             result['followers_saved'] = saved_count
                             
                             if saved_count > 0:
