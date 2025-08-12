@@ -88,7 +88,6 @@ auto-approver_aws/
 ├── aws_wrapper.py                 # 🐍 AWS integration wrapper
 ├── dockerfile                     # 🐳 Container definition
 ├── requirements_aws.txt           # 📦 Python dependencies
-├── test_local.py                  # 🧪 Local testing script
 ├── .env.aws                       # 🔧 Environment variables (auto-generated)
 └── ecs-task-definition-*.json     # 📋 ECS task definitions (auto-generated)
 ```
@@ -285,12 +284,6 @@ aws ecs run-task \
 
 ## Development
 
-### Local Testing
-```bash
-# Test imports and CSV loading
-python3 test_local.py
-```
-
 ### Adding New Features
 1. Modify `aws_wrapper.py` or automation scripts
 2. Update `dockerfile` if needed
@@ -311,8 +304,8 @@ AWS_DEFAULT_REGION=us-east-1  # AWS region
 
 ### AWS Console Links
 - **ECS Cluster**: https://console.aws.amazon.com/ecs/home?region=us-east-1#/clusters/twitter-automation
-- **CloudWatch Logs**: https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups
-- **EventBridge Rules**: https://console.aws.amazon.com/events/home?region=us-east-1#/rules
+- **CloudWatch Logs**: https://479395885256-ig44dkdu.us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/$252Fecs$252Ftwitter-automation
+- **EventBridge Rules**: https://479395885256-ig44dkdu.us-east-1.console.aws.amazon.com/events/home?region=us-east-1#/eventbus/default/rules/twitter-automation-daily
 - **S3 Bucket**: https://console.aws.amazon.com/s3/buckets/twitter-automation-results
 
 ### Emergency Procedures
@@ -345,6 +338,5 @@ aws s3 rb s3://twitter-automation-results --force
 **📊 Accounts**: 169 total (131 academics + 38 superbuilders)
 **⏱️ Duration**: ~2 hours per run
 **💰 Cost**: ~$16/month
-```
 
 This comprehensive README.md provides everything needed to understand, deploy, operate, and maintain the AWS Twitter automation system.
