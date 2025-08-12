@@ -58,12 +58,14 @@ class TwitterSeleniumAutomation:
                 'zeroshotflow', 'munawar2434', 'klair_three', 'klair_two'
             ]
         
-        if not self.username or not self.password:
-            raise ValueError("Twitter credentials not found in environment variables")
+        # if not self.username or not self.password:
+        #     raise ValueError("Twitter credentials not found in environment variables")
         
     def setup_driver(self):
-        """Set up the Selenium WebDriver with appropriate options"""
+        """Set up the Selenium WebDriver with system ChromeDriver"""
         if self.browser_type == "chrome":
+            from selenium.webdriver.chrome.service import Service
+            
             options = Options()
             
             # Add options to avoid detection
@@ -83,16 +85,28 @@ class TwitterSeleniumAutomation:
             if self.headless:
                 options.add_argument('--headless')
             
-            self.driver = webdriver.Chrome(options=options)
+            # Use system ChromeDriver (installed in container)
+            try:
+                print("Setting up ChromeDriver from system PATH...")
+                service = Service('/usr/local/bin/chromedriver')
+                self.driver = webdriver.Chrome(service=service, options=options)
+                print("✅ ChromeDriver setup successful!")
+            except Exception as e:
+                print(f"❌ ChromeDriver setup failed: {e}")
+                raise
             
         elif self.browser_type == "firefox":
             from selenium.webdriver.firefox.options import Options as FirefoxOptions
+            from selenium.webdriver.firefox.service import Service as FirefoxService
+            from webdriver_manager.firefox import GeckoDriverManager
+            
             options = FirefoxOptions()
             
             if self.headless:
                 options.add_argument('--headless')
-                
-            self.driver = webdriver.Firefox(options=options)
+            
+            service = FirefoxService(GeckoDriverManager().install())
+            self.driver = webdriver.Firefox(service=service, options=options)
             
         else:
             raise ValueError(f"Unsupported browser type: {self.browser_type}")
