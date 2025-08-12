@@ -30,7 +30,7 @@ interface ListDetails {
   members: ListMember[];
 }
 
-const MEMBERS_PER_PAGE = 16; // 4x4 grid
+const MEMBERS_PER_PAGE = 30; // More members per page
 
 export const ListMembers: React.FC = () => {
   const { listId } = useParams<{ listId: string }>();
@@ -140,7 +140,7 @@ export const ListMembers: React.FC = () => {
         <TopBar />
         <div className="p-6">
           <Skeleton className="h-32 mb-6" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
             {[...Array(8)].map((_, i) => (
               <Skeleton key={i} className="h-32" />
             ))}

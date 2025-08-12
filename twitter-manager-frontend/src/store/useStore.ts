@@ -1,9 +1,12 @@
 import { create } from 'zustand';
 import { TwitterAccount, Tweet, TwitterList } from '../types';
 
+export type ThemeOption = 'light' | 'dark' | 'midnight' | 'sunset' | 'ocean' | 'forest';
+
 interface AppState {
   // Theme
-  theme: 'light' | 'dark';
+  theme: ThemeOption;
+  setTheme: (theme: ThemeOption) => void;
   toggleTheme: () => void;
 
   // View preferences
@@ -62,12 +65,23 @@ interface Notification {
 }
 
 export const useStore = create<AppState>((set) => ({
-  // Theme - default to dark if not set
-  theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'dark',
+  // Theme - default to midnight if not set
+  theme: (localStorage.getItem('theme') as ThemeOption) || 'midnight',
+  setTheme: (theme) => {
+    localStorage.setItem('theme', theme);
+    // Remove all theme classes
+    document.documentElement.classList.remove('dark', 'light', 'midnight', 'sunset', 'ocean', 'forest');
+    // Add new theme class
+    document.documentElement.classList.add(theme);
+    set({ theme });
+  },
   toggleTheme: () => set((state) => {
-    const newTheme = state.theme === 'light' ? 'dark' : 'light';
+    const themes: ThemeOption[] = ['light', 'dark', 'midnight', 'sunset', 'ocean', 'forest'];
+    const currentIndex = themes.indexOf(state.theme);
+    const newTheme = themes[(currentIndex + 1) % themes.length];
     localStorage.setItem('theme', newTheme);
-    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+    document.documentElement.classList.remove(...themes);
+    document.documentElement.classList.add(newTheme);
     return { theme: newTheme };
   }),
 

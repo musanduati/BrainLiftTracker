@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, ChevronDown, ChevronRight, Hash, CheckCircle, XCircle, Clock, ChevronLeft, TrendingUp, BarChart3, Activity } from 'lucide-react';
+import { ArrowLeft, Calendar, ChevronDown, ChevronRight, Hash, CheckCircle, XCircle, Clock, ChevronLeft, TrendingUp, BarChart3, Activity, Shield, Users, Zap, Target, Flame, Timer, TrendingDown } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -8,10 +8,13 @@ import { Badge } from '../components/common/Badge';
 import { Skeleton } from '../components/common/Skeleton';
 import { apiClient } from '../services/api';
 import { TwitterAccount, Thread, ThreadTweet, Tweet } from '../types';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow, format, subDays, startOfDay } from 'date-fns';
 import toast from 'react-hot-toast';
 import { cn } from '../utils/cn';
 import { getAvatarColor, getAvatarText } from '../utils/avatar';
+import { CompactFollowerList } from '../components/followers/CompactFollowerList';
+import { MiniChart } from '../components/charts/MiniChart';
+import { ActivityHeatmap } from '../components/charts/ActivityHeatmap';
 
 const THREADS_PER_PAGE = 10;
 
@@ -27,6 +30,7 @@ export const AccountDetail: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'all' | 'week' | 'month'>('all');
   const [contentView, setContentView] = useState<'threads' | 'changes' | 'all'>('all');
+  const [savedFollowerCount, setSavedFollowerCount] = useState(0);
 
   useEffect(() => {
     if (id) {
@@ -43,11 +47,15 @@ export const AccountDetail: React.FC = () => {
       const accountData = await apiClient.getAccount(accountId);
       setAccount(accountData);
 
-      // Load threads and changes in parallel
-      const [accountThreads, allTweets] = await Promise.all([
+      // Load threads, changes, and saved followers count in parallel
+      const [accountThreads, allTweets, savedFollowersData] = await Promise.all([
         apiClient.getThreads(accountId),
-        apiClient.getTweets()
+        apiClient.getTweets(),
+        apiClient.getSavedFollowers(accountId, 1, 1) // Fetch just to get total count
       ]);
+      
+      // Set saved follower count
+      setSavedFollowerCount(savedFollowersData.pagination?.total || 0);
 
       // Filter changes for this account that are NOT part of threads
       const accountTweets = allTweets.filter(tweet => 
@@ -156,15 +164,115 @@ export const AccountDetail: React.FC = () => {
     return threadDate >= weekAgo;
   }).length;
 
+  // Advanced metrics calculations
+  const last28DaysData = useMemo(() => {
+    const days = Array.from({ length: 28 }, (_, i) => {
+      const date = subDays(new Date(), 27 - i);
+      const dateStr = format(date, 'yyyy-MM-dd');
+      
+      const dayThreads = threads.filter(t => 
+        format(new Date(t.created_at), 'yyyy-MM-dd') === dateStr
+      );
+      
+      const dayTweets = individualTweets.filter(t => 
+        format(new Date(t.createdAt), 'yyyy-MM-dd') === dateStr
+      );
+      
+      return {
+        date: dateStr,
+        count: dayThreads.length + dayTweets.length,
+        threads: dayThreads.length,
+        tweets: dayTweets.length
+      };
+    });
+    
+    return days;
+  }, [threads, individualTweets]);
+
+  // Activity heatmap data - full year
+  const activityData = useMemo(() => {
+    const data: { date: string; count: number }[] = [];
+    const today = new Date();
+    
+    // Generate data for the last 365 days
+    for (let i = 0; i < 365; i++) {
+      const date = subDays(today, i);
+      const dateStr = format(date, 'yyyy-MM-dd');
+      
+      const dayCount = threads.filter(t => 
+        format(new Date(t.created_at), 'yyyy-MM-dd') === dateStr
+      ).length + individualTweets.filter(t => 
+        format(new Date(t.createdAt), 'yyyy-MM-dd') === dateStr
+      ).length;
+      
+      data.unshift({ date: dateStr, count: dayCount });
+    }
+    
+    return data;
+  }, [threads, individualTweets]);
+
+  // Calculate posting consistency
+  const postingConsistency = useMemo(() => {
+    const daysWithPosts = last28DaysData.filter(d => d.count > 0).length;
+    return Math.round((daysWithPosts / 28) * 100);
+  }, [last28DaysData]);
+
+  // Calculate best posting hour (mock for now)
+  const bestPostingHour = useMemo(() => {
+    const hours = threads.map(t => new Date(t.created_at).getHours());
+    if (hours.length === 0) return 14; // Default to 2 PM
+    const hourCounts = hours.reduce((acc, hour) => {
+      acc[hour] = (acc[hour] || 0) + 1;
+      return acc;
+    }, {} as Record<number, number>);
+    
+    return parseInt(Object.entries(hourCounts)
+      .sort(([, a], [, b]) => b - a)[0]?.[0] || '14');
+  }, [threads]);
+
+  // Calculate streak
+  const currentStreak = useMemo(() => {
+    let streak = 0;
+    const today = startOfDay(new Date());
+    
+    for (let i = 0; i < 365; i++) {
+      const date = subDays(today, i);
+      const dateStr = format(date, 'yyyy-MM-dd');
+      
+      const hasActivity = threads.some(t => 
+        format(new Date(t.created_at), 'yyyy-MM-dd') === dateStr
+      ) || individualTweets.some(t => 
+        format(new Date(t.createdAt), 'yyyy-MM-dd') === dateStr
+      );
+      
+      if (hasActivity) {
+        streak++;
+      } else if (i > 0) {
+        break;
+      }
+    }
+    
+    return streak;
+  }, [threads, individualTweets]);
+
+
   const renderIndividualChange = (change: Tweet) => (
     <Card key={change.id} className="overflow-hidden hover:shadow-md transition-shadow">
       <CardContent className="p-4">
         <div className="flex gap-3">
           {/* Profile Picture */}
           <div className="flex-shrink-0">
-            <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(account?.username || '')} flex items-center justify-center text-white font-semibold text-sm`}>
-              {getAvatarText(account?.username || '', account?.displayName)}
-            </div>
+            {account?.profilePicture ? (
+              <img 
+                src={account.profilePicture}
+                alt={account?.displayName || account?.username}
+                className="w-10 h-10 rounded-full object-cover"
+              />
+            ) : (
+              <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(account?.username || '')} flex items-center justify-center text-white font-semibold text-sm`}>
+                {getAvatarText(account?.username || '', account?.displayName)}
+              </div>
+            )}
           </div>
 
           {/* Change Content */}
@@ -202,9 +310,17 @@ export const AccountDetail: React.FC = () => {
       <div className="flex gap-3 relative">
         {/* Profile Picture */}
         <div className="flex-shrink-0 z-10">
-          <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(account?.username || '')} flex items-center justify-center text-white font-semibold text-sm`}>
-            {getAvatarText(account?.username || '', account?.displayName)}
-          </div>
+          {account?.profilePicture ? (
+            <img 
+              src={account.profilePicture}
+              alt={account?.displayName || account?.username}
+              className="w-10 h-10 rounded-full object-cover"
+            />
+          ) : (
+            <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getAvatarColor(account?.username || '')} flex items-center justify-center text-white font-semibold text-sm`}>
+              {getAvatarText(account?.username || '', account?.displayName)}
+            </div>
+          )}
         </div>
 
         {/* Change Content */}
@@ -360,59 +476,182 @@ export const AccountDetail: React.FC = () => {
           </Button>
         </Link>
 
-        {/* Account Header */}
-        <Card className="mb-6">
+        {/* Account Header - Twitter Analytics Style */}
+        <Card className="mb-6 overflow-hidden border-0 shadow-lg">
           <CardContent className="p-6">
-            <div className="flex items-start gap-4">
+            <div className="flex items-end gap-4 mb-4">
               {/* Large Profile Picture */}
-              <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white text-2xl font-semibold`}>
-                {getAvatarText(account.username, account.displayName)}
+              <div className="relative">
+                {account.profilePicture ? (
+                  <img 
+                    src={account.profilePicture}
+                    alt={account.displayName || account.username}
+                    className="w-24 h-24 rounded-full object-cover shadow-xl"
+                  />
+                ) : (
+                  <div className={`w-24 h-24 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white text-3xl font-bold shadow-xl`}>
+                    {getAvatarText(account.username, account.displayName)}
+                  </div>
+                )}
+                {account.verified && (
+                  <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-1 shadow-lg">
+                    <Shield size={20} className="text-blue-500 fill-blue-500" />
+                  </div>
+                )}
               </div>
 
               {/* Account Info */}
               <div className="flex-1">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h2 className="text-xl font-semibold">{account.displayName || account.username}</h2>
-                    <p className="text-muted-foreground">@{account.username}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">
-                      {account.authorized ? 'Active' : 'Inactive'}
-                    </Badge>
-                    <Badge variant="outline">
-                      {account.accountType === 'list_owner' ? 'List Owner' : 'Managed'}
-                    </Badge>
+                    <h2 className="text-2xl font-bold flex items-center gap-2">
+                      {account.displayName || account.username}
+                      {account.verified && <Shield size={20} className="text-blue-500 fill-blue-500" />}
+                    </h2>
+                    <p className="text-muted-foreground text-lg">@{account.username}</p>
                   </div>
                 </div>
+              </div>
+            </div>
 
-                {/* Stats */}
-                <div className="flex items-center gap-6 mt-4 text-sm">
-                  <div>
-                    <span className="font-semibold">{account.followerCount?.toLocaleString() || '0'}</span>
-                    <span className="text-muted-foreground ml-1">Followers</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold">{account.followingCount?.toLocaleString() || '0'}</span>
-                    <span className="text-muted-foreground ml-1">Following</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold">{threads.length}</span>
-                    <span className="text-muted-foreground ml-1">Threads</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold">{totalChanges}</span>
-                    <span className="text-muted-foreground ml-1">Total Changes</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold">{totalPosted}</span>
-                    <span className="text-muted-foreground ml-1">Posted</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-muted-foreground">
-                    <Calendar size={14} />
-                    <span>Joined {new Date(account.createdAt).toLocaleDateString()}</span>
+            {/* Bio if available */}
+            {account.description && (
+              <p className="text-muted-foreground mb-4 max-w-3xl">{account.description}</p>
+            )}
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-6">
+              <div className="p-3 rounded-lg bg-muted/50">
+                <div className="flex items-center">
+                  <Users size={16} className="text-blue-500" />
+                </div>
+                <div className="text-2xl font-bold mt-1">{savedFollowerCount.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground">Saved Followers</div>
+              </div>
+              
+              <div className="p-3 rounded-lg bg-muted/50">
+                <div className="text-2xl font-bold">{threads.length}</div>
+                <div className="text-xs text-muted-foreground">Threads</div>
+              </div>
+              
+              <div className="p-3 rounded-lg bg-muted/50">
+                <div className="text-2xl font-bold">{totalChanges}</div>
+                <div className="text-xs text-muted-foreground">Total Changes</div>
+              </div>
+              
+              <div className="p-3 rounded-lg bg-muted/50">
+                <div className="text-2xl font-bold text-green-600">{totalPosted}</div>
+                <div className="text-xs text-muted-foreground">Posted</div>
+              </div>
+              
+              <div className="p-3 rounded-lg bg-muted/50">
+                <div className="flex items-center gap-1 text-sm font-medium">
+                  <Calendar size={14} />
+                  {format(new Date(account.createdAt), 'MMM yyyy')}
+                </div>
+                <div className="text-xs text-muted-foreground">Joined</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 28-Day Summary - X Analytics Style */}
+        <Card className="mb-6 border-0 shadow-lg">
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <TrendingUp size={20} className="text-blue-500" />
+                28-Day Summary
+              </CardTitle>
+              <Badge variant="outline" className="text-xs">
+                {format(subDays(new Date(), 27), 'MMM d')} - {format(new Date(), 'MMM d')}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              {/* Posting Consistency */}
+              <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <Target size={16} className="text-purple-500" />
+                  <span className="text-2xl font-bold">{postingConsistency}%</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Consistency Score</p>
+                <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all"
+                    style={{ width: `${postingConsistency}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Current Streak */}
+              <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <Flame size={16} className="text-orange-500" />
+                  <span className="text-2xl font-bold">{currentStreak}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Day Streak</p>
+                <div className="mt-2">
+                  <MiniChart 
+                    data={last28DaysData.slice(-7).map(d => d.count)}
+                    height={20}
+                    width={80}
+                    color="text-orange-500"
+                    type="bar"
+                  />
+                </div>
+              </div>
+
+              {/* Best Posting Time */}
+              <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <Timer size={16} className="text-green-500" />
+                  <span className="text-2xl font-bold">{bestPostingHour}:00</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Best Hour</p>
+                <p className="text-xs text-green-600 mt-2">Peak activity time</p>
+              </div>
+
+              {/* Content Velocity */}
+              <div className="p-4 rounded-lg bg-muted/30 border border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <Zap size={16} className="text-yellow-500" />
+                  <div className="flex items-center gap-1">
+                    <span className="text-2xl font-bold">{postsThisWeek}</span>
+                    {postsThisWeek > 5 ? (
+                      <TrendingUp size={14} className="text-green-500" />
+                    ) : (
+                      <TrendingDown size={14} className="text-red-500" />
+                    )}
                   </div>
                 </div>
+                <p className="text-xs text-muted-foreground">This Week</p>
+                <div className="mt-2">
+                  <MiniChart 
+                    data={last28DaysData.map(d => d.count)}
+                    height={20}
+                    width={80}
+                    color="text-yellow-500"
+                    showDots={false}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Activity Heatmap */}
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <Activity size={14} />
+                  Contribution Activity
+                </h4>
+                <span className="text-xs text-muted-foreground">
+                  {activityData.reduce((sum, d) => sum + d.count, 0)} contributions in the last year
+                </span>
+              </div>
+              <div className="p-4 bg-muted/20 rounded-lg overflow-x-auto">
+                <ActivityHeatmap data={activityData} weeks={52} />
               </div>
             </div>
           </CardContent>
@@ -574,39 +813,52 @@ export const AccountDetail: React.FC = () => {
 
           {/* Stats Sidebar */}
           <div className="space-y-4">
-            {/* Performance Stats */}
-            <Card>
-              <CardHeader className="pb-3">
+            {/* Performance Stats - Analytics Style */}
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-3 bg-muted/50">
                 <CardTitle className="text-base flex items-center gap-2">
                   <BarChart3 size={18} className="text-blue-500" />
-                  Performance Stats
+                  Performance Metrics
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
+              <CardContent className="space-y-4 pt-4">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Engagement Rate</span>
-                    <span className="text-sm font-semibold">{engagementRate}%</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold">{engagementRate}%</span>
+                      <div className="flex items-center gap-0.5 text-green-600">
+                        <TrendingUp size={14} />
+                        <span className="text-xs">+0.3%</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 mt-1">
-                    <TrendingUp size={14} className="text-green-500" />
-                    <span className="text-xs text-green-600">+0.3% from last week</span>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full" style={{width: `${engagementRate * 10}%`}} />
                   </div>
                 </div>
-                <div>
+                
+                <div className="pt-2 space-y-3 border-t">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Avg Changes/Thread</span>
-                    <span className="text-sm font-semibold">{avgChangesPerThread}</span>
+                    <span className="text-sm font-bold bg-muted px-2 py-0.5 rounded">{avgChangesPerThread}</span>
                   </div>
-                </div>
-                <div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Posts This Week</span>
-                    <span className="text-sm font-semibold">{postsThisWeek}</span>
+                    <span className="text-sm font-bold bg-muted px-2 py-0.5 rounded">{postsThisWeek}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Success Rate</span>
+                    <span className="text-sm font-bold bg-muted px-2 py-0.5 rounded">
+                      {totalChanges > 0 ? Math.round((totalPosted / totalChanges) * 100) : 0}%
+                    </span>
                   </div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Followers */}
+            <CompactFollowerList accountId={account.id} key={savedFollowerCount} />
 
             {/* Activity Timeline */}
             <Card>

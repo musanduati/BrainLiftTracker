@@ -31,7 +31,7 @@ export const Accounts: React.FC = () => {
   const [filteredAccounts, setFilteredAccounts] = useState<TwitterAccount[]>([]);
   const [isSyncingProfiles, setIsSyncingProfiles] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const accountsPerPage = 15;
+  const accountsPerPage = 30;
 
   useEffect(() => {
     loadAccounts();
@@ -322,7 +322,7 @@ export const Accounts: React.FC = () => {
         ) : (
           <>
             {accountViewMode === 'grid' ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-10 gap-4">
                 {paginatedAccounts.map((account) => (
                   <AccountCard
                     key={account.id}

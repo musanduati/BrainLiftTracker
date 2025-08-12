@@ -102,6 +102,60 @@ class ApiClient {
     return data;
   }
 
+  async getSavedFollowers(id: number, page: number = 1, perPage: number = 20): Promise<{
+    account: {
+      id: number;
+      username: string;
+    };
+    followers: Array<{
+      twitter_user_id: string;
+      username: string;
+      display_name: string;
+      profile_picture?: string;
+      description?: string;
+      verified: boolean;
+      followers_count: number;
+      following_count: number;
+      tweet_count: number;
+      created_at: string;
+      is_approved: boolean;
+      name: string;
+      approved_at: string;
+      last_updated: string;
+      status: string;
+    }>;
+    pagination: {
+      page: number;
+      per_page: number;
+      total: number;
+      pages: number;
+    };
+  }> {
+    const { data } = await this.client.get(`/accounts/${id}/saved-followers`, {
+      params: { page, per_page: perPage }
+    });
+    return data;
+  }
+
+  async saveSingleFollower(accountId: number, follower: {
+    twitter_user_id: string;
+    username: string;
+    display_name: string;
+    profile_picture?: string;
+    description?: string;
+    verified: boolean;
+    followers_count: number;
+    following_count: number;
+    tweet_count: number;
+    is_approved: boolean;
+  }): Promise<void> {
+    await this.client.post(`/accounts/${accountId}/saved-followers`, follower);
+  }
+
+  async removeSavedFollower(accountId: number, followerId: string): Promise<void> {
+    await this.client.delete(`/accounts/${accountId}/saved-followers/${followerId}`);
+  }
+
   async deleteAccount(id: number): Promise<void> {
     await this.client.delete(`/accounts/${id}`);
   }

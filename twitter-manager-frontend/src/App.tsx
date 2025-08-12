@@ -10,6 +10,7 @@ import { InactiveAccounts } from './pages/InactiveAccounts';
 import { Lists } from './pages/Lists';
 import { ListMembers } from './pages/ListMembers';
 import { useStore } from './store/useStore';
+import { notificationPoller } from './services/notificationPoller';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,13 +26,29 @@ function App() {
 
   useEffect(() => {
     // Apply theme on mount and when it changes
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    const themes = ['light', 'dark', 'midnight', 'sunset', 'ocean', 'forest'];
     
-    // If no theme was previously set, save dark as default
+    // Remove all theme classes
+    document.documentElement.classList.remove(...themes);
+    
+    // Add current theme class
+    document.documentElement.classList.add(theme);
+    
+    // If no theme was previously set, save midnight as default
     if (!localStorage.getItem('theme')) {
-      localStorage.setItem('theme', 'dark');
+      localStorage.setItem('theme', 'midnight');
     }
   }, [theme]);
+
+  useEffect(() => {
+    // Start notification polling when app mounts
+    notificationPoller.start();
+
+    // Cleanup on unmount
+    return () => {
+      notificationPoller.stop();
+    };
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

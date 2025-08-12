@@ -12,7 +12,7 @@ import { getAvatarColor, getAvatarText } from '../utils/avatar';
 import { formatRelativeTime } from '../utils/format';
 import toast from 'react-hot-toast';
 
-const ACCOUNTS_PER_PAGE = 15;
+const ACCOUNTS_PER_PAGE = 20;
 
 export const InactiveAccounts: React.FC = () => {
   const [inactiveAccounts, setInactiveAccounts] = useState<TwitterAccount[]>([]);
