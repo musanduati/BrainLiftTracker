@@ -336,8 +336,11 @@ aws s3 rb s3://twitter-automation-results --force
 **🎯 System Status**: Ready for daily production use
 
 **📅 Next Run**: Every day at 9:00 AM UTC
+
 **📊 Accounts**: 169 total (131 academics + 38 superbuilders)
+
 **⏱️ Duration**: ~2 hours per run
+
 **💰 Cost**: ~$16/month
 
 This comprehensive README.md provides everything needed to understand, deploy, operate, and maintain the AWS Twitter automation system.
