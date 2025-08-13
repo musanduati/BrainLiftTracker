@@ -215,7 +215,7 @@ def get_threads():
             result.append({
                 'thread_id': thread['thread_id'],
                 'account_id': thread['twitter_account_id'],
-                'username': account['username'] if account else 'Unknown',
+                'account_username': account['username'] if account else 'Unknown',  # Fixed: Changed from 'username' to 'account_username'
                 'tweet_count': thread['tweet_count'],
                 'posted_count': thread['posted_count'],
                 'pending_count': thread['pending_count'],

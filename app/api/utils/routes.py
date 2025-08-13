@@ -62,29 +62,50 @@ def get_stats():
 @utils_bp.route('/api/v1/user-activity-rankings', methods=['GET'])
 @require_api_key
 def get_user_activity_rankings():
-    """Get user activity rankings"""
+    """Get top 10 users ranked by number of tweets and threads"""
     conn = get_db()
     
-    # Get tweet counts by account
+    # Get top 10 users by total activity (tweets only for now)
     rankings = conn.execute('''
         SELECT 
             a.id,
             a.username,
-            COUNT(t.id) as total_tweets,
-            SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_tweets,
-            SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_tweets,
-            SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_tweets
+            a.display_name,
+            a.profile_picture,
+            COUNT(t.id) as tweet_count,
+            SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_count,
+            SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+            SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+            0 as thread_count
         FROM twitter_account a
         LEFT JOIN tweet t ON a.id = t.twitter_account_id
-        GROUP BY a.id, a.username
-        ORDER BY total_tweets DESC
+        GROUP BY a.id, a.username, a.display_name, a.profile_picture
+        HAVING tweet_count > 0
+        ORDER BY tweet_count DESC
+        LIMIT 10
     ''').fetchall()
+    
+    result = []
+    for rank, user in enumerate(rankings, 1):
+        result.append({
+            'rank': rank,
+            'id': user['id'],
+            'username': user['username'],
+            'displayName': user['display_name'] or user['username'],
+            'profilePicture': user['profile_picture'],
+            'tweetCount': user['tweet_count'],
+            'threadCount': user['thread_count'],
+            'totalActivity': user['tweet_count'] + user['thread_count'],
+            'postedCount': user['posted_count'],
+            'pendingCount': user['pending_count'],
+            'failedCount': user['failed_count']
+        })
     
     conn.close()
     
     return jsonify({
-        'rankings': [dict(r) for r in rankings],
-        'total_users': len(rankings)
+        'rankings': result,
+        'timestamp': datetime.now(UTC).isoformat()
     })
 
 @utils_bp.route('/api/v1/rate-limits', methods=['GET'])

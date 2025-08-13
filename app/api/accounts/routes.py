@@ -807,50 +807,105 @@ def get_accounts_by_lists():
     """Get accounts grouped by their list memberships"""
     conn = get_db()
     
-    # Get all accounts
-    accounts = conn.execute('''
+    # Get all lists with their members - matching original implementation
+    lists_with_members = conn.execute('''
         SELECT 
-            a.id,
-            a.username,
-            a.status,
-            a.account_type,
-            GROUP_CONCAT(l.name, ', ') as lists
-        FROM twitter_account a
-        LEFT JOIN list_membership lm ON a.id = lm.account_id
-        LEFT JOIN twitter_list l ON lm.list_id = l.id
-        GROUP BY a.id
-        ORDER BY a.username
+            tl.id,
+            tl.list_id,
+            tl.name,
+            tl.description,
+            tl.mode,
+            tl.source,
+            tl.is_managed,
+            tl.last_synced_at,
+            ta_owner.username as owner_username
+        FROM twitter_list tl
+        JOIN twitter_account ta_owner ON tl.owner_account_id = ta_owner.id
+        ORDER BY tl.name
     ''').fetchall()
     
-    # Organize by list membership
-    with_lists = []
-    without_lists = []
+    # Build lists with their members
+    lists = []
+    for list_row in lists_with_members:
+        # Get members for this list
+        members = conn.execute('''
+            SELECT 
+                ta.id,
+                ta.username,
+                ta.display_name,
+                ta.profile_picture,
+                ta.account_type
+            FROM list_membership lm
+            JOIN twitter_account ta ON lm.account_id = ta.id
+            WHERE lm.list_id = ?
+        ''', (list_row['id'],)).fetchall()
+        
+        # Format members
+        formatted_members = []
+        for member in members:
+            formatted_members.append({
+                'id': member['id'],
+                'username': member['username'],
+                'displayName': member['display_name'] if member['display_name'] else member['username'],
+                'profilePicture': member['profile_picture'],
+                'account_type': member['account_type']
+            })
+        
+        lists.append({
+            'id': list_row['id'],
+            'list_id': list_row['list_id'],
+            'name': list_row['name'],
+            'description': list_row['description'],
+            'mode': list_row['mode'],
+            'source': list_row['source'],
+            'is_managed': bool(list_row['is_managed']),
+            'owner_username': list_row['owner_username'],
+            'last_synced_at': list_row['last_synced_at'],
+            'member_count': len(formatted_members),
+            'members': formatted_members
+        })
     
-    for account in accounts:
-        account_data = {
+    # Get accounts not in any list
+    unassigned_accounts = conn.execute('''
+        SELECT 
+            ta.id,
+            ta.username,
+            ta.display_name,
+            ta.profile_picture,
+            ta.account_type
+        FROM twitter_account ta
+        WHERE ta.account_type = 'managed'
+        AND ta.id NOT IN (
+            SELECT DISTINCT account_id FROM list_membership
+        )
+    ''').fetchall()
+    
+    # Format unassigned accounts with camelCase
+    formatted_unassigned = []
+    for account in unassigned_accounts:
+        formatted_unassigned.append({
             'id': account['id'],
             'username': account['username'],
-            'status': account['status'],
-            'account_type': account['account_type'],
-            'lists': account['lists'].split(', ') if account['lists'] else []
-        }
-        
-        if account['lists']:
-            with_lists.append(account_data)
-        else:
-            without_lists.append(account_data)
+            'displayName': account['display_name'] if account['display_name'] else account['username'],
+            'profilePicture': account['profile_picture'],
+            'account_type': account['account_type']
+        })
     
     conn.close()
     
-    return jsonify({
-        'with_lists': with_lists,
-        'without_lists': without_lists,
-        'summary': {
-            'total_accounts': len(accounts),
-            'accounts_with_lists': len(with_lists),
-            'accounts_without_lists': len(without_lists)
+    # Return response matching original format exactly
+    response = {
+        'lists': lists,
+        'unassigned_accounts': formatted_unassigned,
+        'stats': {
+            'total_lists': len(lists),
+            'total_managed_accounts': len(unassigned_accounts) + sum(len([m for m in l['members'] if m.get('account_type') == 'managed']) for l in lists),
+            'accounts_in_lists': sum(len([m for m in l['members'] if m.get('account_type') == 'managed']) for l in lists),
+            'accounts_not_in_lists': len(unassigned_accounts)
         }
-    })
+    }
+    
+    return jsonify(response)
 
 @accounts_bp.route('/api/v1/accounts/cleanup', methods=['POST'])
 @require_api_key

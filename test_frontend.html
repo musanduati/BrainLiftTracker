@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test API Endpoints</title>
+</head>
+<body>
+    <h1>Testing API Endpoints</h1>
+    <div id="results"></div>
+    
+    <script>
+        const API_KEY = '2043adb52a7468621a9245c94d702e4bed5866b0ec52772f203286f823a50bbb';
+        const BASE_URL = 'http://localhost:5555/api/v1';
+        
+        async function testEndpoint(name, url) {
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'X-API-Key': API_KEY
+                    }
+                });
+                
+                const data = await response.json();
+                
+                console.log(`${name}:`, data);
+                
+                // Check what the response structure is
+                document.getElementById('results').innerHTML += `
+                    <h3>${name}</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                    <p>Has 'accounts' key: ${data.accounts !== undefined}</p>
+                    <p>Has 'rankings' key: ${data.rankings !== undefined}</p>
+                    <p>Has 'lists' key: ${data.lists !== undefined}</p>
+                    <hr>
+                `;
+                
+                return data;
+            } catch (error) {
+                console.error(`Error testing ${name}:`, error);
+                document.getElementById('results').innerHTML += `
+                    <h3>${name}</h3>
+                    <p style="color: red">Error: ${error.message}</p>
+                    <hr>
+                `;
+            }
+        }
+        
+        // Test all relevant endpoints
+        async function runTests() {
+            await testEndpoint('Accounts', `${BASE_URL}/accounts`);
+            await testEndpoint('User Rankings', `${BASE_URL}/user-activity-rankings`);
+            await testEndpoint('Stats', `${BASE_URL}/stats`);
+            await testEndpoint('Lists', `${BASE_URL}/lists`);
+            
+            // Check if accounts data is accessible
+            const accountsData = await testEndpoint('Accounts Check', `${BASE_URL}/accounts`);
+            if (accountsData && accountsData.accounts) {
+                console.log('Accounts forEach test:', accountsData.accounts.forEach(a => console.log(a.username)));
+            } else {
+                console.error('Cannot forEach on accounts - data structure issue');
+            }
+        }
+        
+        runTests();
+    </script>
+</body>
+</html>
