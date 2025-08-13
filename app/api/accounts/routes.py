@@ -450,14 +450,23 @@ def get_saved_followers(account_id):
     
     conn.close()
     
-    # Format response
+    # Format response to match frontend expectations
     formatted_followers = []
     for follower in followers:
         formatted_followers.append({
             'id': follower['id'],
+            'twitter_user_id': follower['follower_id'] or '',
             'username': follower['follower_username'],
-            'twitter_id': follower['follower_id'],
-            'name': follower['follower_name'],
+            'display_name': follower['follower_name'] or follower['follower_username'],
+            'name': follower['follower_name'] or follower['follower_username'],
+            'profile_picture': None,
+            'description': None,
+            'verified': False,
+            'followers_count': 0,
+            'following_count': 0, 
+            'tweet_count': 0,
+            'created_at': follower['approved_at'],
+            'is_approved': True,
             'approved_at': follower['approved_at'],
             'last_updated': follower['last_updated'],
             'status': follower['status']
