@@ -409,7 +409,7 @@ def get_saved_followers(account_id):
     
     # Check if account exists
     account = conn.execute(
-        'SELECT username FROM twitter_account WHERE id = ?',
+        'SELECT id, username FROM twitter_account WHERE id = ?',
         (account_id,)
     ).fetchone()
     
@@ -417,9 +417,25 @@ def get_saved_followers(account_id):
         conn.close()
         return jsonify({'error': 'Account not found'}), 404
     
-    # Get saved followers
+    # Get pagination parameters
+    page = int(request.args.get('page', 1))
+    per_page = min(int(request.args.get('per_page', 50)), 100)
+    offset = (page - 1) * per_page
+    
+    # Get status filter
+    status = request.args.get('status', 'active')
+    
+    # Get total count
+    count_result = conn.execute(
+        'SELECT COUNT(*) as count FROM follower WHERE account_id = ? AND status = ?',
+        (account_id, status)
+    ).fetchone()
+    total_count = count_result['count']
+    
+    # Get followers with pagination
     followers = conn.execute('''
         SELECT 
+            id,
             follower_username,
             follower_id,
             follower_name,
@@ -427,17 +443,38 @@ def get_saved_followers(account_id):
             last_updated,
             status
         FROM follower
-        WHERE account_id = ?
+        WHERE account_id = ? AND status = ?
         ORDER BY approved_at DESC
-    ''', (account_id,)).fetchall()
+        LIMIT ? OFFSET ?
+    ''', (account_id, status, per_page, offset)).fetchall()
     
     conn.close()
     
+    # Format response
+    formatted_followers = []
+    for follower in followers:
+        formatted_followers.append({
+            'id': follower['id'],
+            'username': follower['follower_username'],
+            'twitter_id': follower['follower_id'],
+            'name': follower['follower_name'],
+            'approved_at': follower['approved_at'],
+            'last_updated': follower['last_updated'],
+            'status': follower['status']
+        })
+    
     return jsonify({
-        'account_id': account_id,
-        'username': account['username'],
-        'followers': [dict(f) for f in followers],
-        'count': len(followers)
+        'account': {
+            'id': account['id'],
+            'username': account['username']
+        },
+        'followers': formatted_followers,
+        'pagination': {
+            'page': page,
+            'per_page': per_page,
+            'total': total_count,
+            'pages': (total_count + per_page - 1) // per_page if per_page > 0 else 0
+        }
     })
 
 @accounts_bp.route('/api/v1/accounts/<int:account_id>/saved-followers', methods=['POST'])
