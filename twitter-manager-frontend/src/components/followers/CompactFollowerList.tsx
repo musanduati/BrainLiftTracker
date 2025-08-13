@@ -25,22 +25,23 @@ export const CompactFollowerList: React.FC<CompactFollowerListProps> = ({ accoun
   const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
+    const loadFollowers = async () => {
+      try {
+        setLoading(true);
+        const data = await apiClient.getSavedFollowers(accountId, 1, limit);
+        setFollowers(data.followers || []);
+        setTotalCount(data.pagination?.total || 0);
+      } catch (error) {
+        console.error('Error loading followers:', error);
+        setFollowers([]);
+        setTotalCount(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
     loadFollowers();
-  }, [accountId]);
-
-  const loadFollowers = async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient.getSavedFollowers(accountId, 1, limit);
-      setFollowers(data.followers || []);
-      setTotalCount(data.pagination?.total || 0);
-    } catch (error) {
-      console.error('Error loading followers:', error);
-      setFollowers([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [accountId, limit]);
 
   const getInitials = (name: string | undefined, username: string): string => {
     const displayName = name || username;

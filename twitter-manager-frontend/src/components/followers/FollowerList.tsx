@@ -45,6 +45,25 @@ export const FollowerList: React.FC<FollowerListProps> = ({ accountId, accountUs
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    const loadSavedFollowers = async () => {
+      try {
+        setLoading(true);
+        const data = await apiClient.getSavedFollowers(accountId, currentPage, 20);
+        
+        setFollowers(data.followers || []);
+        setTotalCount(data.pagination?.total || 0);
+        setTotalPages(data.pagination?.pages || 1);
+      } catch (error: any) {
+        toast.error('Failed to load followers');
+        console.error('Error loading followers:', error);
+        setFollowers([]);
+        setTotalCount(0);
+        setTotalPages(1);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
     loadSavedFollowers();
   }, [accountId, currentPage]);
 
@@ -59,6 +78,9 @@ export const FollowerList: React.FC<FollowerListProps> = ({ accountId, accountUs
     } catch (error: any) {
       toast.error('Failed to load followers');
       console.error('Error loading followers:', error);
+      setFollowers([]);
+      setTotalCount(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }

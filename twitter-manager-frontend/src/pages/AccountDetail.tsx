@@ -47,15 +47,20 @@ export const AccountDetail: React.FC = () => {
       const accountData = await apiClient.getAccount(accountId);
       setAccount(accountData);
 
-      // Load threads, changes, and saved followers count in parallel
-      const [accountThreads, allTweets, savedFollowersData] = await Promise.all([
+      // Load threads and changes
+      const [accountThreads, allTweets] = await Promise.all([
         apiClient.getThreads(accountId),
-        apiClient.getTweets(),
-        apiClient.getSavedFollowers(accountId, 1, 1) // Fetch just to get total count
+        apiClient.getTweets()
       ]);
       
-      // Set saved follower count
-      setSavedFollowerCount(savedFollowersData.pagination?.total || 0);
+      // Try to load saved followers count separately to prevent blocking if it fails
+      try {
+        const savedFollowersData = await apiClient.getSavedFollowers(accountId, 1, 1);
+        setSavedFollowerCount(savedFollowersData.pagination?.total || 0);
+      } catch (error) {
+        console.error('Failed to load saved followers count:', error);
+        setSavedFollowerCount(0);
+      }
 
       // Filter changes for this account that are NOT part of threads
       const accountTweets = allTweets.filter(tweet => 
@@ -858,7 +863,7 @@ export const AccountDetail: React.FC = () => {
             </Card>
 
             {/* Followers */}
-            <CompactFollowerList accountId={account.id} key={savedFollowerCount} />
+            <CompactFollowerList accountId={account.id} />
 
             {/* Activity Timeline */}
             <Card>
