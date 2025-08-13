@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Plus, Users, Activity } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Users, Activity } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -122,28 +122,19 @@ export const Lists: React.FC = () => {
             <div>
               <h2 className="text-2xl font-semibold">Twitter Lists</h2>
               <p className="text-muted-foreground mt-1">
-                Managing {lists.length} lists with {lists.reduce((sum, l) => sum + l.member_count, 0)} total members
+                Managing {lists.length} lists with {lists.reduce((sum, l) => sum + l.member_count, 0)} total brainlifts
               </p>
             </div>
             
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleSync}
-                disabled={syncing}
-              >
-                <RefreshCw size={16} className={`mr-2 ${syncing ? 'animate-spin' : ''}`} />
-                Sync Lists
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-              >
-                <Plus size={16} className="mr-2" />
-                Create List
-              </Button>
-            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              <RefreshCw size={16} className={`mr-2 ${syncing ? 'animate-spin' : ''}`} />
+              Sync Lists
+            </Button>
           </div>
         </div>
 
@@ -166,15 +157,15 @@ export const Lists: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {/* Members Count */}
+                  {/* Brainlifts Count */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm">
                       <Users size={16} className="text-muted-foreground" />
-                      <span>{list.member_count} members</span>
+                      <span>{list.member_count} brainlifts</span>
                     </div>
-                    {list.activeMembers !== undefined && (
+                    {list.activeMembers !== undefined && !isNaN(list.activeMembers) && (
                       <Badge variant="secondary" className="text-xs">
-                        {list.activeMembers} active
+                        {list.activeMembers || 0} active
                       </Badge>
                     )}
                   </div>
@@ -208,21 +199,14 @@ export const Lists: React.FC = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-2 pt-2">
+                  <div className="pt-2">
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="flex-1"
+                      className="w-full"
                       onClick={() => navigate(`/lists/${list.id}`)}
                     >
-                      View Members
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="flex-1"
-                    >
-                      Manage
+                      View Brainlifts
                     </Button>
                   </div>
                 </div>
@@ -233,11 +217,7 @@ export const Lists: React.FC = () => {
 
         {lists.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-muted-foreground mb-4">No lists found</p>
-            <Button variant="primary">
-              <Plus size={16} className="mr-2" />
-              Create Your First List
-            </Button>
+            <p className="text-muted-foreground">No lists found</p>
           </div>
         )}
       </div>

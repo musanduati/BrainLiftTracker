@@ -124,9 +124,9 @@ export const CompactFollowerList: React.FC<CompactFollowerListProps> = ({ accoun
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          {followers.map((follower) => (
+          {followers.map((follower, index) => (
             <div 
-              key={follower.twitter_user_id} 
+              key={follower.twitter_user_id || follower.username || `follower-${index}`} 
               className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors group"
             >
               {/* Mini Profile Picture */}
@@ -152,9 +152,6 @@ export const CompactFollowerList: React.FC<CompactFollowerListProps> = ({ accoun
                 <p className="text-sm font-medium truncate">
                   @{follower.username}
                 </p>
-                {follower.is_approved && (
-                  <p className="text-xs text-green-600">Approved</p>
-                )}
               </div>
 
               {/* Action Icon */}

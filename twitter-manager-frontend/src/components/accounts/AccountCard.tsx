@@ -20,7 +20,7 @@ export const AccountCard: React.FC<AccountCardProps> = ({
     <div 
       className="cursor-pointer transition-transform hover:scale-[1.02] h-full"
       onClick={() => navigate(`/accounts/${account.id}`)}
-      title={`View ${account.displayName || account.username}'s changes`}
+      title={`View ${account.displayName || account.username}'s tweets`}
     >
       <Card className="relative overflow-hidden transition-all duration-200 hover:shadow-xl h-full flex flex-col">
         <CardContent className="p-4 flex-1 flex flex-col">
@@ -59,7 +59,7 @@ export const AccountCard: React.FC<AccountCardProps> = ({
           <div className="flex items-center gap-4 mt-3 text-xs h-12">
             <div className="text-center">
               <p className="font-semibold text-lg">{formatNumber(account.tweetCount || 0)}</p>
-              <p className="text-muted-foreground text-xs">Changes</p>
+              <p className="text-muted-foreground text-xs">Tweets</p>
             </div>
             <div className="text-center">
               <p className="font-semibold text-lg">{formatNumber(account.threadCount || 0)}</p>

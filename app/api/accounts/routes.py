@@ -22,7 +22,7 @@ def get_accounts():
     status = request.args.get('status')
     account_type = request.args.get('type')
     
-    # Build query
+    # Build query - exclude thread tweets from tweet_count (only count standalone changes)
     query = '''
         SELECT 
             a.id,
@@ -36,10 +36,12 @@ def get_accounts():
             a.account_type,
             a.display_name,
             a.profile_picture,
-            COUNT(DISTINCT t.id) as tweet_count,
-            COUNT(DISTINCT CASE WHEN t.status = 'pending' THEN t.id END) as pending_tweets
+            COUNT(DISTINCT CASE WHEN t.thread_id IS NULL THEN t.id END) as tweet_count,
+            COUNT(DISTINCT CASE WHEN t.status = 'pending' AND t.thread_id IS NULL THEN t.id END) as pending_tweets,
+            COUNT(DISTINCT f.id) as follower_count
         FROM twitter_account a
         LEFT JOIN tweet t ON a.id = t.twitter_account_id
+        LEFT JOIN follower f ON a.id = f.account_id AND f.status = 'active'
         WHERE 1=1
     '''
     
@@ -89,7 +91,8 @@ def get_accounts():
             'token_health': token_health,
             'account_type': account['account_type'] or 'managed',
             'display_name': account['display_name'],
-            'profile_picture': account['profile_picture']
+            'profile_picture': account['profile_picture'],
+            'followerCount': account['follower_count']
         })
     
     conn.close()
@@ -105,19 +108,20 @@ def get_account(account_id):
     """Get a specific Twitter account details"""
     conn = get_db()
     
-    # Get account with tweet stats
+    # Get account with tweet stats - separate standalone tweets (changes) from thread tweets
     account = conn.execute('''
         SELECT 
             a.*,
-            COUNT(DISTINCT t.id) as total_tweets,
-            COUNT(DISTINCT CASE WHEN t.status = 'pending' THEN t.id END) as pending_tweets,
-            COUNT(DISTINCT CASE WHEN t.status = 'posted' THEN t.id END) as posted_tweets,
-            COUNT(DISTINCT CASE WHEN t.status = 'failed' THEN t.id END) as failed_tweets,
-            COUNT(DISTINCT th.thread_id) as total_threads
+            COUNT(DISTINCT CASE WHEN t.thread_id IS NULL THEN t.id END) as standalone_tweets,
+            COUNT(DISTINCT CASE WHEN t.thread_id IS NOT NULL THEN t.id END) as thread_tweets,
+            COUNT(DISTINCT CASE WHEN t.status = 'pending' AND t.thread_id IS NULL THEN t.id END) as pending_standalone,
+            COUNT(DISTINCT CASE WHEN t.status = 'posted' AND t.thread_id IS NULL THEN t.id END) as posted_standalone,
+            COUNT(DISTINCT CASE WHEN t.status = 'failed' AND t.thread_id IS NULL THEN t.id END) as failed_standalone,
+            COUNT(DISTINCT t.thread_id) as total_threads,
+            COUNT(DISTINCT CASE WHEN t.thread_id IS NOT NULL AND t.status = 'pending' THEN t.thread_id END) as pending_threads,
+            COUNT(DISTINCT CASE WHEN t.thread_id IS NOT NULL AND t.status = 'posted' THEN t.thread_id END) as posted_threads
         FROM twitter_account a
         LEFT JOIN tweet t ON a.id = t.twitter_account_id
-        LEFT JOIN (SELECT DISTINCT twitter_account_id, thread_id FROM tweet WHERE thread_id IS NOT NULL) th 
-            ON a.id = th.twitter_account_id
         WHERE a.id = ?
         GROUP BY a.id
     ''', (account_id,)).fetchone()
@@ -178,11 +182,19 @@ def get_account(account_id):
             'profile_picture': account['profile_picture']
         },
         'stats': {
-            'total_tweets': account['total_tweets'],
-            'pending_tweets': account['pending_tweets'],
-            'posted_tweets': account['posted_tweets'],
-            'failed_tweets': account['failed_tweets'],
-            'total_threads': account['total_threads']
+            'standalone_tweets': account['standalone_tweets'],  # Changes (not part of threads)
+            'thread_tweets': account['thread_tweets'],  # Tweets that are part of threads
+            'pending_standalone': account['pending_standalone'],
+            'posted_standalone': account['posted_standalone'],
+            'failed_standalone': account['failed_standalone'],
+            'total_threads': account['total_threads'],
+            'pending_threads': account['pending_threads'],
+            'posted_threads': account['posted_threads'],
+            # Legacy fields for compatibility
+            'total_tweets': account['standalone_tweets'],  # Only standalone for backward compatibility
+            'pending_tweets': account['pending_standalone'],
+            'posted_tweets': account['posted_standalone'],
+            'failed_tweets': account['failed_standalone']
         },
         'recent_tweets': [dict(tweet) for tweet in recent_tweets],
         'list_memberships': [dict(list_item) for list_item in list_memberships]
@@ -880,10 +892,13 @@ def get_accounts_by_lists():
                 ta.username,
                 ta.display_name,
                 ta.profile_picture,
-                ta.account_type
+                ta.account_type,
+                COUNT(DISTINCT f.id) as follower_count
             FROM list_membership lm
             JOIN twitter_account ta ON lm.account_id = ta.id
+            LEFT JOIN follower f ON ta.id = f.account_id AND f.status = 'active'
             WHERE lm.list_id = ?
+            GROUP BY ta.id, ta.username, ta.display_name, ta.profile_picture, ta.account_type
         ''', (list_row['id'],)).fetchall()
         
         # Format members
@@ -894,7 +909,8 @@ def get_accounts_by_lists():
                 'username': member['username'],
                 'displayName': member['display_name'] if member['display_name'] else member['username'],
                 'profilePicture': member['profile_picture'],
-                'account_type': member['account_type']
+                'account_type': member['account_type'],
+                'followerCount': member['follower_count']
             })
         
         lists.append({
@@ -918,12 +934,15 @@ def get_accounts_by_lists():
             ta.username,
             ta.display_name,
             ta.profile_picture,
-            ta.account_type
+            ta.account_type,
+            COUNT(DISTINCT f.id) as follower_count
         FROM twitter_account ta
+        LEFT JOIN follower f ON ta.id = f.account_id AND f.status = 'active'
         WHERE ta.account_type = 'managed'
         AND ta.id NOT IN (
             SELECT DISTINCT account_id FROM list_membership
         )
+        GROUP BY ta.id, ta.username, ta.display_name, ta.profile_picture, ta.account_type
     ''').fetchall()
     
     # Format unassigned accounts with camelCase
@@ -934,7 +953,8 @@ def get_accounts_by_lists():
             'username': account['username'],
             'displayName': account['display_name'] if account['display_name'] else account['username'],
             'profilePicture': account['profile_picture'],
-            'account_type': account['account_type']
+            'account_type': account['account_type'],
+            'followerCount': account['follower_count']
         })
     
     conn.close()

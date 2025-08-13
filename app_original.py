@@ -455,18 +455,24 @@ def get_accounts():
         conn = get_db()
         if account_type:
             cursor = conn.execute(
-                '''SELECT id, username, display_name, profile_picture, status, account_type, created_at, 
-                          token_expires_at, refresh_failure_count 
-                   FROM twitter_account 
-                   WHERE account_type = ? 
-                   ORDER BY created_at DESC''',
+                '''SELECT ta.id, ta.username, ta.display_name, ta.profile_picture, ta.status, ta.account_type, ta.created_at, 
+                          ta.token_expires_at, ta.refresh_failure_count,
+                          COUNT(f.id) as follower_count
+                   FROM twitter_account ta
+                   LEFT JOIN follower f ON ta.id = f.account_id AND f.status = 'active'
+                   WHERE ta.account_type = ? 
+                   GROUP BY ta.id
+                   ORDER BY ta.created_at DESC''',
                 (account_type,)
             )
         else:
-            cursor = conn.execute('''SELECT id, username, display_name, profile_picture, status, account_type, created_at,
-                                           token_expires_at, refresh_failure_count 
-                                    FROM twitter_account 
-                                    ORDER BY created_at DESC''')
+            cursor = conn.execute('''SELECT ta.id, ta.username, ta.display_name, ta.profile_picture, ta.status, ta.account_type, ta.created_at,
+                                           ta.token_expires_at, ta.refresh_failure_count,
+                                           COUNT(f.id) as follower_count
+                                    FROM twitter_account ta
+                                    LEFT JOIN follower f ON ta.id = f.account_id AND f.status = 'active'
+                                    GROUP BY ta.id
+                                    ORDER BY ta.created_at DESC''')
         accounts = cursor.fetchall()
         conn.close()
         
@@ -499,7 +505,8 @@ def get_accounts():
                 'created_at': acc['created_at'],
                 'token_status': token_status,
                 'token_expires_at': acc['token_expires_at'],
-                'token_refresh_failures': acc['refresh_failure_count'] or 0
+                'token_refresh_failures': acc['refresh_failure_count'] or 0,
+                'follower_count': acc['follower_count'] if 'follower_count' in acc.keys() else 0
             })
         
         return jsonify({
@@ -4271,7 +4278,8 @@ def get_accounts_by_lists():
                         'username', ta_member.username,
                         'displayName', COALESCE(ta_member.display_name, ta_member.username),
                         'profilePicture', ta_member.profile_picture,
-                        'account_type', ta_member.account_type
+                        'account_type', ta_member.account_type,
+                        'followerCount', (SELECT COUNT(*) FROM follower WHERE account_id = ta_member.id AND status = 'active')
                     )
                     ELSE NULL END, '|||'
                 ) as members
@@ -4290,12 +4298,15 @@ def get_accounts_by_lists():
                 ta.username,
                 ta.display_name,
                 ta.profile_picture,
-                ta.account_type
+                ta.account_type,
+                COUNT(f.id) as follower_count
             FROM twitter_account ta
+            LEFT JOIN follower f ON ta.id = f.account_id AND f.status = 'active'
             WHERE ta.account_type = 'managed'
             AND ta.id NOT IN (
                 SELECT DISTINCT account_id FROM list_membership
             )
+            GROUP BY ta.id
             ORDER BY ta.username
         ''').fetchall()
         
@@ -4341,7 +4352,8 @@ def get_accounts_by_lists():
                 'username': account['username'],
                 'displayName': account['display_name'] if account['display_name'] else account['username'],
                 'profilePicture': account['profile_picture'],
-                'account_type': account['account_type']
+                'account_type': account['account_type'],
+                'followerCount': account['follower_count'] if 'follower_count' in account.keys() else 0
             })
         
         response = {

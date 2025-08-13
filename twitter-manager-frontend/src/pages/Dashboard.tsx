@@ -10,10 +10,21 @@ import toast from 'react-hot-toast';
 import { TwitterAccount } from '../types';
 import { UserActivityRankings } from '../components/dashboard/UserActivityRankings';
 import { ListActivityRankings } from '../components/dashboard/ListActivityRankings';
+import { UserActivityStats } from '../components/dashboard/UserActivityStats';
 
 export const Dashboard: React.FC = () => {
   const { accounts, setAccounts, setTweets, setLoadingAccounts, setLoadingTweets } = useStore();
   const [inactiveAccounts, setInactiveAccounts] = useState<TwitterAccount[]>([]);
+  const [userActivityData, setUserActivityData] = useState<{
+    rankings: any[];
+    totalChanges: number;
+    selectedListId: string;
+    listName?: string;
+  }>({
+    rankings: [],
+    totalChanges: 0,
+    selectedListId: 'all'
+  });
 
   useEffect(() => {
     loadData();
@@ -67,7 +78,7 @@ export const Dashboard: React.FC = () => {
 
   const statCards = [
     {
-      title: 'Total Users Monitored',
+      title: 'Total Brainlifts Monitored',
       value: totalAccountsCount,
       description: 'All registered accounts',
       icon: Users,
@@ -76,18 +87,18 @@ export const Dashboard: React.FC = () => {
       link: '/accounts',
     },
     {
-      title: 'Active Users',
+      title: 'Active Brainlifts',
       value: activeAccountsCount,
-      description: 'Users with changes',
+      description: 'Brainlifts with tweets',
       icon: TrendingUp,
       color: 'text-green-500',
       bgColor: 'bg-green-100 dark:bg-green-900/20',
       link: '/accounts',
     },
     {
-      title: 'Inactive Users',
+      title: 'Inactive Brainlifts',
       value: inactiveAccountsCount,
-      description: 'No changes posted',
+      description: 'No tweets posted',
       icon: UserX,
       color: 'text-orange-500',
       bgColor: 'bg-orange-100 dark:bg-orange-900/20',
@@ -96,7 +107,7 @@ export const Dashboard: React.FC = () => {
     {
       title: 'Activity Rate',
       value: `${activityRate}%`,
-      description: 'Percentage of active users',
+      description: 'Percentage of active brainlifts',
       icon: TrendingUp,
       color: 'text-purple-500',
       bgColor: 'bg-purple-100 dark:bg-purple-900/20',
@@ -148,11 +159,21 @@ export const Dashboard: React.FC = () => {
 
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* User Activity Rankings */}
-          <UserActivityRankings />
+          {/* Left Column - Brainlift Activity Rankings */}
+          <div>
+            <UserActivityRankings onDataChange={setUserActivityData} />
+          </div>
           
-          {/* List Activity Rankings */}
-          <ListActivityRankings />
+          {/* Right Column - List Activity Rankings and Brainlift Activity Stats */}
+          <div className="space-y-6">
+            <ListActivityRankings />
+            <UserActivityStats 
+              rankings={userActivityData.rankings}
+              totalChanges={userActivityData.totalChanges}
+              selectedListId={userActivityData.selectedListId}
+              listName={userActivityData.listName}
+            />
+          </div>
         </div>
 
       </div>

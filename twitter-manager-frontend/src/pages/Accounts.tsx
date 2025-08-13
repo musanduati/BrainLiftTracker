@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Grid3x3, List, RefreshCw, ArrowLeft, UserCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
-import { AccountCard } from '../components/accounts/AccountCard';
 import { AccountList } from '../components/accounts/AccountList';
 import { ListFilter } from '../components/accounts/ListFilter';
 import { Button } from '../components/common/Button';
@@ -15,10 +14,8 @@ import { TwitterAccount } from '../types';
 export const Accounts: React.FC = () => {
   const {
     accounts,
-    accountViewMode,
     isLoadingAccounts,
     setAccounts,
-    setAccountViewMode,
     setLoadingAccounts,
     setLists,
   } = useStore();
@@ -29,9 +26,9 @@ export const Accounts: React.FC = () => {
     unassigned_accounts: TwitterAccount[];
   }>({ lists: [], unassigned_accounts: [] });
   const [filteredAccounts, setFilteredAccounts] = useState<TwitterAccount[]>([]);
-  const [isSyncingProfiles, setIsSyncingProfiles] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const accountsPerPage = 30;
+  const [sortBy, setSortBy] = useState<'followers-desc' | 'followers-asc' | 'username' | 'displayName' | 'lastActive' | 'tweets' | 'threads' | 'activity'>('followers-desc');
+  const [accountsPerPage, setAccountsPerPage] = useState(40);
 
   useEffect(() => {
     loadAccounts();
@@ -48,10 +45,52 @@ export const Accounts: React.FC = () => {
     return listNames;
   };
 
-  // Reset page when filter changes
+  // Reset page when filter, sort, or items per page changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedListId]);
+  }, [selectedListId, sortBy, accountsPerPage]);
+
+  // Sorting function
+  const sortAccounts = (accounts: TwitterAccount[]) => {
+    const sorted = [...accounts];
+    
+    switch (sortBy) {
+      case 'followers-desc':
+        sorted.sort((a, b) => (b.followerCount || 0) - (a.followerCount || 0));
+        break;
+      case 'followers-asc':
+        sorted.sort((a, b) => (a.followerCount || 0) - (b.followerCount || 0));
+        break;
+      case 'username':
+        sorted.sort((a, b) => a.username.localeCompare(b.username));
+        break;
+      case 'displayName':
+        sorted.sort((a, b) => (a.displayName || a.username).localeCompare(b.displayName || b.username));
+        break;
+      case 'lastActive':
+        sorted.sort((a, b) => {
+          const dateA = a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0;
+          const dateB = b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0;
+          return dateB - dateA;
+        });
+        break;
+      case 'tweets':
+        sorted.sort((a, b) => (b.tweetCount || 0) - (a.tweetCount || 0));
+        break;
+      case 'threads':
+        sorted.sort((a, b) => (b.threadCount || 0) - (a.threadCount || 0));
+        break;
+      case 'activity':
+        sorted.sort((a, b) => {
+          const totalA = (a.tweetCount || 0) + (a.threadCount || 0);
+          const totalB = (b.tweetCount || 0) + (b.threadCount || 0);
+          return totalB - totalA;
+        });
+        break;
+    }
+    
+    return sorted;
+  };
 
   useEffect(() => {
     // Filter accounts based on selected list
@@ -66,12 +105,22 @@ export const Accounts: React.FC = () => {
           if (!allAccounts.find(a => a.id === member.id)) {
             // Find the full account data if available
             const fullAccount = accounts.find(a => a.id === member.id);
-            allAccounts.push({
-              ...member,
-              tweetCount: fullAccount?.tweetCount || 0,
-              threadCount: fullAccount?.threadCount || 0,
-              listNames: getAccountListNames(member.id)
-            });
+            if (fullAccount) {
+              // Use full account data with all fields
+              allAccounts.push({
+                ...fullAccount,
+                listNames: getAccountListNames(member.id)
+              });
+            } else {
+              // Fallback to member data
+              allAccounts.push({
+                ...member,
+                tweetCount: 0,
+                threadCount: 0,
+                followerCount: member.followerCount || 0,
+                listNames: getAccountListNames(member.id)
+              });
+            }
           }
         });
       });
@@ -80,23 +129,28 @@ export const Accounts: React.FC = () => {
       accountsByList.unassigned_accounts?.forEach((unassigned: any) => {
         if (!allAccounts.find(a => a.id === unassigned.id)) {
           const fullAccount = accounts.find(a => a.id === unassigned.id);
-          allAccounts.push({
-            ...unassigned,
-            tweetCount: fullAccount?.tweetCount || 0,
-            threadCount: fullAccount?.threadCount || 0,
-            listNames: []
-          });
+          if (fullAccount) {
+            // Use full account data with all fields
+            allAccounts.push({
+              ...fullAccount,
+              listNames: []
+            });
+          } else {
+            // Fallback to unassigned data
+            allAccounts.push({
+              ...unassigned,
+              tweetCount: 0,
+              threadCount: 0,
+              followerCount: unassigned.followerCount || 0,
+              listNames: []
+            });
+          }
         }
       });
       
-      // Sort accounts by total activity (tweets + threads) in descending order
-      allAccounts.sort((a, b) => {
-        const totalA = (a.tweetCount || 0) + (a.threadCount || 0);
-        const totalB = (b.tweetCount || 0) + (b.threadCount || 0);
-        return totalB - totalA;
-      });
-      
-      setFilteredAccounts(allAccounts);
+      // Apply sorting
+      const sortedAccounts = sortAccounts(allAccounts);
+      setFilteredAccounts(sortedAccounts);
     } else if (selectedListId === 'unassigned') {
       // Show unassigned accounts - need to merge with full account data
       const unassignedWithFullData = accountsByList.unassigned_accounts.map((unassigned: any) => {
@@ -104,65 +158,42 @@ export const Accounts: React.FC = () => {
         return fullAccount ? { ...fullAccount, listNames: [] } : { ...unassigned, listNames: [] };
       });
       
-      // Sort by activity
-      unassignedWithFullData.sort((a, b) => {
-        const totalA = (a.tweetCount || 0) + (a.threadCount || 0);
-        const totalB = (b.tweetCount || 0) + (b.threadCount || 0);
-        return totalB - totalA;
-      });
-      
-      setFilteredAccounts(unassignedWithFullData);
+      // Apply sorting
+      const sortedAccounts = sortAccounts(unassignedWithFullData);
+      setFilteredAccounts(sortedAccounts);
     } else {
       // Show accounts from selected list - merge with full account data
       const list = accountsByList.lists.find(l => l.id === selectedListId);
       const accountsWithLists = (list?.members || []).map((member: any) => {
         const fullAccount = accounts.find(a => a.id === member.id);
-        return fullAccount ? { ...fullAccount, listNames: [list.name] } : { ...member, listNames: [list.name] };
+        if (fullAccount) {
+          return { ...fullAccount, listNames: [list.name] };
+        } else {
+          return { 
+            ...member, 
+            tweetCount: 0,
+            threadCount: 0,
+            followerCount: member.followerCount || 0,
+            listNames: [list.name] 
+          };
+        }
       });
       
-      // Sort by activity
-      accountsWithLists.sort((a: any, b: any) => {
-        const totalA = (a.tweetCount || 0) + (a.threadCount || 0);
-        const totalB = (b.tweetCount || 0) + (b.threadCount || 0);
-        return totalB - totalA;
-      });
-      
-      setFilteredAccounts(accountsWithLists);
+      // Apply sorting
+      const sortedAccounts = sortAccounts(accountsWithLists);
+      setFilteredAccounts(sortedAccounts);
     }
-  }, [selectedListId, accounts, accountsByList]);
+  }, [selectedListId, accounts, accountsByList, sortBy]);
 
   // Calculate paginated accounts
   const paginatedAccounts = useMemo(() => {
     const startIndex = (currentPage - 1) * accountsPerPage;
     const endIndex = startIndex + accountsPerPage;
     return filteredAccounts.slice(startIndex, endIndex);
-  }, [filteredAccounts, currentPage]);
+  }, [filteredAccounts, currentPage, accountsPerPage]);
 
   // Calculate total pages
   const totalPages = Math.ceil(filteredAccounts.length / accountsPerPage);
-
-  const handleSyncProfiles = async () => {
-    try {
-      setIsSyncingProfiles(true);
-      const result = await apiClient.syncAccountProfiles();
-      
-      if (result.results.synced.length > 0) {
-        toast.success(`Successfully synced ${result.results.synced.length} account profiles`);
-        // Reload accounts to show updated profiles
-        await loadAccounts();
-      }
-      
-      if (result.results.failed.length > 0) {
-        toast.error(`Failed to sync ${result.results.failed.length} accounts`);
-        console.error('Sync failures:', result.results.failed);
-      }
-    } catch (error) {
-      toast.error('Failed to sync account profiles');
-      console.error('Sync profiles error:', error);
-    } finally {
-      setIsSyncingProfiles(false);
-    }
-  };
 
   const loadAccounts = async () => {
     try {
@@ -200,7 +231,8 @@ export const Accounts: React.FC = () => {
           return {
             ...account,
             tweetCount: accountTweetCount,
-            threadCount: accountThreadCount
+            threadCount: accountThreadCount,
+            followerCount: account.followerCount || 0
           };
         });
       
@@ -254,48 +286,11 @@ export const Accounts: React.FC = () => {
           </Button>
         </Link>
 
-        {/* Header Actions */}
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h2 className="text-2xl font-semibold">
-              Twitter Accounts ({filteredAccounts.length})
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Sorted by activity (most active first)
-            </p>
-          </div>
-          
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAccountViewMode(accountViewMode === 'grid' ? 'list' : 'grid')}
-              title={accountViewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
-            >
-              {accountViewMode === 'grid' ? <List size={20} /> : <Grid3x3 size={20} />}
-            </Button>
-            
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleSyncProfiles}
-              disabled={isSyncingProfiles || isLoadingAccounts}
-              title="Sync profile pictures and names from Twitter"
-            >
-              <UserCheck size={16} className={`mr-2 ${isSyncingProfiles ? 'animate-spin' : ''}`} />
-              Sync Profiles
-            </Button>
-            
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={loadAccounts}
-              disabled={isLoadingAccounts}
-            >
-              <RefreshCw size={16} className={`mr-2 ${isLoadingAccounts ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-          </div>
+        {/* Header */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-semibold">
+            Brainlifts ({filteredAccounts.length})
+          </h2>
         </div>
 
         {/* List Filter */}
@@ -308,7 +303,46 @@ export const Accounts: React.FC = () => {
           />
         </div>
 
-        {/* Account Grid/List */}
+        {/* Sort and Display Controls */}
+        <div className="mb-4 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Show:</span>
+            <select
+              value={accountsPerPage}
+              onChange={(e) => setAccountsPerPage(Number(e.target.value))}
+              className="px-3 py-1 text-sm border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="20">20</option>
+              <option value="40">40</option>
+              <option value="60">60</option>
+              <option value="80">80</option>
+              <option value="100">100</option>
+              <option value="200">200</option>
+            </select>
+            <span className="text-sm text-muted-foreground">per page</span>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <ArrowUpDown size={16} className="text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Sort by:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="px-3 py-1 text-sm border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="followers-desc">Most Followers</option>
+              <option value="followers-asc">Least Followers</option>
+              <option value="username">Username (A-Z)</option>
+              <option value="displayName">Display Name (A-Z)</option>
+              <option value="lastActive">Most Recently Active</option>
+              <option value="activity">Total Activity</option>
+              <option value="tweets">Most Tweets</option>
+              <option value="threads">Most Threads</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Account Grid */}
         {filteredAccounts.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-muted-foreground">
@@ -321,18 +355,7 @@ export const Accounts: React.FC = () => {
           </div>
         ) : (
           <>
-            {accountViewMode === 'grid' ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-10 gap-4">
-                {paginatedAccounts.map((account) => (
-                  <AccountCard
-                    key={account.id}
-                    account={account}
-                  />
-                ))}
-              </div>
-            ) : (
-              <AccountList accounts={paginatedAccounts} />
-            )}
+            <AccountList accounts={paginatedAccounts} />
             
             {/* Pagination Controls */}
             {totalPages > 1 && (

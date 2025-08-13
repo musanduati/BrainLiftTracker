@@ -213,7 +213,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ isOp
                             <>
                               <span>•</span>
                               <Badge variant="secondary" className="text-xs px-1 py-0">
-                                {notification.tweetCount} tweets
+                                {notification.tweetCount || 0} tweets
                               </Badge>
                             </>
                           )}

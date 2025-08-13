@@ -53,8 +53,9 @@ def get_tweets():
     status = request.args.get('status')
     account_id = request.args.get('account_id')
     limit = request.args.get('limit', 100, type=int)
+    include_threads = request.args.get('include_threads', 'false').lower() == 'true'
     
-    # Build query
+    # Build query - by default exclude tweets that are part of threads
     query = '''
         SELECT t.*, a.username 
         FROM tweet t
@@ -62,6 +63,10 @@ def get_tweets():
         WHERE 1=1
     '''
     params = []
+    
+    # Exclude thread tweets unless specifically requested
+    if not include_threads:
+        query += ' AND t.thread_id IS NULL'
     
     if status:
         query += ' AND t.status = ?'

@@ -62,7 +62,9 @@ class ApiClient {
       authorized: account.status === 'active',
       followerCount: account.follower_count,
       followingCount: account.following_count,
-      tweetCount: data.stats?.total_tweets || account.tweet_count || 0,
+      tweetCount: data.stats?.standalone_tweets || data.stats?.total_tweets || account.tweet_count || 0,
+      threadCount: data.stats?.total_threads || 0,
+      threadTweetCount: data.stats?.thread_tweets || 0,
       createdAt: account.created_at,
       lastActiveAt: account.last_active_at,
       tokenExpiresAt: account.token_expires_at,
@@ -71,6 +73,16 @@ class ApiClient {
       verified: account.verified,
       description: account.description,
       twitterUserId: account.twitter_user_id,
+      stats: data.stats ? {
+        standalone_tweets: data.stats.standalone_tweets,
+        thread_tweets: data.stats.thread_tweets,
+        total_threads: data.stats.total_threads,
+        pending_standalone: data.stats.pending_standalone,
+        posted_standalone: data.stats.posted_standalone,
+        failed_standalone: data.stats.failed_standalone,
+        pending_threads: data.stats.pending_threads,
+        posted_threads: data.stats.posted_threads,
+      } : undefined,
     };
   }
   
@@ -294,7 +306,7 @@ class ApiClient {
     return data;
   }
 
-  // User Activity Rankings
+  // Brainlift Activity Rankings
   async getUserActivityRankings(): Promise<{
     rankings: Array<{
       rank: number;

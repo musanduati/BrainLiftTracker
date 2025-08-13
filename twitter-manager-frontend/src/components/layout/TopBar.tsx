@@ -18,7 +18,7 @@ export const TopBar: React.FC = () => {
         <div className="flex items-center gap-6">
           {/* App Name */}
           <Link to="/" className="font-bold text-3xl hover:opacity-80 transition-opacity">
-            Brainlift Monitor
+            BrainLedger
           </Link>
         </div>
 

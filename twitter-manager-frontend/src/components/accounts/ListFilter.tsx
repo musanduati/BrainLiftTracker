@@ -54,17 +54,6 @@ export const ListFilter: React.FC<ListFilterProps> = ({
           );
         })}
 
-        {/* Unassigned */}
-        <button
-          onClick={() => onSelectList('unassigned')}
-          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
-            selectedListId === 'unassigned'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted hover:bg-muted/80 text-foreground'
-          }`}
-        >
-          Unassigned ({accountCounts.unassigned || 0})
-        </button>
       </div>
     </div>
   );

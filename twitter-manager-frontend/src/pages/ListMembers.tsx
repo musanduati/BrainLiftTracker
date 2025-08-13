@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Activity, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Users, Activity, ExternalLink, ChevronLeft, ChevronRight, TrendingUp, UserCheck, Clock, BarChart3, AlertCircle } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -8,6 +8,7 @@ import { Badge } from '../components/common/Badge';
 import { Skeleton } from '../components/common/Skeleton';
 import { apiClient } from '../services/api';
 import toast from 'react-hot-toast';
+import { formatNumber } from '../utils/format';
 
 interface ListMember {
   id: number;
@@ -30,7 +31,7 @@ interface ListDetails {
   members: ListMember[];
 }
 
-const MEMBERS_PER_PAGE = 30; // More members per page
+const BRAINLIFTS_PER_PAGE = 30; // More brainlifts per page
 
 export const ListMembers: React.FC = () => {
   const { listId } = useParams<{ listId: string }>();
@@ -123,16 +124,16 @@ export const ListMembers: React.FC = () => {
     navigate(`/accounts/${memberId}`);
   };
 
-  // Calculate paginated members
+  // Calculate paginated brainlifts
   const paginatedMembers = useMemo(() => {
     if (!list) return [];
-    const startIndex = (currentPage - 1) * MEMBERS_PER_PAGE;
-    const endIndex = startIndex + MEMBERS_PER_PAGE;
+    const startIndex = (currentPage - 1) * BRAINLIFTS_PER_PAGE;
+    const endIndex = startIndex + BRAINLIFTS_PER_PAGE;
     return list.members.slice(startIndex, endIndex);
   }, [list, currentPage]);
 
   // Calculate total pages
-  const totalPages = list ? Math.ceil(list.members.length / MEMBERS_PER_PAGE) : 0;
+  const totalPages = list ? Math.ceil(list.members.length / BRAINLIFTS_PER_PAGE) : 0;
 
   if (loading) {
     return (
@@ -201,14 +202,219 @@ export const ListMembers: React.FC = () => {
                 <span>•</span>
                 <span className="flex items-center gap-1">
                   <Users size={14} />
-                  {list.member_count} members
+                  {list.member_count} brainlifts
                 </span>
               </div>
             </CardHeader>
           </Card>
+
+          {/* Metrics Section */}
+          {(() => {
+            // Calculate metrics
+            const activeMembers = list.members.filter(m => (m.tweetCount || 0) + (m.threadCount || 0) > 0);
+            const activityRate = list.members.length > 0 ? Math.round((activeMembers.length / list.members.length) * 100) : 0;
+            const totalTweets = list.members.reduce((sum, m) => sum + (m.tweetCount || 0), 0);
+            const totalThreads = list.members.reduce((sum, m) => sum + (m.threadCount || 0), 0);
+            const totalActivity = totalTweets + totalThreads;
+            const avgActivityPerMember = activeMembers.length > 0 ? Math.round(totalActivity / activeMembers.length) : 0;
+            
+            // Find top performers
+            const topPerformers = [...list.members]
+              .sort((a, b) => ((b.tweetCount || 0) + (b.threadCount || 0)) - ((a.tweetCount || 0) + (a.threadCount || 0)))
+              .slice(0, 3);
+            
+            // Calculate activity distribution
+            const highActivity = activeMembers.filter(m => (m.tweetCount || 0) + (m.threadCount || 0) > avgActivityPerMember).length;
+            const mediumActivity = activeMembers.filter(m => {
+              const activity = (m.tweetCount || 0) + (m.threadCount || 0);
+              return activity > 0 && activity <= avgActivityPerMember;
+            }).length;
+            const noActivity = list.members.length - activeMembers.length;
+            
+            // Recent activity
+            const recentlyActive = list.members.filter(m => {
+              if (!m.lastActivity) return false;
+              const daysSinceActive = (Date.now() - new Date(m.lastActivity).getTime()) / (1000 * 60 * 60 * 24);
+              return daysSinceActive <= 7;
+            }).length;
+            
+            return (
+              <div className="space-y-6 mb-6">
+                {/* Key Metrics Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Activity Rate</p>
+                          <p className="text-2xl font-bold mt-1">{activityRate}%</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {activeMembers.length} of {list.members.length} active
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-lg ${activityRate >= 70 ? 'bg-green-100 dark:bg-green-900/20' : activityRate >= 40 ? 'bg-yellow-100 dark:bg-yellow-900/20' : 'bg-red-100 dark:bg-red-900/20'}`}>
+                          <TrendingUp size={24} className={activityRate >= 70 ? 'text-green-500' : activityRate >= 40 ? 'text-yellow-500' : 'text-red-500'} />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Total Activity</p>
+                          <p className="text-2xl font-bold mt-1">{formatNumber(totalActivity)}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {formatNumber(totalTweets)} tweets • {formatNumber(totalThreads)} threads
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/20">
+                          <BarChart3 size={24} className="text-blue-500" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Avg per Active Brainlift</p>
+                          <p className="text-2xl font-bold mt-1">{avgActivityPerMember}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            posts per brainlift
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-purple-100 dark:bg-purple-900/20">
+                          <UserCheck size={24} className="text-purple-500" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Recently Active</p>
+                          <p className="text-2xl font-bold mt-1">{recentlyActive}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            in last 7 days
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-indigo-100 dark:bg-indigo-900/20">
+                          <Clock size={24} className="text-indigo-500" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                {/* Activity Distribution and Top Performers */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Activity Distribution */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Activity Distribution</CardTitle>
+                      <CardDescription>Member engagement levels</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm">High Activity</span>
+                            <span className="text-sm font-medium">{highActivity} brainlifts</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                              style={{ width: `${list.members.length > 0 ? (highActivity / list.members.length) * 100 : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm">Medium Activity</span>
+                            <span className="text-sm font-medium">{mediumActivity} brainlifts</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="bg-yellow-500 h-2 rounded-full transition-all duration-500"
+                              style={{ width: `${list.members.length > 0 ? (mediumActivity / list.members.length) * 100 : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm">No Activity</span>
+                            <span className="text-sm font-medium">{noActivity} brainlifts</span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="bg-red-500 h-2 rounded-full transition-all duration-500"
+                              style={{ width: `${list.members.length > 0 ? (noActivity / list.members.length) * 100 : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Top Performers */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Top Performers</CardTitle>
+                      <CardDescription>Most active brainlifts in this list</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {topPerformers.length > 0 ? (
+                          topPerformers.map((member, index) => {
+                            const activity = (member.tweetCount || 0) + (member.threadCount || 0);
+                            return (
+                              <div 
+                                key={member.id}
+                                className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                                onClick={() => handleMemberClick(member.id)}
+                              >
+                                <div className="flex-shrink-0">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white
+                                    ${index === 0 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : 
+                                      index === 1 ? 'bg-gradient-to-br from-gray-400 to-gray-600' : 
+                                      'bg-gradient-to-br from-orange-400 to-orange-600'}`}>
+                                    {index + 1}
+                                  </div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm truncate">{member.displayName}</p>
+                                  <p className="text-xs text-muted-foreground">@{member.username}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-bold">{activity}</p>
+                                  <p className="text-xs text-muted-foreground">posts</p>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <AlertCircle size={24} className="mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No activity yet</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
-        {/* Members Grid */}
+        {/* Brainlifts Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {paginatedMembers.map((member) => {
             const totalActivity = (member.tweetCount || 0) + (member.threadCount || 0);
@@ -255,7 +461,7 @@ export const ListMembers: React.FC = () => {
                                 {totalActivity} total
                               </span>
                               {member.tweetCount! > 0 && (
-                                <span>{member.tweetCount} changes</span>
+                                <span>{member.tweetCount} tweets</span>
                               )}
                               {member.threadCount! > 0 && (
                                 <span>{member.threadCount} threads</span>
@@ -286,9 +492,9 @@ export const ListMembers: React.FC = () => {
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-6 py-4 border-t">
             <div className="text-sm text-muted-foreground">
-              Showing {(currentPage - 1) * MEMBERS_PER_PAGE + 1} to{' '}
-              {Math.min(currentPage * MEMBERS_PER_PAGE, list.members.length)} of{' '}
-              {list.members.length} members
+              Showing {(currentPage - 1) * BRAINLIFTS_PER_PAGE + 1} to{' '}
+              {Math.min(currentPage * BRAINLIFTS_PER_PAGE, list.members.length)} of{' '}
+              {list.members.length} brainlifts
             </div>
             
             <div className="flex items-center gap-2">
@@ -344,7 +550,7 @@ export const ListMembers: React.FC = () => {
 
         {list.members.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">This list has no members</p>
+            <p className="text-muted-foreground">This list has no brainlifts</p>
           </div>
         )}
       </div>

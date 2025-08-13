@@ -94,16 +94,38 @@ export const ListActivityRankings: React.FC = () => {
   // Calculate total activity to get percentages
   const totalActivity = rankings.reduce((sum, list) => sum + list.totalActivity, 0);
 
-  // Use a gradient color scheme
-  const getBarColor = (index: number) => {
-    const colors = [
-      '#10B981', // Green
-      '#34D399', // Light green
-      '#6EE7B7', // Lighter green
-      '#A7F3D0', // Very light green
-      '#D1FAE5', // Pale green
+  // Use vibrant gradient colors for different lists
+  const getBarGradient = (index: number) => {
+    const gradients = [
+      'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', // Purple to Pink
+      'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', // Pink to Red
+      'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', // Blue to Cyan
+      'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', // Green to Teal
+      'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', // Pink to Yellow
+      'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', // Cyan to Purple
+      'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', // Light Blue to Pink
+      'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)', // Coral to Pink
+      'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)', // Pink to Blue
+      'linear-gradient(135deg, #fdcbf1 0%, #e6dee9 100%)', // Light Pink to Gray
     ];
-    return colors[Math.min(index, colors.length - 1)];
+    return gradients[index % gradients.length];
+  };
+  
+  // Get a complementary shadow color
+  const getBarShadow = (index: number) => {
+    const shadows = [
+      'rgba(102, 126, 234, 0.4)', // Purple
+      'rgba(245, 87, 108, 0.4)',  // Red
+      'rgba(79, 172, 254, 0.4)',  // Blue
+      'rgba(67, 233, 123, 0.4)',  // Green
+      'rgba(254, 225, 64, 0.4)',  // Yellow
+      'rgba(51, 8, 103, 0.4)',    // Dark Purple
+      'rgba(168, 237, 234, 0.4)', // Light Blue
+      'rgba(255, 154, 158, 0.4)', // Coral
+      'rgba(251, 194, 235, 0.4)', // Pink
+      'rgba(253, 203, 241, 0.4)', // Light Pink
+    ];
+    return shadows[index % shadows.length];
   };
 
   if (loading) {
@@ -164,44 +186,59 @@ export const ListActivityRankings: React.FC = () => {
                 const percentage = totalActivity > 0 
                   ? Math.round((list.totalActivity / totalActivity) * 100) 
                   : 0;
-                const barColor = getBarColor(index);
+                const barGradient = getBarGradient(index);
+                const barShadow = getBarShadow(index);
                 
                 return (
                   <div 
                     key={list.id} 
-                    className="space-y-1 group cursor-pointer transition-transform hover:scale-[1.02]"
+                    className="space-y-1.5 group cursor-pointer transition-all duration-300 hover:scale-[1.02]"
                     onClick={() => navigate(`/lists/${list.id}`)}
-                    title={`View members of ${list.name}`}
+                    title={`View brainlifts of ${list.name}`}
                   >
                     {/* List name and stats */}
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className="text-sm font-medium truncate group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                        <span className="text-sm font-semibold truncate group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-pink-600 transition-all duration-300">
                           {list.name}
                         </span>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground/70 group-hover:text-muted-foreground transition-colors">
                           ({list.activeMembers}/{list.memberCount} active)
                         </span>
                       </div>
-                      <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                      <span className="text-sm font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                         {percentage}%
                       </span>
                     </div>
                     
-                    {/* Progress Bar with Hover Tooltip */}
-                    <div className="relative w-full h-5 bg-gray-200/50 dark:bg-gray-800/50 rounded-full overflow-hidden backdrop-blur-sm group-hover:bg-gray-200/70 dark:group-hover:bg-gray-800/70 transition-colors">
+                    {/* Enhanced Progress Bar */}
+                    <div className="relative w-full h-6 bg-gradient-to-r from-gray-200/30 to-gray-200/50 dark:from-gray-800/30 dark:to-gray-800/50 rounded-full overflow-hidden backdrop-blur-sm group-hover:from-gray-200/50 group-hover:to-gray-200/70 dark:group-hover:from-gray-800/50 dark:group-hover:to-gray-800/70 transition-all duration-300">
+                      {/* Animated gradient bar */}
                       <div
-                        className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 ease-out shadow-sm group-hover:shadow-md"
+                        className="absolute top-0 left-0 h-full rounded-full transition-all duration-700 ease-out"
                         style={{
                           width: `${percentage}%`,
-                          background: `linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%)`,
+                          background: barGradient,
+                          boxShadow: `0 2px 10px ${barShadow}, inset 0 1px 0 rgba(255,255,255,0.3)`,
                         }}
-                      />
+                      >
+                        {/* Shimmer effect */}
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                          <div className="h-full w-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                        </div>
+                      </div>
+                      
+                      {/* Percentage label inside bar (if wide enough) */}
+                      {percentage > 15 && (
+                        <div className="absolute left-2 top-1/2 -translate-y-1/2 text-white text-xs font-semibold drop-shadow-lg">
+                          {percentage}%
+                        </div>
+                      )}
                       
                       {/* Hover Tooltip */}
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                        <span className="bg-gray-900/90 text-white text-xs px-2 py-1 rounded shadow-lg">
-                          {list.totalActivity} total activity ({list.activityRate}% member activity rate)
+                        <span className="bg-gray-900/95 text-white text-xs px-3 py-1.5 rounded-lg shadow-xl backdrop-blur-sm">
+                          {list.totalActivity} total activity • {list.activityRate}% brainlift activity rate
                         </span>
                       </div>
                     </div>
@@ -223,7 +260,7 @@ export const ListActivityRankings: React.FC = () => {
               <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                 {rankings.reduce((sum, list) => sum + list.memberCount, 0)}
               </div>
-              <div className="text-sm text-muted-foreground">Total Members</div>
+              <div className="text-sm text-muted-foreground">Total Brainlifts</div>
             </div>
             <div className="p-4 rounded-lg bg-purple-100/10 dark:bg-purple-900/10 backdrop-blur-sm border border-purple-200/20 dark:border-purple-700/20 text-center">
               <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">

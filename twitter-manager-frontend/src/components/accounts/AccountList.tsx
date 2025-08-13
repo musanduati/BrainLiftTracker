@@ -1,10 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Eye, CheckCircle, AlertCircle } from 'lucide-react';
 import { TwitterAccount } from '../../types';
-import { Badge } from '../common/Badge';
-import { Button } from '../common/Button';
-import { formatNumber, formatRelativeTime, getAccountHealthBadgeClass } from '../../utils/format';
+import { Card, CardContent } from '../common/Card';
+import { formatNumber, formatRelativeTime } from '../../utils/format';
 import { getAvatarColor, getAvatarText } from '../../utils/avatar';
 
 interface AccountListProps {
@@ -13,88 +11,69 @@ interface AccountListProps {
 
 export const AccountList: React.FC<AccountListProps> = ({ accounts }) => {
   return (
-    <div className="space-y-2">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3">
       {accounts.map((account) => (
-        <div
-          key={account.id}
-          className="flex items-center gap-4 p-4 bg-card border border-border rounded-lg hover:bg-accent/50 transition-colors"
-        >
-          {/* Profile picture */}
-          {account.profilePicture ? (
-            <img
-              src={account.profilePicture}
-              alt={account.displayName || account.username}
-              className="w-12 h-12 rounded-full object-cover"
-              onError={(e) => {
-                // Fallback to colored avatar on error
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-                const fallback = target.nextElementSibling as HTMLElement;
-                if (fallback) fallback.style.display = 'flex';
-              }}
-            />
-          ) : null}
-          <div 
-            className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold ${account.profilePicture ? 'hidden' : ''}`}
-            style={{ display: account.profilePicture ? 'none' : 'flex' }}
-          >
-            {getAvatarText(account.username, account.displayName)}
-          </div>
+        <Link key={account.id} to={`/accounts/${account.id}`}>
+          <Card className="hover:shadow-md transition-all duration-200 cursor-pointer group h-full">
+            <CardContent className="p-3">
+              <div className="space-y-2">
+                {/* Profile Picture */}
+                <div className="flex justify-center">
+                  {account.profilePicture ? (
+                    <img 
+                      src={account.profilePicture}
+                      alt={account.displayName || account.username}
+                      className="w-12 h-12 rounded-full object-cover ring-2 ring-primary/20"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const fallback = target.nextElementSibling as HTMLElement;
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <div 
+                    className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold text-sm ring-2 ring-primary/20 ${account.profilePicture ? 'hidden' : ''}`}
+                    style={{ display: account.profilePicture ? 'none' : 'flex' }}
+                  >
+                    {getAvatarText(account.username, account.displayName)}
+                  </div>
+                </div>
+                
+                {/* Account Info */}
+                <div className="text-center">
+                  <h3 className="font-semibold text-xs break-words line-clamp-2" title={account.displayName || account.username}>
+                    {account.displayName || account.username}
+                  </h3>
+                  <p className="text-muted-foreground text-[10px] break-all" title={`@${account.username}`}>
+                    @{account.username}
+                  </p>
+                </div>
 
-          {/* Account info */}
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold">{account.displayName || account.username}</h3>
-              <span className="text-muted-foreground">@{account.username}</span>
-              {account.accountType === 'list_owner' && (
-                <Badge variant="secondary" className="ml-2">List Owner</Badge>
-              )}
-            </div>
-            
-            {/* Lists */}
-            {account.listNames && account.listNames.length > 0 && (
-              <p className="text-sm text-muted-foreground">
-                Lists: {account.listNames.join(', ')}
-              </p>
-            )}
-            
-            <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-              {account.tweetCount !== undefined && account.tweetCount > 0 && (
-                <>
-                  <span>{formatNumber(account.tweetCount)} tweets</span>
-                  {(account.threadCount !== undefined && account.threadCount > 0) && <span>•</span>}
-                </>
-              )}
-              {account.threadCount !== undefined && account.threadCount > 0 && (
-                <span>{formatNumber(account.threadCount)} threads</span>
-              )}
-              {account.lastActiveAt && (
-                <>
-                  <span>•</span>
-                  <span>Active {formatRelativeTime(account.lastActiveAt)}</span>
-                </>
-              )}
-            </div>
-          </div>
+                {/* Stats */}
+                <div className="space-y-1">
+                  {account.followerCount !== undefined && (
+                    <div className="flex items-center justify-center text-[10px]">
+                      <span className="font-semibold">{formatNumber(account.followerCount)}</span>
+                      <span className="text-muted-foreground ml-1">followers</span>
+                    </div>
+                  )}
+                  
+                  {/* Active Status */}
+                  {account.lastActiveAt && (
+                    <div className="flex items-center justify-center">
+                      <span className="text-[10px] text-muted-foreground truncate">
+                        Active {formatRelativeTime(account.lastActiveAt)}
+                      </span>
+                    </div>
+                  )}
+                </div>
 
-          {/* Token status */}
-          <Badge className={getAccountHealthBadgeClass(account.tokenStatus)}>
-            {account.tokenStatus === 'healthy' && <CheckCircle size={12} className="mr-1" />}
-            {account.tokenStatus === 'refresh_failed' && <AlertCircle size={12} className="mr-1" />}
-            {account.tokenStatus === 'healthy' ? 'Connected' : account.tokenStatus?.replace('_', ' ') || 'Unknown'}
-          </Badge>
 
-          {/* Actions */}
-          <Link to={`/accounts/${account.id}`}>
-            <Button
-              variant="primary"
-              size="sm"
-            >
-              <Eye size={16} className="mr-2" />
-              View Profile
-            </Button>
-          </Link>
-        </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       ))}
     </div>
   );

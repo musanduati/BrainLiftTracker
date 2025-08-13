@@ -199,11 +199,11 @@ export const FollowerList: React.FC<FollowerListProps> = ({ accountId, accountUs
       }
     });
 
-  const renderFollowerCard = (follower: SavedFollower) => {
+  const renderFollowerCard = (follower: SavedFollower, index: number) => {
     const engagementScore = Math.min(100, Math.round(((follower.followers_count || 0) / 1000) + ((follower.tweet_count || 0) / 100)));
     
     return (
-      <Card key={follower.twitter_user_id} className="overflow-hidden hover:shadow-xl transition-all duration-200 group border-0 bg-gradient-to-br from-background to-muted/20">
+      <Card key={follower.twitter_user_id || follower.username || `follower-card-${index}`} className="overflow-hidden hover:shadow-xl transition-all duration-200 group border-0 bg-gradient-to-br from-background to-muted/20">
         {/* Engagement Score Bar */}
         <div className="h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" style={{width: `${engagementScore}%`}} />
         
@@ -323,9 +323,9 @@ export const FollowerList: React.FC<FollowerListProps> = ({ accountId, accountUs
     );
   };
 
-  const renderFollowerListItem = (follower: SavedFollower) => {
+  const renderFollowerListItem = (follower: SavedFollower, index: number) => {
     return (
-      <div key={follower.twitter_user_id} className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors group">
+      <div key={follower.twitter_user_id || follower.username || `follower-list-${index}`} className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors group">
         {/* Profile Picture */}
         <div className="relative flex-shrink-0">
           {follower.profile_picture ? (
@@ -596,11 +596,11 @@ export const FollowerList: React.FC<FollowerListProps> = ({ accountId, accountUs
           <>
             {viewMode === 'grid' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredFollowers.map(renderFollowerCard)}
+                {filteredFollowers.map((follower, index) => renderFollowerCard(follower, index))}
               </div>
             ) : (
               <div className="divide-y divide-border rounded-lg border">
-                {filteredFollowers.map(renderFollowerListItem)}
+                {filteredFollowers.map((follower, index) => renderFollowerListItem(follower, index))}
               </div>
             )}
           </>

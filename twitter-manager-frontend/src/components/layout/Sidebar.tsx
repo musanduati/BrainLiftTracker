@@ -61,7 +61,7 @@ export const Sidebar: React.FC = () => {
           {/* Logo */}
           <div className="flex items-center justify-between p-4 border-b border-border">
             <h1 className={cn('font-bold text-xl', isCollapsed && 'hidden')}>
-              Brainlift Monitor
+              BrainLedger
             </h1>
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}

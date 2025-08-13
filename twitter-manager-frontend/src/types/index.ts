@@ -7,8 +7,9 @@ export interface TwitterAccount {
   authorized: boolean;
   followerCount?: number;
   followingCount?: number;
-  tweetCount?: number;
-  threadCount?: number;
+  tweetCount?: number;  // Standalone tweets (changes not in threads)
+  threadCount?: number;  // Number of threads
+  threadTweetCount?: number;  // Number of tweets that are part of threads
   createdAt: string;
   lastActiveAt?: string;
   tokenExpiresAt?: string;
@@ -18,6 +19,16 @@ export interface TwitterAccount {
   verified?: boolean;
   description?: string;
   twitterUserId?: string;
+  stats?: {  // Detailed stats from API
+    standalone_tweets: number;
+    thread_tweets: number;
+    total_threads: number;
+    pending_standalone: number;
+    posted_standalone: number;
+    failed_standalone: number;
+    pending_threads: number;
+    posted_threads: number;
+  };
 }
 
 export interface Tweet {

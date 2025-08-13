@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, UserX, AlertCircle, Calendar, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, UserX, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
-import { Card, CardContent, CardHeader } from '../components/common/Card';
+import { Card, CardContent } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
 import { Skeleton } from '../components/common/Skeleton';
@@ -12,16 +12,20 @@ import { getAvatarColor, getAvatarText } from '../utils/avatar';
 import { formatRelativeTime } from '../utils/format';
 import toast from 'react-hot-toast';
 
-const ACCOUNTS_PER_PAGE = 20;
-
 export const InactiveAccounts: React.FC = () => {
   const [inactiveAccounts, setInactiveAccounts] = useState<TwitterAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [accountsPerPage, setAccountsPerPage] = useState(40);
 
   useEffect(() => {
     loadInactiveAccounts();
   }, []);
+
+  // Reset page when items per page changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [accountsPerPage]);
 
   const loadInactiveAccounts = async () => {
     try {
@@ -67,10 +71,10 @@ export const InactiveAccounts: React.FC = () => {
   };
 
   // Pagination
-  const totalPages = Math.ceil(inactiveAccounts.length / ACCOUNTS_PER_PAGE);
+  const totalPages = Math.ceil(inactiveAccounts.length / accountsPerPage);
   const paginatedAccounts = inactiveAccounts.slice(
-    (currentPage - 1) * ACCOUNTS_PER_PAGE,
-    currentPage * ACCOUNTS_PER_PAGE
+    (currentPage - 1) * accountsPerPage,
+    currentPage * accountsPerPage
   );
 
   if (loading) {
@@ -78,9 +82,9 @@ export const InactiveAccounts: React.FC = () => {
       <>
         <TopBar />
         <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {[...Array(10)].map((_, i) => (
-              <Skeleton key={i} className="h-48" />
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3">
+            {[...Array(20)].map((_, i) => (
+              <Skeleton key={i} className="h-32" />
             ))}
           </div>
         </div>
@@ -107,17 +111,35 @@ export const InactiveAccounts: React.FC = () => {
             <div>
               <h1 className="text-2xl font-semibold flex items-center gap-3">
                 <UserX size={28} className="text-orange-500" />
-                Inactive Accounts
+                Inactive Brainlifts
               </h1>
               <p className="text-muted-foreground mt-1">
-                {inactiveAccounts.length} account{inactiveAccounts.length !== 1 ? 's' : ''} without any content
+                {inactiveAccounts.length} brainlift{inactiveAccounts.length !== 1 ? 's' : ''} without any content
                 {totalPages > 1 && ` • Page ${currentPage} of ${totalPages}`}
               </p>
             </div>
-            <Badge variant="secondary" className="text-orange-600">
-              <AlertCircle size={14} className="mr-1" />
-              Action Required
-            </Badge>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Show:</span>
+                <select
+                  value={accountsPerPage}
+                  onChange={(e) => setAccountsPerPage(Number(e.target.value))}
+                  className="px-3 py-1 text-sm border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="20">20</option>
+                  <option value="40">40</option>
+                  <option value="60">60</option>
+                  <option value="80">80</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                </select>
+                <span className="text-sm text-muted-foreground">per page</span>
+              </div>
+              <Badge variant="secondary" className="text-orange-600">
+                <AlertCircle size={14} className="mr-1" />
+                Action Required
+              </Badge>
+            </div>
           </div>
         </div>
 
@@ -137,61 +159,68 @@ export const InactiveAccounts: React.FC = () => {
           </Card>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3">
               {paginatedAccounts.map((account) => (
-              <Card key={account.id} className="hover:shadow-lg transition-all duration-200">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold text-lg`}>
-                      {getAvatarText(account.username, account.displayName)}
+              <Link key={account.id} to={`/accounts/${account.id}`}>
+              <Card className="hover:shadow-md transition-all duration-200 cursor-pointer group h-full">
+                <CardContent className="p-3">
+                  <div className="space-y-2">
+                    {/* Profile Picture */}
+                    <div className="flex justify-center">
+                      {account.profilePicture ? (
+                        <img 
+                          src={account.profilePicture}
+                          alt={account.displayName || account.username}
+                          className="w-12 h-12 rounded-full object-cover ring-2 ring-orange-200"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const fallback = target.nextElementSibling as HTMLElement;
+                            if (fallback) fallback.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      <div 
+                        className={`w-12 h-12 rounded-full bg-gradient-to-br ${getAvatarColor(account.username)} flex items-center justify-center text-white font-bold text-sm ring-2 ring-orange-200 ${account.profilePicture ? 'hidden' : ''}`}
+                        style={{ display: account.profilePicture ? 'none' : 'flex' }}
+                      >
+                        {getAvatarText(account.username, account.displayName)}
+                      </div>
                     </div>
-                    <Badge variant="outline" className="text-orange-600 text-xs">
-                      No Content
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-3">
+                    
                     {/* Account Info */}
-                    <div>
-                      <h3 className="font-semibold text-sm truncate" title={account.displayName || account.username}>
+                    <div className="text-center">
+                      <h3 className="font-semibold text-xs break-words line-clamp-2" title={account.displayName || account.username}>
                         {account.displayName || account.username}
                       </h3>
-                      <p className="text-muted-foreground text-xs truncate" title={`@${account.username}`}>
+                      <p className="text-muted-foreground text-[10px] break-all" title={`@${account.username}`}>
                         @{account.username}
                       </p>
                     </div>
 
-                    {/* Status Info - more compact */}
-                    <div className="space-y-1 text-xs">
-                      <div className="flex items-center gap-1">
-                        <Clock size={12} className="text-muted-foreground" />
-                        <span className="text-muted-foreground truncate">{getTimeInactive(account.lastActiveAt)}</span>
+                    {/* Status Info - ultra compact */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-center">
+                        <span className="text-orange-600 text-[10px] font-medium truncate">{getTimeInactive(account.lastActiveAt)}</span>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Calendar size={12} className="text-muted-foreground" />
-                        <span className="text-muted-foreground truncate">
-                          Added {new Date(account.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <div className={`w-2 h-2 rounded-full ${getStatusColor(account.tokenStatus)}`} />
-                        <span className="text-muted-foreground truncate">
-                          {account.tokenStatus?.replace('_', ' ') || 'Unknown'}
-                        </span>
+                      <div className="flex justify-center">
+                        <div className={`w-2 h-2 rounded-full ${getStatusColor(account.tokenStatus)}`} title={account.tokenStatus?.replace('_', ' ') || 'Unknown'} />
                       </div>
                     </div>
 
                     {/* Account Type */}
                     {account.accountType === 'list_owner' && (
-                      <Badge variant="secondary" className="w-fit text-xs">
-                        List Owner
-                      </Badge>
+                      <div className="flex justify-center">
+                        <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                          List
+                        </Badge>
+                      </div>
                     )}
 
                   </div>
                 </CardContent>
               </Card>
+              </Link>
             ))}
             </div>
 

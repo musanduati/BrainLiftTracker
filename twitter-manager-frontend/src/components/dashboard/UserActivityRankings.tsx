@@ -20,29 +20,110 @@ interface UserRanking {
   failedCount: number;
 }
 
-export const UserActivityRankings: React.FC = () => {
+interface UserActivityRankingsProps {
+  onDataChange?: (data: { rankings: UserRanking[], totalChanges: number, selectedListId: string, listName?: string }) => void;
+}
+
+export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDataChange }) => {
+  const [allRankings, setAllRankings] = useState<UserRanking[]>([]);
   const [rankings, setRankings] = useState<UserRanking[]>([]);
+  const [lists, setLists] = useState<any[]>([]);
+  const [selectedListId, setSelectedListId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    loadRankings();
+    loadData();
   }, []);
 
-  const loadRankings = async () => {
+  useEffect(() => {
+    filterByList();
+  }, [selectedListId, allRankings, lists]);
+
+  const loadData = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.getUserActivityRankings();
-      setRankings(data.rankings);
+      const [, listsData, tweetsData, threadsData] = await Promise.all([
+        apiClient.getUserActivityRankings(),
+        apiClient.getAccountsByLists(),
+        apiClient.getTweets(),
+        apiClient.getThreads()
+      ]);
+      
+      // Get ALL accounts with activity, not just top 10
+      const accounts = await apiClient.getAccounts();
+      
+      // Calculate activity for ALL brainlifts
+      const allUsersWithActivity = accounts.map((account: any) => {
+        const userTweets = tweetsData.filter((tweet: any) => tweet.username === account.username);
+        const userThreads = threadsData.filter((thread: any) => thread.account_username === account.username);
+        
+        const tweetCount = userTweets.length;
+        const threadCount = userThreads.length;
+        const totalActivity = tweetCount + threadCount;
+        const postedCount = userTweets.filter((t: any) => t.status === 'posted').length;
+        const pendingCount = userTweets.filter((t: any) => t.status === 'pending').length;
+        const failedCount = userTweets.filter((t: any) => t.status === 'failed').length;
+        
+        return {
+          id: account.id,
+          username: account.username,
+          displayName: account.display_name || account.displayName || account.username,
+          profilePicture: account.profile_picture || account.profilePicture,
+          tweetCount,
+          threadCount,
+          totalActivity,
+          postedCount,
+          pendingCount,
+          failedCount,
+          rank: 0
+        };
+      }).filter((user: any) => user.totalActivity > 0) // Only include brainlifts with activity
+        .sort((a: any, b: any) => b.totalActivity - a.totalActivity); // Sort by activity
+      
+      // Add rank numbers
+      allUsersWithActivity.forEach((user: any, index: number) => {
+        user.rank = index + 1;
+      });
+      
+      setAllRankings(allUsersWithActivity);
+      setRankings(allUsersWithActivity.slice(0, 10)); // Show top 10 initially
+      setLists(listsData.lists || []);
     } catch (error) {
       toast.error('Failed to load user rankings');
       console.error('Rankings error:', error);
+      // Fallback to empty state
+      setAllRankings([]);
+      setRankings([]);
+      setLists([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Calculate total changes to get percentages
+  const filterByList = () => {
+    if (selectedListId === 'all') {
+      // Show top 10 from all brainlifts
+      setRankings(allRankings.slice(0, 10));
+    } else {
+      // Filter by specific list - convert selectedListId to string for comparison
+      const selectedList = lists.find(l => String(l.id) === String(selectedListId));
+      
+      if (selectedList && selectedList.members && selectedList.members.length > 0) {
+        const memberUsernames = new Set((selectedList.members || []).map((m: any) => m.username));
+        const filtered = allRankings.filter(user => memberUsernames.has(user.username));
+        // Sort filtered results by activity to maintain ranking
+        filtered.sort((a, b) => (b.totalActivity || b.tweetCount) - (a.totalActivity || a.tweetCount));
+        // Take top 10 from the filtered list
+        setRankings(filtered.slice(0, 10));
+      } else {
+        // List exists but has no members
+        setRankings([]);
+      }
+    }
+  };
+
+  // Calculate total activity to get percentages
   const totalChanges = rankings.reduce((sum, user) => sum + (user.totalActivity || user.tweetCount), 0);
 
   // Prepare data for the chart with percentages
@@ -72,6 +153,19 @@ export const UserActivityRankings: React.FC = () => {
     return colors[Math.min(index, colors.length - 1)];
   };
 
+  // Notify parent when data changes
+  useEffect(() => {
+    if (onDataChange) {
+      const selectedList = lists.find(l => String(l.id) === String(selectedListId));
+      onDataChange({
+        rankings,
+        totalChanges,
+        selectedListId,
+        listName: selectedList?.name
+      });
+    }
+  }, [rankings, totalChanges, selectedListId, lists, onDataChange]);
+
 
   if (loading) {
     return (
@@ -79,9 +173,9 @@ export const UserActivityRankings: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Trophy size={20} className="text-yellow-500" />
-            User Activity Rankings
+            Brainlift Activity Rankings
           </CardTitle>
-          <CardDescription>Top 10 users by tweet count</CardDescription>
+          <CardDescription>Top 10 brainlifts by activity</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -94,19 +188,53 @@ export const UserActivityRankings: React.FC = () => {
     );
   }
 
-  if (rankings.length === 0) {
+  if (rankings.length === 0 && !loading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Trophy size={20} className="text-yellow-500" />
-            User Activity Rankings
-          </CardTitle>
-          <CardDescription>Top 10 users by tweet count</CardDescription>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy size={20} className="text-yellow-500" />
+                Brainlift Activity Rankings
+              </CardTitle>
+              <CardDescription>
+                {selectedListId === 'all' 
+                  ? 'Top brainlifts by total activity' 
+                  : `Top brainlifts in ${lists.find(l => l.id === selectedListId)?.name || 'list'}`
+                }
+              </CardDescription>
+            </div>
+            <select
+              value={selectedListId}
+              onChange={(e) => setSelectedListId(e.target.value)}
+              className="px-3 py-1.5 text-sm border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="all">All Brainlifts</option>
+              {lists.length > 0 && (
+                <optgroup label="Lists">
+                  {lists.map((list) => (
+                    <option key={list.id} value={list.id}>
+                      {list.name} ({list.member_count || 0})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-muted-foreground">
-            No user activity data available
+            {selectedListId === 'all'
+              ? 'No brainlift activity data available'
+              : (() => {
+                  const selectedList = lists.find(l => String(l.id) === String(selectedListId));
+                  if (selectedList && selectedList.member_count === 0) {
+                    return `The "${selectedList.name}" list has no members. Add accounts to this list to see their activity.`;
+                  }
+                  return `No activity found for members in ${selectedList?.name || 'this list'}`;
+                })()
+            }
           </div>
         </CardContent>
       </Card>
@@ -116,11 +244,36 @@ export const UserActivityRankings: React.FC = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users size={20} className="text-purple-500" />
-          User Activity Rankings
-        </CardTitle>
-        <CardDescription>Top users by total activity (changes and threads)</CardDescription>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Users size={20} className="text-purple-500" />
+              Brainlift Activity Rankings
+            </CardTitle>
+            <CardDescription>
+              {selectedListId === 'all' 
+                ? 'Top brainlifts by total activity (tweets and threads)' 
+                : `Top users in ${lists.find(l => l.id === selectedListId)?.name || 'list'}`
+              }
+            </CardDescription>
+          </div>
+          <select
+            value={selectedListId}
+            onChange={(e) => setSelectedListId(e.target.value)}
+            className="px-3 py-1.5 text-sm border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            <option value="all">All Brainlifts</option>
+            {lists.length > 0 && (
+              <optgroup label="Lists">
+                {lists.map((list) => (
+                  <option key={list.id} value={list.id}>
+                    {list.name} ({list.member_count || 0})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -130,13 +283,14 @@ export const UserActivityRankings: React.FC = () => {
               {chartData.map((user, index) => {
                 const percentage = user.percentage;
                 const barColor = getBarColor(index);
+                const userRanking = rankings[index]; // Get the actual user from rankings
                 
                 return (
                   <div 
                     key={index} 
                     className="space-y-1 group cursor-pointer transition-transform hover:scale-[1.02]"
-                    onClick={() => navigate(`/accounts/${rankings[index].id}`)}
-                    title={`View ${rankings[index].displayName || rankings[index].username}'s account details`}
+                    onClick={() => navigate(`/accounts/${userRanking.id}`)}
+                    title={`View ${userRanking.displayName || userRanking.username}'s account details`}
                   >
                     {/* Username and Percentage */}
                     <div className="flex items-center justify-between gap-4">
@@ -161,7 +315,7 @@ export const UserActivityRankings: React.FC = () => {
                       {/* Hover Tooltip */}
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
                         <span className="bg-gray-900/90 text-white text-xs px-2 py-1 rounded shadow-lg">
-                          {user.threads > 0 ? `${user.total} total: ${user.tweets} changes, ${user.threads} threads` : `${user.total} changes`}
+                          {user.threads > 0 ? `${user.total} total: ${user.tweets} tweets, ${user.threads} threads` : `${user.total} tweets`}
                         </span>
                       </div>
                     </div>
@@ -171,27 +325,6 @@ export const UserActivityRankings: React.FC = () => {
             </div>
           </div>
 
-          {/* Summary Stats */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="p-4 rounded-lg bg-purple-100/10 dark:bg-purple-900/10 backdrop-blur-sm border border-purple-200/20 dark:border-purple-700/20 text-center">
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {rankings.length}
-              </div>
-              <div className="text-sm text-muted-foreground">Active Users</div>
-            </div>
-            <div className="p-4 rounded-lg bg-blue-100/10 dark:bg-blue-900/10 backdrop-blur-sm border border-blue-200/20 dark:border-blue-700/20 text-center">
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {totalChanges}
-              </div>
-              <div className="text-sm text-muted-foreground">Total Activity</div>
-            </div>
-            <div className="p-4 rounded-lg bg-green-100/10 dark:bg-green-900/10 backdrop-blur-sm border border-green-200/20 dark:border-green-700/20 text-center">
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {rankings.reduce((sum, user) => sum + user.postedCount, 0)}
-              </div>
-              <div className="text-sm text-muted-foreground">Posted</div>
-            </div>
-          </div>
 
         </div>
       </CardContent>
