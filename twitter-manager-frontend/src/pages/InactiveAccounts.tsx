@@ -9,7 +9,6 @@ import { Skeleton } from '../components/common/Skeleton';
 import { apiClient } from '../services/api';
 import { TwitterAccount } from '../types';
 import { getAvatarColor, getAvatarText } from '../utils/avatar';
-import { formatRelativeTime } from '../utils/format';
 import toast from 'react-hot-toast';
 
 export const InactiveAccounts: React.FC = () => {
@@ -65,10 +64,6 @@ export const InactiveAccounts: React.FC = () => {
     }
   };
 
-  const getTimeInactive = (lastActiveAt?: string) => {
-    if (!lastActiveAt) return 'Never active';
-    return `Last active ${formatRelativeTime(lastActiveAt)}`;
-  };
 
   // Pagination
   const totalPages = Math.ceil(inactiveAccounts.length / accountsPerPage);
@@ -198,14 +193,9 @@ export const InactiveAccounts: React.FC = () => {
                       </p>
                     </div>
 
-                    {/* Status Info - ultra compact */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-center">
-                        <span className="text-orange-600 text-[10px] font-medium truncate">{getTimeInactive(account.lastActiveAt)}</span>
-                      </div>
-                      <div className="flex justify-center">
-                        <div className={`w-2 h-2 rounded-full ${getStatusColor(account.tokenStatus)}`} title={account.tokenStatus?.replace('_', ' ') || 'Unknown'} />
-                      </div>
+                    {/* Token Status Indicator */}
+                    <div className="flex justify-center">
+                      <div className={`w-2 h-2 rounded-full ${getStatusColor(account.tokenStatus)}`} title={account.tokenStatus?.replace('_', ' ') || 'Unknown'} />
                     </div>
 
                     {/* Account Type */}

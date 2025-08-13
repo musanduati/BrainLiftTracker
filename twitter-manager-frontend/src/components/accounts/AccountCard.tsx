@@ -47,13 +47,15 @@ export const AccountCard: React.FC<AccountCardProps> = ({
             {getAvatarText(account.username, account.displayName)}
           </div>
 
-          {/* Account info - smaller text */}
-          <h3 className="font-semibold text-sm truncate w-full px-1" title={account.displayName || account.username}>
-            {account.displayName || account.username}
-          </h3>
-          <p className="text-muted-foreground text-xs truncate w-full" title={`@${account.username}`}>
-            @{account.username}
-          </p>
+          {/* Account info - Min height for consistency, allow wrapping */}
+          <div className="min-h-[2.5rem] flex flex-col justify-center">
+            <h3 className="font-semibold text-sm break-words line-clamp-2 px-1" title={account.displayName || account.username}>
+              {account.displayName || account.username}
+            </h3>
+            <p className="text-muted-foreground text-xs truncate w-full" title={`@${account.username}`}>
+              @{account.username}
+            </p>
+          </div>
 
           {/* Stats - smaller and always show both for consistent height */}
           <div className="flex items-center gap-4 mt-3 text-xs h-12">

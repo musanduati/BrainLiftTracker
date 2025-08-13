@@ -40,12 +40,12 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts }) => {
                   </div>
                 </div>
                 
-                {/* Account Info */}
-                <div className="text-center">
-                  <h3 className="font-semibold text-xs break-words line-clamp-2" title={account.displayName || account.username}>
+                {/* Account Info - Min height for consistency, allow wrapping */}
+                <div className="text-center min-h-[2.75rem] flex flex-col justify-center">
+                  <h3 className="font-semibold text-xs break-words line-clamp-2 px-1" title={account.displayName || account.username}>
                     {account.displayName || account.username}
                   </h3>
-                  <p className="text-muted-foreground text-[10px] break-all" title={`@${account.username}`}>
+                  <p className="text-muted-foreground text-[10px] truncate" title={`@${account.username}`}>
                     @{account.username}
                   </p>
                 </div>
