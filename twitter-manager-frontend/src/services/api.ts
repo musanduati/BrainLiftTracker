@@ -50,26 +50,27 @@ class ApiClient {
 
   async getAccount(id: number): Promise<TwitterAccount> {
     const { data } = await this.client.get<any>(`/accounts/${id}`);
-    if (!data) throw new Error('Account not found');
+    if (!data || !data.account) throw new Error('Account not found');
     // Map backend response to frontend TwitterAccount interface
+    const account = data.account;
     return {
-      id: data.id,
-      username: data.username,
-      displayName: data.display_name,
-      profilePicture: data.profile_picture,
-      accountType: data.account_type || 'managed',
-      authorized: data.status === 'active',
-      followerCount: data.follower_count,
-      followingCount: data.following_count,
-      tweetCount: data.tweet_count,
-      createdAt: data.created_at,
-      lastActiveAt: data.last_active_at,
-      tokenExpiresAt: data.token_expires_at,
-      tokenRefreshFailures: data.token_refresh_failures,
-      tokenStatus: data.token_status || (data.status === 'active' ? 'healthy' : 'expired'),
-      verified: data.verified,
-      description: data.description,
-      twitterUserId: data.twitter_user_id,
+      id: account.id,
+      username: account.username,
+      displayName: account.display_name,
+      profilePicture: account.profile_picture,
+      accountType: account.account_type || 'managed',
+      authorized: account.status === 'active',
+      followerCount: account.follower_count,
+      followingCount: account.following_count,
+      tweetCount: data.stats?.total_tweets || account.tweet_count || 0,
+      createdAt: account.created_at,
+      lastActiveAt: account.last_active_at,
+      tokenExpiresAt: account.token_expires_at,
+      tokenRefreshFailures: account.token_refresh_failures || account.refresh_failure_count,
+      tokenStatus: account.token_health || account.token_status || (account.status === 'active' ? 'healthy' : 'expired'),
+      verified: account.verified,
+      description: account.description,
+      twitterUserId: account.twitter_user_id,
     };
   }
   
