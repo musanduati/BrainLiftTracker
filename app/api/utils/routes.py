@@ -1,0 +1,238 @@
+from flask import Blueprint, jsonify, request
+from datetime import datetime, timezone
+import requests
+try:
+    from datetime import UTC
+except ImportError:
+    UTC = timezone.utc
+
+from app.db.database import get_db
+from app.utils.security import require_api_key, decrypt_token
+from app.utils.rate_limit import get_rate_limit_status
+from app.services.twitter import refresh_twitter_token
+
+utils_bp = Blueprint('utils', __name__)
+
+@utils_bp.route('/api/v1/stats', methods=['GET'])
+@require_api_key
+def get_stats():
+    """Get statistics"""
+    conn = get_db()
+    
+    # Get account stats
+    total_accounts = conn.execute('SELECT COUNT(*) as count FROM twitter_account').fetchone()['count']
+    active_accounts = conn.execute('SELECT COUNT(*) as count FROM twitter_account WHERE status = "active"').fetchone()['count']
+    
+    # Get tweet stats
+    total_tweets = conn.execute('SELECT COUNT(*) as count FROM tweet').fetchone()['count']
+    pending_tweets = conn.execute('SELECT COUNT(*) as count FROM tweet WHERE status = "pending"').fetchone()['count']
+    posted_tweets = conn.execute('SELECT COUNT(*) as count FROM tweet WHERE status = "posted"').fetchone()['count']
+    failed_tweets = conn.execute('SELECT COUNT(*) as count FROM tweet WHERE status = "failed"').fetchone()['count']
+    
+    # Get thread stats
+    total_threads = conn.execute('SELECT COUNT(DISTINCT thread_id) as count FROM tweet WHERE thread_id IS NOT NULL').fetchone()['count']
+    
+    # Get list stats
+    total_lists = conn.execute('SELECT COUNT(*) as count FROM twitter_list').fetchone()['count']
+    total_memberships = conn.execute('SELECT COUNT(*) as count FROM list_membership').fetchone()['count']
+    
+    conn.close()
+    
+    return jsonify({
+        'accounts': {
+            'total': total_accounts,
+            'active': active_accounts
+        },
+        'tweets': {
+            'total': total_tweets,
+            'pending': pending_tweets,
+            'posted': posted_tweets,
+            'failed': failed_tweets
+        },
+        'threads': {
+            'total': total_threads
+        },
+        'lists': {
+            'total': total_lists,
+            'total_memberships': total_memberships
+        },
+        'timestamp': datetime.now(UTC).isoformat()
+    })
+
+@utils_bp.route('/api/v1/user-activity-rankings', methods=['GET'])
+@require_api_key
+def get_user_activity_rankings():
+    """Get user activity rankings"""
+    conn = get_db()
+    
+    # Get tweet counts by account
+    rankings = conn.execute('''
+        SELECT 
+            a.id,
+            a.username,
+            COUNT(t.id) as total_tweets,
+            SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_tweets,
+            SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_tweets,
+            SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_tweets
+        FROM twitter_account a
+        LEFT JOIN tweet t ON a.id = t.twitter_account_id
+        GROUP BY a.id, a.username
+        ORDER BY total_tweets DESC
+    ''').fetchall()
+    
+    conn.close()
+    
+    return jsonify({
+        'rankings': [dict(r) for r in rankings],
+        'total_users': len(rankings)
+    })
+
+@utils_bp.route('/api/v1/rate-limits', methods=['GET'])
+@require_api_key
+def get_rate_limits():
+    """Get current rate limit status for all accounts"""
+    conn = get_db()
+    
+    accounts = conn.execute('SELECT id, username FROM twitter_account').fetchall()
+    
+    rate_limits = []
+    for account in accounts:
+        status = get_rate_limit_status(account['id'])
+        rate_limits.append({
+            'account_id': account['id'],
+            'username': account['username'],
+            **status
+        })
+    
+    conn.close()
+    
+    return jsonify({
+        'rate_limits': rate_limits,
+        'timestamp': datetime.now(UTC).isoformat()
+    })
+
+@utils_bp.route('/api/v1/twitter/users/<username>/lists', methods=['GET'])
+@require_api_key
+def get_twitter_user_lists(username):
+    """Get lists owned by a Twitter user"""
+    try:
+        conn = get_db()
+        
+        # Get any list_owner account for API access
+        list_owner = conn.execute(
+            "SELECT access_token FROM twitter_account WHERE account_type = 'list_owner' LIMIT 1"
+        ).fetchone()
+        
+        if not list_owner:
+            conn.close()
+            return jsonify({'error': 'No list_owner account available'}), 404
+        
+        access_token = decrypt_token(list_owner['access_token'])
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+        
+        # Get user ID
+        user_response = requests.get(
+            f'https://api.twitter.com/2/users/by/username/{username}',
+            headers=headers
+        )
+        
+        if user_response.status_code != 200:
+            conn.close()
+            return jsonify({'error': f'User @{username} not found'}), 404
+        
+        user_id = user_response.json()['data']['id']
+        
+        # Get user's lists
+        lists_response = requests.get(
+            f'https://api.twitter.com/2/users/{user_id}/owned_lists',
+            headers=headers,
+            params={'max_results': 100, 'list.fields': 'name,description,private,member_count'}
+        )
+        
+        conn.close()
+        
+        if lists_response.status_code != 200:
+            return jsonify({'error': 'Failed to fetch lists'}), 500
+        
+        return jsonify({
+            'username': username,
+            'lists': lists_response.json().get('data', [])
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@utils_bp.route('/api/v1/twitter/lists/<list_id>/members', methods=['GET'])
+@require_api_key
+def get_twitter_list_members(list_id):
+    """Get members of a Twitter list"""
+    try:
+        conn = get_db()
+        
+        # Get any list_owner account for API access
+        list_owner = conn.execute(
+            "SELECT access_token FROM twitter_account WHERE account_type = 'list_owner' LIMIT 1"
+        ).fetchone()
+        
+        if not list_owner:
+            conn.close()
+            return jsonify({'error': 'No list_owner account available'}), 404
+        
+        access_token = decrypt_token(list_owner['access_token'])
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+        
+        # Get list members
+        members_response = requests.get(
+            f'https://api.twitter.com/2/lists/{list_id}/members',
+            headers=headers,
+            params={'max_results': 100, 'user.fields': 'username,name,description'}
+        )
+        
+        conn.close()
+        
+        if members_response.status_code != 200:
+            return jsonify({'error': 'Failed to fetch list members'}), 500
+        
+        return jsonify({
+            'list_id': list_id,
+            'members': members_response.json().get('data', [])
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@utils_bp.route('/api/v1/debug/group-concat', methods=['GET'])
+@require_api_key
+def debug_group_concat():
+    """Debug endpoint for testing group concat functionality"""
+    conn = get_db()
+    
+    try:
+        # Test GROUP_CONCAT functionality
+        result = conn.execute('''
+            SELECT 
+                thread_id,
+                GROUP_CONCAT(content, ' | ') as concatenated_tweets
+            FROM tweet
+            WHERE thread_id IS NOT NULL
+            GROUP BY thread_id
+            LIMIT 5
+        ''').fetchall()
+        
+        conn.close()
+        
+        return jsonify({
+            'message': 'GROUP_CONCAT test',
+            'results': [dict(r) for r in result]
+        })
+        
+    except Exception as e:
+        conn.close()
+        return jsonify({
+            'error': str(e),
+            'message': 'GROUP_CONCAT may not be available in SQLite'
+        }), 500
