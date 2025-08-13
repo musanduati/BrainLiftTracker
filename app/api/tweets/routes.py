@@ -77,9 +77,26 @@ def get_tweets():
     tweets = conn.execute(query, params).fetchall()
     conn.close()
     
+    # Format tweets to match frontend expectations
+    formatted_tweets = []
+    for tweet in tweets:
+        formatted_tweets.append({
+            'id': tweet['id'],
+            'content': tweet['content'],  # Keep as 'content' since frontend handles both 'text' and 'content'
+            'status': tweet['status'],
+            'created_at': tweet['created_at'],
+            'posted_at': tweet['posted_at'],
+            'username': tweet['username'],
+            'account_id': tweet['twitter_account_id'],  # Map twitter_account_id to account_id
+            'thread_id': tweet['thread_id'],  # Keep snake_case, frontend maps to camelCase
+            'thread_position': tweet['thread_position'],
+            'twitter_id': tweet['twitter_id'],
+            'reply_to_tweet_id': tweet['reply_to_tweet_id']
+        })
+    
     return jsonify({
-        'tweets': [dict(tweet) for tweet in tweets],
-        'count': len(tweets)
+        'tweets': formatted_tweets,
+        'count': len(formatted_tweets)
     })
 
 @tweets_bp.route('/api/v1/tweets/pending-analysis', methods=['GET'])
