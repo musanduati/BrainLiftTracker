@@ -10,14 +10,14 @@ import json
 import boto3
 import sys
 import csv
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add auto-approver to path
 sys.path.append('/app/auto-approver')
-from batch_automation import BatchTwitterAutomation
+from batch_automation_enhanced import WorkingEnhancedBatchAutomation
 
-class AWSBatchWrapper(BatchTwitterAutomation):
+class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
     def __init__(self):
         # Initialize AWS clients
         self.s3 = boto3.client('s3')
@@ -32,7 +32,7 @@ class AWSBatchWrapper(BatchTwitterAutomation):
             browser="chrome"
         )
         
-        self.batch_id = f"fargate-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+        self.batch_id = f"fargate-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
         
     def load_accounts_from_csv_files(self):
         """Load accounts from CSV files (test or production)"""
@@ -131,7 +131,7 @@ class AWSBatchWrapper(BatchTwitterAutomation):
             
             results_data = {
                 'batch_id': self.batch_id,
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'execution_environment': 'AWS_ECS_FARGATE',
                 'summary': {
                     'total_accounts': len(self.results),
@@ -146,7 +146,7 @@ class AWSBatchWrapper(BatchTwitterAutomation):
             }
             
             # Save to S3
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
             key = f"results/{timestamp.strftime('%Y/%m/%d')}/{self.batch_id}.json"
             
             self.s3.put_object(
@@ -181,7 +181,7 @@ class AWSBatchWrapper(BatchTwitterAutomation):
         try:
             results_data = {
                 'batch_id': self.batch_id,
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'summary': {
                     'total_accounts': len(self.results),
                     'successful_accounts': sum(1 for r in self.results if r.get('success', False)),
@@ -205,9 +205,9 @@ class AWSBatchWrapper(BatchTwitterAutomation):
         
         print(f"\n{'='*60}")
         print(f"AWS FARGATE TWITTER AUTOMATION - {mode_text}")
-        print(f"Batch ID: {self.batch_id}")
-        print(f"Start Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        print(f"Processing CSV files: {csv_files_text}")
+        print(f"Batch ID             : {self.batch_id}")
+        print(f"Start Time           : {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        print(f"Processing CSV files : {csv_files_text}")
         print(f"{'='*60}")
         
         try:
