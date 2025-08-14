@@ -1130,6 +1130,165 @@
 							"body": "{\n    \"message\": \"Successfully processed 2 followers\",\n    \"saved\": 2,\n    \"updated\": 0,\n    \"errors\": []\n}"
 						}
 					]
+				},
+				{
+					"name": "Get Followers Gained by Time",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/followers-gained?time_period=1d",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"followers-gained"
+							],
+							"query": [
+								{
+									"key": "time_period",
+									"value": "1d",
+									"description": "Time period (e.g., 1d, 7d, 30d, 24h)"
+								},
+								{
+									"key": "account_id",
+									"value": "",
+									"description": "Optional: Filter by specific account ID",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get accounts that gained new followers within specified time period. Returns accounts with their new followers sorted by new follower count."
+					},
+					"response": [
+						{
+							"name": "Success - 1 Day",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/followers-gained?time_period=1d",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"followers-gained"
+									],
+									"query": [
+										{
+											"key": "time_period",
+											"value": "1d"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"time_period\": \"1d\",\n    \"from_date\": \"2025-01-14T12:00:00Z\",\n    \"to_date\": \"2025-01-15T12:00:00Z\",\n    \"summary\": {\n        \"accounts_with_new_followers\": 3,\n        \"total_new_followers\": 15\n    },\n    \"accounts\": [\n        {\n            \"id\": 1,\n            \"username\": \"brainlift_scien\",\n            \"display_name\": \"BrainLift Science\",\n            \"profile_picture\": null,\n            \"new_follower_count\": 8,\n            \"new_followers\": [\n                {\n                    \"id\": 123,\n                    \"username\": \"follower1\",\n                    \"twitter_id\": \"111111111\",\n                    \"name\": \"Follower One\",\n                    \"approved_at\": \"2025-01-15T10:30:00Z\",\n                    \"status\": \"active\"\n                },\n                {\n                    \"id\": 124,\n                    \"username\": \"follower2\",\n                    \"twitter_id\": \"222222222\",\n                    \"name\": \"Follower Two\",\n                    \"approved_at\": \"2025-01-15T09:15:00Z\",\n                    \"status\": \"active\"\n                }\n            ]\n        },\n        {\n            \"id\": 2,\n            \"username\": \"brainlift_tech\",\n            \"display_name\": \"BrainLift Tech\",\n            \"profile_picture\": null,\n            \"new_follower_count\": 5,\n            \"new_followers\": [\n                {\n                    \"id\": 125,\n                    \"username\": \"techfan1\",\n                    \"twitter_id\": \"333333333\",\n                    \"name\": \"Tech Fan\",\n                    \"approved_at\": \"2025-01-15T11:00:00Z\",\n                    \"status\": \"active\"\n                }\n            ]\n        }\n    ]\n}"
+						},
+						{
+							"name": "Success - 7 Days",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/followers-gained?time_period=7d",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"followers-gained"
+									],
+									"query": [
+										{
+											"key": "time_period",
+											"value": "7d"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"time_period\": \"7d\",\n    \"from_date\": \"2025-01-08T12:00:00Z\",\n    \"to_date\": \"2025-01-15T12:00:00Z\",\n    \"summary\": {\n        \"accounts_with_new_followers\": 10,\n        \"total_new_followers\": 87\n    },\n    \"accounts\": [\n        {\n            \"id\": 1,\n            \"username\": \"brainlift_scien\",\n            \"display_name\": \"BrainLift Science\",\n            \"profile_picture\": null,\n            \"new_follower_count\": 35,\n            \"new_followers\": []\n        }\n    ]\n}"
+						},
+						{
+							"name": "Error - Invalid Time Period",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/followers-gained?time_period=invalid",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"followers-gained"
+									],
+									"query": [
+										{
+											"key": "time_period",
+											"value": "invalid"
+										}
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"Invalid time period format. Use format like 1d, 7d, 24h\"\n}"
+						}
+					]
 				}
 			]
 		},

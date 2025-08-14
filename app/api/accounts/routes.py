@@ -498,6 +498,133 @@ def get_saved_followers(account_id):
         }
     })
 
+@accounts_bp.route('/api/v1/accounts/followers-gained', methods=['GET'])
+@require_api_key
+def get_followers_gained_by_time():
+    """Get accounts that gained new followers within a specified time period
+    
+    Query Parameters:
+    - time_period: Time period to filter (e.g., '1d', '7d', '30d', '1h', '24h')
+    - account_id: Optional - filter for specific account
+    
+    Returns accounts with their new followers gained in the specified period
+    """
+    conn = get_db()
+    
+    # Get time period parameter
+    time_period = request.args.get('time_period', '1d')
+    account_id = request.args.get('account_id')
+    
+    # Parse time period
+    import re
+    match = re.match(r'(\d+)([hd])', time_period.lower())
+    if not match:
+        conn.close()
+        return jsonify({'error': 'Invalid time period format. Use format like 1d, 7d, 24h'}), 400
+    
+    amount = int(match.group(1))
+    unit = match.group(2)
+    
+    # Calculate the datetime threshold
+    from datetime import timedelta
+    now = datetime.now(UTC)
+    
+    if unit == 'h':
+        threshold = now - timedelta(hours=amount)
+    elif unit == 'd':
+        threshold = now - timedelta(days=amount)
+    else:
+        conn.close()
+        return jsonify({'error': 'Invalid time unit. Use h for hours or d for days'}), 400
+    
+    # Build query to get accounts with new followers
+    base_query = '''
+        SELECT DISTINCT
+            a.id as account_id,
+            a.username as account_username,
+            a.display_name as account_display_name,
+            a.profile_picture as account_profile_picture,
+            f.id as follower_id,
+            f.follower_username,
+            f.follower_id as follower_twitter_id,
+            f.follower_name,
+            f.approved_at,
+            f.status as follower_status
+        FROM twitter_account a
+        INNER JOIN follower f ON a.id = f.account_id
+        WHERE f.approved_at >= ?
+        AND f.status = 'active'
+    '''
+    
+    params = [threshold.isoformat()]
+    
+    if account_id:
+        base_query += ' AND a.id = ?'
+        params.append(account_id)
+    
+    base_query += ' ORDER BY f.approved_at DESC, a.username'
+    
+    followers_data = conn.execute(base_query, params).fetchall()
+    
+    # Get summary stats
+    stats_query = '''
+        SELECT 
+            COUNT(DISTINCT a.id) as accounts_with_new_followers,
+            COUNT(DISTINCT f.id) as total_new_followers
+        FROM twitter_account a
+        INNER JOIN follower f ON a.id = f.account_id
+        WHERE f.approved_at >= ?
+        AND f.status = 'active'
+    '''
+    
+    stats_params = [threshold.isoformat()]
+    if account_id:
+        stats_query += ' AND a.id = ?'
+        stats_params.append(account_id)
+    
+    stats = conn.execute(stats_query, stats_params).fetchone()
+    
+    # Group followers by account
+    accounts_map = {}
+    for row in followers_data:
+        acc_id = row['account_id']
+        if acc_id not in accounts_map:
+            accounts_map[acc_id] = {
+                'id': acc_id,
+                'username': row['account_username'],
+                'display_name': row['account_display_name'],
+                'profile_picture': row['account_profile_picture'],
+                'new_followers': [],
+                'new_follower_count': 0
+            }
+        
+        accounts_map[acc_id]['new_followers'].append({
+            'id': row['follower_id'],
+            'username': row['follower_username'],
+            'twitter_id': row['follower_twitter_id'],
+            'name': row['follower_name'] or row['follower_username'],
+            'approved_at': row['approved_at'],
+            'status': row['follower_status']
+        })
+        accounts_map[acc_id]['new_follower_count'] += 1
+    
+    # Convert to list and sort by new follower count
+    accounts_list = list(accounts_map.values())
+    accounts_list.sort(key=lambda x: x['new_follower_count'], reverse=True)
+    
+    conn.close()
+    
+    return jsonify({
+        'time_period': time_period,
+        'from_date': threshold.isoformat(),
+        'to_date': now.isoformat(),
+        'summary': {
+            'accounts_with_new_followers': stats['accounts_with_new_followers'],
+            'total_new_followers': stats['total_new_followers']
+        },
+        'accounts': accounts_list
+    })
+
 @accounts_bp.route('/api/v1/accounts/<int:account_id>/saved-followers', methods=['POST'])
 @require_api_key
 def save_follower(account_id):
