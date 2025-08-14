@@ -4026,6 +4026,145 @@
 					"response": []
 				},
 				{
+					"name": "Add Follower to List Accounts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"follower_username\": \"johndoe\",\n    \"follower_id\": \"123456789\",\n    \"follower_name\": \"John Doe\",\n    \"status\": \"active\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/lists/{{list_id}}/add-follower",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"lists",
+								"{{list_id}}",
+								"add-follower"
+							]
+						},
+						"description": "Add a username as a follower to all accounts in a list (stored in local database, not on Twitter/X). The follower will be added to the 'follower' table for each account in the specified list.\n\nRequired:\n- follower_username: The username to add as a follower\n\nOptional:\n- follower_id: Twitter ID of the follower\n- follower_name: Display name of the follower\n- status: Status of the follower (active/inactive, defaults to active)"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"follower_username\": \"johndoe\",\n    \"follower_id\": \"123456789\",\n    \"follower_name\": \"John Doe\",\n    \"status\": \"active\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/lists/1/add-follower",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"lists",
+										"1",
+										"add-follower"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Added @johndoe as follower to accounts in list\",\n    \"results\": {\n        \"follower_username\": \"johndoe\",\n        \"list_name\": \"Tech Influencers\",\n        \"added\": [\n            {\n                \"account_username\": \"alice\",\n                \"follower_username\": \"johndoe\"\n            },\n            {\n                \"account_username\": \"bob\",\n                \"follower_username\": \"johndoe\"\n            }\n        ],\n        \"already_exists\": [\n            {\n                \"account_username\": \"charlie\",\n                \"follower_username\": \"johndoe\"\n            }\n        ],\n        \"failed\": [],\n        \"total_accounts\": 3\n    },\n    \"summary\": {\n        \"total_accounts\": 3,\n        \"added_count\": 2,\n        \"already_exists_count\": 1,\n        \"failed_count\": 0\n    }\n}"
+						},
+						{
+							"name": "List Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"follower_username\": \"johndoe\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/lists/999/add-follower",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"lists",
+										"999",
+										"add-follower"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"List not found\"\n}"
+						}
+					]
+				},
+				{
 					"name": "Get User Lists (Any Username)",
 					"request": {
 						"method": "GET",

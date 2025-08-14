@@ -8,6 +8,7 @@ except ImportError:
 
 from app.db.database import get_db
 from app.utils.security import require_api_key, decrypt_token
+from app.services.twitter import check_token_needs_refresh, refresh_twitter_token
 
 lists_bp = Blueprint('lists', __name__)
 
@@ -710,6 +711,102 @@ def move_list_members():
             'message': f'Moved {len(moved)} members',
             'moved': moved,
             'failed': failed
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@lists_bp.route('/api/v1/lists/<int:list_id>/add-follower', methods=['POST'])
+@require_api_key
+def add_follower_to_list_accounts(list_id):
+    """Add a username as a follower to all accounts in a list (in the database)"""
+    data = request.get_json()
+    if not data or 'follower_username' not in data:
+        return jsonify({'error': 'follower_username is required'}), 400
+    
+    follower_username = data['follower_username']
+    follower_id = data.get('follower_id')  # Optional Twitter ID
+    follower_name = data.get('follower_name', '')  # Optional display name
+    status = data.get('status', 'active')  # Optional status, defaults to 'active'
+    
+    try:
+        conn = get_db()
+        
+        # Check if list exists
+        lst = conn.execute(
+            'SELECT id, name FROM twitter_list WHERE id = ?',
+            (list_id,)
+        ).fetchone()
+        
+        if not lst:
+            conn.close()
+            return jsonify({'error': 'List not found'}), 404
+        
+        # Get all members of the list
+        members = conn.execute('''
+            SELECT a.id, a.username
+            FROM list_membership lm
+            JOIN twitter_account a ON lm.account_id = a.id
+            WHERE lm.list_id = ?
+        ''', (list_id,)).fetchall()
+        
+        if not members:
+            conn.close()
+            return jsonify({'message': 'No accounts found in this list'}), 200
+        
+        results = {
+            'follower_username': follower_username,
+            'list_name': lst['name'],
+            'added': [],
+            'already_exists': [],
+            'failed': [],
+            'total_accounts': len(members)
+        }
+        
+        for member in members:
+            try:
+                # Check if this follower already exists for this account
+                existing = conn.execute(
+                    'SELECT id FROM follower WHERE account_id = ? AND follower_username = ?',
+                    (member['id'], follower_username)
+                ).fetchone()
+                
+                if existing:
+                    results['already_exists'].append({
+                        'account_username': member['username'],
+                        'follower_username': follower_username
+                    })
+                    continue
+                
+                # Add the follower to this account
+                conn.execute('''
+                    INSERT INTO follower (account_id, follower_username, follower_id, follower_name, status)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (member['id'], follower_username, follower_id, follower_name, status))
+                
+                results['added'].append({
+                    'account_username': member['username'],
+                    'follower_username': follower_username
+                })
+                    
+            except Exception as e:
+                results['failed'].append({
+                    'account_username': member['username'],
+                    'error': str(e)
+                })
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': f'Added @{follower_username} as follower to accounts in list',
+            'results': results,
+            'summary': {
+                'total_accounts': results['total_accounts'],
+                'added_count': len(results['added']),
+                'already_exists_count': len(results['already_exists']),
+                'failed_count': len(results['failed'])
+            }
         })
         
     except Exception as e:
