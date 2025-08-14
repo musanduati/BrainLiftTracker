@@ -1,11 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Calendar } from 'lucide-react';
 import { TwitterAccount } from '../../types';
 import { Card, CardContent } from '../common/Card';
 import { Badge } from '../common/Badge';
 import { formatNumber } from '../../utils/format';
 import { getAvatarColor, getAvatarText } from '../../utils/avatar';
+import { format } from 'date-fns';
 
 interface AccountCardProps {
   account: TwitterAccount;
@@ -57,16 +58,26 @@ export const AccountCard: React.FC<AccountCardProps> = ({
             </p>
           </div>
 
-          {/* Stats - smaller and always show both for consistent height */}
-          <div className="flex items-center gap-4 mt-3 text-xs h-12">
+          {/* Stats - show tweets, threads, and followers */}
+          <div className="flex items-center gap-3 mt-3 text-xs">
             <div className="text-center">
-              <p className="font-semibold text-lg">{formatNumber(account.tweetCount || 0)}</p>
+              <p className="font-semibold text-base">{formatNumber(account.tweetCount || 0)}</p>
               <p className="text-muted-foreground text-xs">Tweets</p>
             </div>
             <div className="text-center">
-              <p className="font-semibold text-lg">{formatNumber(account.threadCount || 0)}</p>
+              <p className="font-semibold text-base">{formatNumber(account.threadCount || 0)}</p>
               <p className="text-muted-foreground text-xs">Threads</p>
             </div>
+            <div className="text-center">
+              <p className="font-semibold text-base">{formatNumber(account.followerCount || 0)}</p>
+              <p className="text-muted-foreground text-xs">Followers</p>
+            </div>
+          </div>
+
+          {/* Onboarding date */}
+          <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+            <Calendar size={12} />
+            <span>Onboarded {format(new Date(account.createdAt), 'MMM d, yyyy')}</span>
           </div>
 
           {/* Lists - smaller */}

@@ -38,6 +38,7 @@ def get_accounts():
             a.profile_picture,
             COUNT(DISTINCT CASE WHEN t.thread_id IS NULL THEN t.id END) as tweet_count,
             COUNT(DISTINCT CASE WHEN t.status = 'pending' AND t.thread_id IS NULL THEN t.id END) as pending_tweets,
+            COUNT(DISTINCT t.thread_id) as thread_count,
             COUNT(DISTINCT f.id) as follower_count
         FROM twitter_account a
         LEFT JOIN tweet t ON a.id = t.twitter_account_id
@@ -85,6 +86,7 @@ def get_accounts():
             'updated_at': account['updated_at'],
             'tweet_count': account['tweet_count'],
             'pending_tweets': account['pending_tweets'],
+            'thread_count': account['thread_count'],
             'token_expires_at': account['token_expires_at'],
             'last_token_refresh': account['last_token_refresh'],
             'refresh_failure_count': account['refresh_failure_count'],

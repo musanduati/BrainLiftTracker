@@ -296,7 +296,15 @@ export const AccountDetail: React.FC = () => {
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-1 text-sm">
                 <span className="font-semibold">{account?.displayName || account?.username}</span>
-                <span className="text-muted-foreground">@{account?.username}</span>
+                <a 
+                  href={`https://x.com/${account?.username}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-primary transition-colors"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  @{account?.username}
+                </a>
                 <span className="text-muted-foreground">·</span>
                 <span className="text-muted-foreground">{formatChangeTime(tweet.postedAt || tweet.createdAt)}</span>
                 {getStatusIcon(tweet.status)}
@@ -527,7 +535,14 @@ export const AccountDetail: React.FC = () => {
                       {account.displayName || account.username}
                       {account.verified && <Shield size={20} className="text-blue-500 fill-blue-500" />}
                     </h2>
-                    <p className="text-muted-foreground text-lg">@{account.username}</p>
+                    <a 
+                      href={`https://x.com/${account.username}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-muted-foreground text-lg hover:text-primary transition-colors"
+                    >
+                      @{account.username}
+                    </a>
                   </div>
                 </div>
               </div>

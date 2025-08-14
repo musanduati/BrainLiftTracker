@@ -4,6 +4,8 @@ import { TwitterAccount } from '../../types';
 import { Card, CardContent } from '../common/Card';
 import { formatNumber, formatRelativeTime } from '../../utils/format';
 import { getAvatarColor, getAvatarText } from '../../utils/avatar';
+import { format } from 'date-fns';
+import { Calendar } from 'lucide-react';
 
 interface AccountListProps {
   accounts: TwitterAccount[];
@@ -52,10 +54,26 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts }) => {
 
                 {/* Stats */}
                 <div className="space-y-1">
-                  {account.followerCount !== undefined && (
-                    <div className="flex items-center justify-center text-[10px]">
-                      <span className="font-semibold">{formatNumber(account.followerCount)}</span>
-                      <span className="text-muted-foreground ml-1">followers</span>
+                  {/* Followers and Threads in one line */}
+                  <div className="flex items-center justify-center gap-2 text-[10px]">
+                    <div className="flex items-center">
+                      <span className="font-semibold">{formatNumber(account.followerCount || 0)}</span>
+                      <span className="text-muted-foreground ml-0.5">followers</span>
+                    </div>
+                    <span className="text-muted-foreground">·</span>
+                    <div className="flex items-center">
+                      <span className="font-semibold">{formatNumber(account.threadCount || 0)}</span>
+                      <span className="text-muted-foreground ml-0.5">threads</span>
+                    </div>
+                  </div>
+                  
+                  {/* Onboarding Date */}
+                  {account.createdAt && (
+                    <div className="flex items-center justify-center gap-1">
+                      <Calendar size={8} className="text-muted-foreground" />
+                      <span className="text-[9px] text-muted-foreground">
+                        {format(new Date(account.createdAt), 'MMM d, yyyy')}
+                      </span>
                     </div>
                   )}
                   
