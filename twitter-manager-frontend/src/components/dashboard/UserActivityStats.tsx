@@ -21,7 +21,7 @@ export const UserActivityStats: React.FC<UserActivityStatsProps> = ({
           {rankings.length}
         </div>
         <div className="text-sm text-muted-foreground">
-          {selectedListId === 'all' ? 'Active Brainlifts' : 'List Brainlifts'}
+          {selectedListId === 'all' ? 'Active Brainlifts' : 'Group Brainlifts'}
         </div>
       </div>
       <div className="p-4 rounded-lg bg-blue-100/10 dark:bg-blue-900/10 backdrop-blur-sm border border-blue-200/20 dark:border-blue-700/20 text-center">

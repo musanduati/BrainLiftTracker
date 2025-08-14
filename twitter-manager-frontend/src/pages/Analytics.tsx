@@ -488,10 +488,10 @@ export const Analytics: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Total Lists */}
+          {/* Total Org/Function */}
           <Card>
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground mb-1">Total Lists</p>
+              <p className="text-xs text-muted-foreground mb-1">Total Org/Function</p>
               <span className="text-2xl font-bold">{data.performanceMetrics.totalLists}</span>
             </CardContent>
           </Card>

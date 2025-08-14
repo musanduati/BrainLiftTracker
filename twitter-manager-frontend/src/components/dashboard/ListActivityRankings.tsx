@@ -115,9 +115,9 @@ export const ListActivityRankings: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <List size={20} className="text-green-500" />
-            List Activity Rankings
+            Org/Function Activity Rankings
           </CardTitle>
-          <CardDescription>Activity levels across all lists</CardDescription>
+          <CardDescription>Activity levels across all groups</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -136,13 +136,13 @@ export const ListActivityRankings: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <List size={20} className="text-green-500" />
-            List Activity Rankings
+            Org/Function Activity Rankings
           </CardTitle>
-          <CardDescription>Activity levels across all lists</CardDescription>
+          <CardDescription>Activity levels across all groups</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-muted-foreground">
-            No list data available
+            No group data available
           </div>
         </CardContent>
       </Card>
@@ -154,9 +154,9 @@ export const ListActivityRankings: React.FC = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <List size={20} className="text-green-500" />
-          List Activity Rankings
+          Org/Function Activity Rankings
         </CardTitle>
-        <CardDescription>Activity distribution across {rankings.length} lists</CardDescription>
+        <CardDescription>Activity distribution across {rankings.length} groups</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -251,7 +251,7 @@ export const ListActivityRankings: React.FC = () => {
             </div>
           </div>
 
-          {/* View Lists Button */}
+          {/* View Groups Button */}
           <div className="mt-6 text-center">
             <Link to="/lists">
               <Button 
@@ -260,7 +260,7 @@ export const ListActivityRankings: React.FC = () => {
                 className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
               >
                 <List size={18} className="mr-2" />
-                View All Lists
+                View All Groups
               </Button>
             </Link>
           </div>

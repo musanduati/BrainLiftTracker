@@ -243,7 +243,7 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
             >
               <option value="all">All Brainlifts</option>
               {lists.length > 0 && (
-                <optgroup label="Lists">
+                <optgroup label="Org/Function">
                   {lists.map((list) => (
                     <option key={list.id} value={list.id}>
                       {list.name} ({list.member_count || 0})
@@ -261,9 +261,9 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
               : (() => {
                   const selectedList = lists.find(l => String(l.id) === String(selectedListId));
                   if (selectedList && selectedList.member_count === 0) {
-                    return `The "${selectedList.name}" list has no members. Add accounts to this list to see their activity.`;
+                    return `The "${selectedList.name}" group has no members. Add accounts to this group to see their activity.`;
                   }
-                  return `No activity found for members in ${selectedList?.name || 'this list'}`;
+                  return `No activity found for members in ${selectedList?.name || 'this group'}`;
                 })()
             }
           </div>
@@ -284,7 +284,7 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
             <CardDescription>
               {selectedListId === 'all' 
                 ? 'Top brainlifts by total activity (tweets and threads)' 
-                : `Top users in ${lists.find(l => l.id === selectedListId)?.name || 'list'}`
+                : `Top users in ${lists.find(l => l.id === selectedListId)?.name || 'group'}`
               }
             </CardDescription>
           </div>

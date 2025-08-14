@@ -21,7 +21,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Analytics', href: '/analytics', icon: TrendingUp },
   { name: 'Accounts', href: '/accounts', icon: Users },
-  { name: 'Lists', href: '/lists', icon: List },
+  { name: 'Org/Function', href: '/lists', icon: List },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
 

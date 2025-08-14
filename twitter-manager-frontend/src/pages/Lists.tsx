@@ -120,9 +120,9 @@ export const Lists: React.FC = () => {
 
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-semibold">Twitter Lists</h2>
+              <h2 className="text-2xl font-semibold">Org/Function Groups</h2>
               <p className="text-muted-foreground mt-1">
-                Managing {lists.length} lists with {lists.reduce((sum, l) => sum + l.member_count, 0)} total brainlifts
+                Managing {lists.length} groups with {lists.reduce((sum, l) => sum + l.member_count, 0)} total brainlifts
               </p>
             </div>
             
@@ -133,7 +133,7 @@ export const Lists: React.FC = () => {
               disabled={syncing}
             >
               <RefreshCw size={16} className={`mr-2 ${syncing ? 'animate-spin' : ''}`} />
-              Sync Lists
+              Sync Groups
             </Button>
           </div>
         </div>
