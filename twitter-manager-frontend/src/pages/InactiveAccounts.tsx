@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, UserX, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, UserX, AlertCircle, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -9,6 +9,8 @@ import { Skeleton } from '../components/common/Skeleton';
 import { apiClient } from '../services/api';
 import { TwitterAccount } from '../types';
 import { getAvatarColor, getAvatarText } from '../utils/avatar';
+import { formatNumber } from '../utils/format';
+import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 
 export const InactiveAccounts: React.FC = () => {
@@ -191,6 +193,25 @@ export const InactiveAccounts: React.FC = () => {
                       <p className="text-muted-foreground text-[10px] break-all" title={`@${account.username}`}>
                         @{account.username}
                       </p>
+                    </div>
+
+                    {/* Stats */}
+                    <div className="space-y-1">
+                      {/* Followers */}
+                      <div className="flex items-center justify-center text-[10px]">
+                        <span className="font-semibold">{formatNumber(account.followerCount || 0)}</span>
+                        <span className="text-muted-foreground ml-0.5">followers</span>
+                      </div>
+                      
+                      {/* Onboarding Date */}
+                      {account.createdAt && (
+                        <div className="flex items-center justify-center gap-1">
+                          <Calendar size={8} className="text-muted-foreground" />
+                          <span className="text-[9px] text-muted-foreground">
+                            {format(new Date(account.createdAt), 'MMM d, yyyy')}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Token Status Indicator */}

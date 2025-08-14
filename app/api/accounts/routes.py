@@ -1022,12 +1022,15 @@ def get_accounts_by_lists():
                 ta.display_name,
                 ta.profile_picture,
                 ta.account_type,
-                COUNT(DISTINCT f.id) as follower_count
+                ta.created_at,
+                COUNT(DISTINCT f.id) as follower_count,
+                COUNT(DISTINCT t.thread_id) as thread_count
             FROM list_membership lm
             JOIN twitter_account ta ON lm.account_id = ta.id
             LEFT JOIN follower f ON ta.id = f.account_id AND f.status = 'active'
+            LEFT JOIN tweet t ON ta.id = t.twitter_account_id
             WHERE lm.list_id = ?
-            GROUP BY ta.id, ta.username, ta.display_name, ta.profile_picture, ta.account_type
+            GROUP BY ta.id, ta.username, ta.display_name, ta.profile_picture, ta.account_type, ta.created_at
         ''', (list_row['id'],)).fetchall()
         
         # Format members
@@ -1039,7 +1042,9 @@ def get_accounts_by_lists():
                 'displayName': member['display_name'] if member['display_name'] else member['username'],
                 'profilePicture': member['profile_picture'],
                 'account_type': member['account_type'],
-                'followerCount': member['follower_count']
+                'followerCount': member['follower_count'],
+                'threadCount': member['thread_count'],
+                'createdAt': member['created_at']
             })
         
         lists.append({
@@ -1064,14 +1069,17 @@ def get_accounts_by_lists():
             ta.display_name,
             ta.profile_picture,
             ta.account_type,
-            COUNT(DISTINCT f.id) as follower_count
+            ta.created_at,
+            COUNT(DISTINCT f.id) as follower_count,
+            COUNT(DISTINCT t.thread_id) as thread_count
         FROM twitter_account ta
         LEFT JOIN follower f ON ta.id = f.account_id AND f.status = 'active'
+        LEFT JOIN tweet t ON ta.id = t.twitter_account_id
         WHERE ta.account_type = 'managed'
         AND ta.id NOT IN (
             SELECT DISTINCT account_id FROM list_membership
         )
-        GROUP BY ta.id, ta.username, ta.display_name, ta.profile_picture, ta.account_type
+        GROUP BY ta.id, ta.username, ta.display_name, ta.profile_picture, ta.account_type, ta.created_at
     ''').fetchall()
     
     # Format unassigned accounts with camelCase
@@ -1083,7 +1091,9 @@ def get_accounts_by_lists():
             'displayName': account['display_name'] if account['display_name'] else account['username'],
             'profilePicture': account['profile_picture'],
             'account_type': account['account_type'],
-            'followerCount': account['follower_count']
+            'followerCount': account['follower_count'],
+            'threadCount': account['thread_count'],
+            'createdAt': account['created_at']
         })
     
     conn.close()
