@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Skeleton } from '../common/Skeleton';
 import { apiClient } from '../../services/api';
 import toast from 'react-hot-toast';
+import { getListGradient, getListShadow, initializeListColors } from '../../utils/listColors';
 
 interface UserRanking {
   rank: number;
@@ -18,6 +19,7 @@ interface UserRanking {
   postedCount: number;
   pendingCount: number;
   failedCount: number;
+  listId?: string; // Track which list the user belongs to
 }
 
 interface UserActivityRankingsProps {
@@ -53,6 +55,18 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
       // Get ALL accounts with activity, not just top 10
       const accounts = await apiClient.getAccounts();
       
+      // Initialize list colors based on list IDs
+      const listIds = (listsData.lists || []).map((list: any) => list.id);
+      initializeListColors(listIds);
+      
+      // Create a map of username to list ID for quick lookup
+      const usernameToListId = new Map<string, string>();
+      (listsData.lists || []).forEach((list: any) => {
+        (list.members || []).forEach((member: any) => {
+          usernameToListId.set(member.username, list.id);
+        });
+      });
+      
       // Calculate activity for ALL brainlifts
       const allUsersWithActivity = accounts.map((account: any) => {
         const userTweets = tweetsData.filter((tweet: any) => tweet.username === account.username);
@@ -65,6 +79,9 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
         const pendingCount = userTweets.filter((t: any) => t.status === 'pending').length;
         const failedCount = userTweets.filter((t: any) => t.status === 'failed').length;
         
+        // Find which list this user belongs to
+        const listId = usernameToListId.get(account.username);
+        
         return {
           id: account.id,
           username: account.username,
@@ -76,7 +93,8 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
           postedCount,
           pendingCount,
           failedCount,
-          rank: 0
+          rank: 0,
+          listId
         };
       }).filter((user: any) => user.totalActivity > 0) // Only include brainlifts with activity
         .sort((a: any, b: any) => b.totalActivity - a.totalActivity); // Sort by activity
@@ -141,16 +159,29 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
     };
   });
 
-  // Use a gradient color scheme similar to the image
-  const getBarColor = (index: number) => {
-    const colors = [
-      '#8B5CF6', // Purple
-      '#A78BFA', // Light purple
-      '#C4B5FD', // Lighter purple
-      '#DDD6FE', // Very light purple
-      '#E9D5FF', // Pale purple
+  // Use list-specific colors when showing filtered view, or default gradient for all
+  const getBarGradient = (userRanking: UserRanking, index: number) => {
+    if (userRanking.listId) {
+      // User belongs to a list, use that list's color
+      return getListGradient(userRanking.listId);
+    }
+    // Default gradient for users not in any list (shouldn't happen usually)
+    const defaultGradients = [
+      'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)', // Purple gradient
+      'linear-gradient(135deg, #A78BFA 0%, #C4B5FD 100%)', // Light purple gradient
+      'linear-gradient(135deg, #C4B5FD 0%, #DDD6FE 100%)', // Lighter purple gradient
+      'linear-gradient(135deg, #DDD6FE 0%, #E9D5FF 100%)', // Very light purple gradient
+      'linear-gradient(135deg, #E9D5FF 0%, #F3E7FC 100%)', // Pale purple gradient
     ];
-    return colors[Math.min(index, colors.length - 1)];
+    return defaultGradients[Math.min(index, defaultGradients.length - 1)];
+  };
+  
+  const getBarShadow = (userRanking: UserRanking) => {
+    if (userRanking.listId) {
+      return getListShadow(userRanking.listId);
+    }
+    // Default shadow for users not in any list
+    return 'rgba(139, 92, 246, 0.4)'; // Purple shadow
   };
 
   // Notify parent when data changes
@@ -282,8 +313,9 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
             <div className="space-y-3">
               {chartData.map((user, index) => {
                 const percentage = user.percentage;
-                const barColor = getBarColor(index);
                 const userRanking = rankings[index]; // Get the actual user from rankings
+                const barGradient = getBarGradient(userRanking, index);
+                const barShadow = getBarShadow(userRanking);
                 
                 return (
                   <div 
@@ -294,27 +326,49 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
                   >
                     {/* Username and Percentage */}
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-sm font-medium truncate group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                        {user.name}
-                      </span>
-                      <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-sm font-medium truncate group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-600 group-hover:to-pink-600 transition-all duration-300">
+                          {user.name}
+                        </span>
+                        {/* Show list name if user belongs to a list */}
+                        {userRanking.listId && selectedListId === 'all' && (
+                          <span className="text-xs text-muted-foreground/60">
+                            ({lists.find((l: any) => String(l.id) === String(userRanking.listId))?.name})
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                         {percentage}%
                       </span>
                     </div>
                     
-                    {/* Progress Bar with Hover Tooltip */}
-                    <div className="relative w-full h-5 bg-gray-200/50 dark:bg-gray-800/50 rounded-full overflow-hidden backdrop-blur-sm group-hover:bg-gray-200/70 dark:group-hover:bg-gray-800/70 transition-colors">
+                    {/* Enhanced Progress Bar with List Color */}
+                    <div className="relative w-full h-6 bg-gradient-to-r from-gray-200/30 to-gray-200/50 dark:from-gray-800/30 dark:to-gray-800/50 rounded-full overflow-hidden backdrop-blur-sm group-hover:from-gray-200/50 group-hover:to-gray-200/70 dark:group-hover:from-gray-800/50 dark:group-hover:to-gray-800/70 transition-all duration-300">
+                      {/* Animated gradient bar */}
                       <div
-                        className="absolute top-0 left-0 h-full rounded-full transition-all duration-500 ease-out shadow-sm group-hover:shadow-md"
+                        className="absolute top-0 left-0 h-full rounded-full transition-all duration-700 ease-out"
                         style={{
                           width: `${percentage}%`,
-                          background: `linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%)`,
+                          background: barGradient,
+                          boxShadow: `0 2px 10px ${barShadow}, inset 0 1px 0 rgba(255,255,255,0.3)`,
                         }}
-                      />
+                      >
+                        {/* Shimmer effect */}
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                          <div className="h-full w-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                        </div>
+                      </div>
+                      
+                      {/* Percentage label inside bar (if wide enough) */}
+                      {percentage > 15 && (
+                        <div className="absolute left-2 top-1/2 -translate-y-1/2 text-white text-xs font-semibold drop-shadow-lg">
+                          {percentage}%
+                        </div>
+                      )}
                       
                       {/* Hover Tooltip */}
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                        <span className="bg-gray-900/90 text-white text-xs px-2 py-1 rounded shadow-lg">
+                        <span className="bg-gray-900/95 text-white text-xs px-3 py-1.5 rounded-lg shadow-xl backdrop-blur-sm">
                           {user.threads > 0 ? `${user.total} total: ${user.tweets} tweets, ${user.threads} threads` : `${user.total} tweets`}
                         </span>
                       </div>

@@ -6,6 +6,7 @@ import { Button } from '../common/Button';
 import { Skeleton } from '../common/Skeleton';
 import { apiClient } from '../../services/api';
 import toast from 'react-hot-toast';
+import { getListGradient, getListShadow, initializeListColors } from '../../utils/listColors';
 
 interface ListRanking {
   id: string;
@@ -82,6 +83,10 @@ export const ListActivityRankings: React.FC = () => {
       // Sort by total activity
       listRankings.sort((a, b) => b.totalActivity - a.totalActivity);
       
+      // Initialize list colors based on sorted list IDs (ensures consistent colors)
+      const sortedListIds = listRankings.map(list => list.id);
+      initializeListColors(sortedListIds);
+      
       setRankings(listRankings);
     } catch (error) {
       toast.error('Failed to load list rankings');
@@ -94,38 +99,14 @@ export const ListActivityRankings: React.FC = () => {
   // Calculate total activity to get percentages
   const totalActivity = rankings.reduce((sum, list) => sum + list.totalActivity, 0);
 
-  // Use vibrant gradient colors for different lists
-  const getBarGradient = (index: number) => {
-    const gradients = [
-      'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', // Purple to Pink
-      'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', // Pink to Red
-      'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', // Blue to Cyan
-      'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', // Green to Teal
-      'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', // Pink to Yellow
-      'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', // Cyan to Purple
-      'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', // Light Blue to Pink
-      'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)', // Coral to Pink
-      'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)', // Pink to Blue
-      'linear-gradient(135deg, #fdcbf1 0%, #e6dee9 100%)', // Light Pink to Gray
-    ];
-    return gradients[index % gradients.length];
+  // Use consistent list colors from the shared utility
+  const getBarGradient = (listId: string) => {
+    return getListGradient(listId);
   };
   
-  // Get a complementary shadow color
-  const getBarShadow = (index: number) => {
-    const shadows = [
-      'rgba(102, 126, 234, 0.4)', // Purple
-      'rgba(245, 87, 108, 0.4)',  // Red
-      'rgba(79, 172, 254, 0.4)',  // Blue
-      'rgba(67, 233, 123, 0.4)',  // Green
-      'rgba(254, 225, 64, 0.4)',  // Yellow
-      'rgba(51, 8, 103, 0.4)',    // Dark Purple
-      'rgba(168, 237, 234, 0.4)', // Light Blue
-      'rgba(255, 154, 158, 0.4)', // Coral
-      'rgba(251, 194, 235, 0.4)', // Pink
-      'rgba(253, 203, 241, 0.4)', // Light Pink
-    ];
-    return shadows[index % shadows.length];
+  // Get a complementary shadow color for the list
+  const getBarShadow = (listId: string) => {
+    return getListShadow(listId);
   };
 
   if (loading) {
@@ -182,12 +163,12 @@ export const ListActivityRankings: React.FC = () => {
           {/* Horizontal Bar Chart Container with Glass Effect */}
           <div className="p-6 rounded-xl bg-white/5 dark:bg-gray-900/20 backdrop-blur-sm border border-white/10 dark:border-gray-700/50 shadow-xl">
             <div className="space-y-3">
-              {rankings.slice(0, 10).map((list, index) => {
+              {rankings.slice(0, 10).map((list) => {
                 const percentage = totalActivity > 0 
                   ? Math.round((list.totalActivity / totalActivity) * 100) 
                   : 0;
-                const barGradient = getBarGradient(index);
-                const barShadow = getBarShadow(index);
+                const barGradient = getBarGradient(list.id);
+                const barShadow = getBarShadow(list.id);
                 
                 return (
                   <div 
