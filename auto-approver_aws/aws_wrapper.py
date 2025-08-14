@@ -2,7 +2,7 @@
 #!/usr/bin/env python3
 """
 AWS wrapper for batch_automation.py
-Handles both CSV files and AWS S3 reporting
+Handles both CSV files and AWS S3 reporting with email notifications
 """
 
 import os
@@ -10,12 +10,14 @@ import json
 import boto3
 import sys
 import csv
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
 # Add auto-approver to path
 sys.path.append('/app/auto-approver')
 from batch_automation_enhanced import WorkingEnhancedBatchAutomation
+from email_service import AutomationEmailService
 
 class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
     def __init__(self):
@@ -33,6 +35,14 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
         )
         
         self.batch_id = f"fargate-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+        
+        # Initialize email service
+        self.email_service = AutomationEmailService()
+        print(f"📧 Email service initialized: {'✅ Available' if self.email_service.ses_available else '❌ Not available'}")
+        if self.email_service.to_emails:
+            print(f"   Recipients: {', '.join(self.email_service.to_emails)}")
+        else:
+            print(f"   ⚠️ No recipients configured")
         
     def load_accounts_from_csv_files(self):
         """Load accounts from CSV files (test or production)"""
@@ -198,7 +208,7 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
             print(f"❌ Failed to save results locally: {e}")
     
     def run_aws_batch_automation(self):
-        """Run the batch automation with AWS integration"""
+        """Run the batch automation with AWS integration and email notifications"""
         test_mode = os.environ.get('TEST_MODE', 'false').lower() == 'true'
         mode_text = "TEST MODE" if test_mode else "PRODUCTION MODE"
         csv_files_text = "accounts_test.csv" if test_mode else "academics_accounts.csv, superbuilders_accounts.csv"
@@ -210,24 +220,140 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
         print(f"Processing CSV files : {csv_files_text}")
         print(f"{'='*60}")
         
+        automation_success = False
+        s3_success = False
+        email_success = False
+        
         try:
             # Run the standard batch automation
+            print("\n🔄 Starting batch automation...")
             self.run_batch_automation()
+            automation_success = True
+            print("✅ Batch automation completed")
             
             # Save results to S3
+            print("\n📤 Saving results to S3...")
             self.save_results_to_s3()
+            s3_success = True
+            print("✅ Results saved to S3")
+            
+            # Send email notification - NEW
+            print("\n📧 Sending email notification...")
+            email_success = self._send_completion_email(test_mode)
+            
+            if email_success:
+                print("✅ Email notification sent")
+            else:
+                print("⚠️ Email notification failed (but automation succeeded)")
             
             print(f"\n✅ AWS Batch automation completed successfully!")
             return True
             
         except Exception as e:
-            print(f"\n❌ AWS Batch automation failed: {str(e)}")
+            error_msg = str(e)
+            print(f"\n❌ AWS Batch automation failed: {error_msg}")
+            
             # Still try to save what we have
+            if not s3_success:
+                try:
+                    print("🔄 Attempting to save partial results to S3...")
+                    self.save_results_to_s3()
+                    s3_success = True
+                    print("✅ Partial results saved to S3")
+                except Exception as s3_error:
+                    print(f"❌ Failed to save partial results: {str(s3_error)}")
+            
+            # Send error notification - NEW
             try:
-                self.save_results_to_s3()
-            except:
-                pass
+                print("📧 Sending error notification...")
+                self._send_error_email(error_msg, test_mode)
+                print("✅ Error notification sent")
+            except Exception as email_error:
+                print(f"❌ Failed to send error notification: {str(email_error)}")
+            
             raise
+    
+    def _send_completion_email(self, test_mode: bool) -> bool:
+        """Send completion email notification"""
+        try:
+            # Prepare email data in the format expected by email service
+            execution_mode = "AWS_ECS_FARGATE_TEST" if test_mode else "AWS_ECS_FARGATE_PRODUCTION"
+            
+            # Calculate summary statistics
+            total_accounts = len(self.results)
+            successful_accounts = sum(1 for r in self.results if r.get('success', False))
+            failed_accounts = total_accounts - successful_accounts
+            total_approvals = sum(r.get('approved_count', 0) for r in self.results)
+            total_followers_saved = sum(r.get('followers_saved', 0) for r in self.results)
+            
+            # Group results by source file
+            by_source = {}
+            for result in self.results:
+                source = result.get('source_file', 'unknown')
+                if source not in by_source:
+                    by_source[source] = {'accounts': 0, 'successful': 0, 'approvals': 0}
+                by_source[source]['accounts'] += 1
+                if result.get('success', False):
+                    by_source[source]['successful'] += 1
+                by_source[source]['approvals'] += result.get('approved_count', 0)
+            
+            # Create results data structure for email service
+            email_data = {
+                'batch_id': self.batch_id,
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'execution_environment': execution_mode,
+                'summary': {
+                    'total_accounts': total_accounts,
+                    'successful_accounts': successful_accounts,
+                    'failed_accounts': failed_accounts,
+                    'success_rate': round(successful_accounts / total_accounts * 100, 2) if total_accounts > 0 else 0,
+                    'total_approvals': total_approvals,
+                    'total_followers_saved': total_followers_saved,
+                    'by_source_file': by_source
+                },
+                'detailed_results': self.results
+            }
+            
+            # Send email
+            return self.email_service.send_completion_notification(email_data, execution_mode)
+            
+        except Exception as e:
+            print(f"❌ Error preparing/sending completion email: {str(e)}")
+            print(f"   Traceback: {traceback.format_exc()}")
+            return False
+    
+    def _send_error_email(self, error_message: str, test_mode: bool) -> bool:
+        """Send error notification email"""
+        try:
+            execution_mode = "AWS_ECS_FARGATE_TEST" if test_mode else "AWS_ECS_FARGATE_PRODUCTION"
+            
+            # Include some context in the error message
+            enhanced_error = f"""
+Automation Error Details:
+========================
+
+Primary Error:
+{error_message}
+
+Context:
+- Batch ID: {self.batch_id}
+- Execution Mode: {execution_mode}
+- Processed Accounts: {len(self.results) if hasattr(self, 'results') else 0}
+- Error Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+Full Traceback:
+{traceback.format_exc()}
+"""
+            
+            return self.email_service.send_error_notification(
+                enhanced_error, 
+                execution_mode, 
+                self.batch_id
+            )
+            
+        except Exception as e:
+            print(f"❌ Error sending error notification: {str(e)}")
+            return False
 
 def main():
     """Main entry point"""
