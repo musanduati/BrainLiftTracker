@@ -27,7 +27,7 @@ export const Accounts: React.FC = () => {
   }>({ lists: [], unassigned_accounts: [] });
   const [filteredAccounts, setFilteredAccounts] = useState<TwitterAccount[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState<'followers-desc' | 'followers-asc' | 'username' | 'displayName' | 'lastActive' | 'tweets' | 'threads' | 'activity'>('followers-desc');
+  const [sortBy, setSortBy] = useState<'followers-desc' | 'followers-asc' | 'username' | 'displayName' | 'lastActive' | 'tweets' | 'threads' | 'activity' | 'onboarded-newest' | 'onboarded-oldest'>('followers-desc');
   const [accountsPerPage, setAccountsPerPage] = useState(40);
 
   useEffect(() => {
@@ -85,6 +85,20 @@ export const Accounts: React.FC = () => {
           const totalA = (a.tweetCount || 0) + (a.threadCount || 0);
           const totalB = (b.tweetCount || 0) + (b.threadCount || 0);
           return totalB - totalA;
+        });
+        break;
+      case 'onboarded-newest':
+        sorted.sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA; // Newest first
+        });
+        break;
+      case 'onboarded-oldest':
+        sorted.sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateA - dateB; // Oldest first
         });
         break;
     }
@@ -334,6 +348,8 @@ export const Accounts: React.FC = () => {
               <option value="followers-asc">Least Followers</option>
               <option value="username">Username (A-Z)</option>
               <option value="displayName">Display Name (A-Z)</option>
+              <option value="onboarded-newest">Newest Onboarded</option>
+              <option value="onboarded-oldest">Oldest Onboarded</option>
               <option value="lastActive">Most Recently Active</option>
               <option value="activity">Total Activity</option>
               <option value="tweets">Most Tweets</option>
