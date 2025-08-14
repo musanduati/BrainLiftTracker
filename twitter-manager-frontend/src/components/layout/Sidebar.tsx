@@ -12,12 +12,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
+  TrendingUp,
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useStore } from '../../store/useStore';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
+  { name: 'Analytics', href: '/analytics', icon: TrendingUp },
   { name: 'Accounts', href: '/accounts', icon: Users },
   { name: 'Lists', href: '/lists', icon: List },
   { name: 'Settings', href: '/settings', icon: Settings },

@@ -107,10 +107,11 @@ export const Dashboard: React.FC = () => {
     {
       title: 'Activity Rate',
       value: `${activityRate}%`,
-      description: 'Percentage of active brainlifts',
+      description: 'View detailed analytics →',
       icon: TrendingUp,
       color: 'text-purple-500',
       bgColor: 'bg-purple-100 dark:bg-purple-900/20',
+      link: '/analytics',
     },
   ];
 

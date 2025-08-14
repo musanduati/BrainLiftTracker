@@ -9,6 +9,7 @@ import { AccountDetail } from './pages/AccountDetail';
 import { InactiveAccounts } from './pages/InactiveAccounts';
 import { Lists } from './pages/Lists';
 import { ListMembers } from './pages/ListMembers';
+import { Analytics } from './pages/Analytics';
 import { useStore } from './store/useStore';
 import { notificationPoller } from './services/notificationPoller';
 
@@ -61,6 +62,7 @@ function App() {
             <Route path="accounts/inactive" element={<InactiveAccounts />} />
             <Route path="lists" element={<Lists />} />
             <Route path="lists/:listId" element={<ListMembers />} />
+            <Route path="analytics" element={<Analytics />} />
           </Route>
         </Routes>
       </BrowserRouter>
