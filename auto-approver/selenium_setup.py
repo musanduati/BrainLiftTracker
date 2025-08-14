@@ -12,6 +12,30 @@ from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.firefox import GeckoDriverManager
 from webdriver_manager.microsoft import EdgeChromiumDriverManager
 
+def is_containerized_environment():
+    """Detect if we're running in a containerized environment like AWS Fargate"""
+    # Check for manually installed ChromeDriver (installed by Dockerfile)
+    if os.path.exists('/usr/local/bin/chromedriver'):
+        return True
+    
+    # Check for container environment variables
+    container_indicators = [
+        'AWS_EXECUTION_ENV',  # AWS Lambda/Fargate
+        'ECS_CONTAINER_METADATA_URI',  # ECS
+        'KUBERNETES_SERVICE_HOST',  # Kubernetes
+        'DOCKER_CONTAINER'  # Generic Docker flag
+    ]
+    
+    for indicator in container_indicators:
+        if os.environ.get(indicator):
+            return True
+    
+    # Check if we're in a Docker container by looking for .dockerenv
+    if os.path.exists('/.dockerenv'):
+        return True
+        
+    return False
+
 def get_chrome_driver(headless=False):
     """Get Chrome driver with auto-downloaded driver"""
     options = ChromeOptions()
@@ -34,18 +58,34 @@ def get_chrome_driver(headless=False):
     if headless:
         options.add_argument('--headless=new')  # New headless mode
     
-    # Auto-download and set up ChromeDriver
-    try:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-    except AttributeError:
-        # Fallback: specify Chrome version if auto-detection fails
-        from webdriver_manager.core.os_manager import ChromeType
-        service = Service(ChromeDriverManager(chrome_type=ChromeType.GOOGLE).install())
-        driver = webdriver.Chrome(service=service, options=options)
+    # Choose ChromeDriver approach based on environment
+    if is_containerized_environment():
+        # Use pre-installed ChromeDriver in container
+        chromedriver_path = '/usr/local/bin/chromedriver'
+        if os.path.exists(chromedriver_path):
+            print(f"🐳 Using containerized ChromeDriver: {chromedriver_path}")
+            service = Service(chromedriver_path)
+        else:
+            raise RuntimeError(f"Expected ChromeDriver not found at {chromedriver_path}")
+    else:
+        # Use webdriver_manager for local development
+        print("💻 Using webdriver_manager for local ChromeDriver")
+        try:
+            service = Service(ChromeDriverManager().install())
+        except AttributeError:
+            # Fallback: specify Chrome version if auto-detection fails
+            from webdriver_manager.core.os_manager import ChromeType
+            service = Service(ChromeDriverManager(chrome_type=ChromeType.GOOGLE).install())
     
-    # Remove webdriver property
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    # Create driver
+    driver = webdriver.Chrome(service=service, options=options)
+    
+    # Safer anti-detection (only if it works)
+    try:
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    except Exception as e:
+        print(f"⚠️ Anti-detection script failed (this is OK): {e}")
+        # Continue without anti-detection - modern Chrome blocks this anyway
     
     return driver
 
@@ -90,6 +130,7 @@ def get_edge_driver(headless=False):
 if __name__ == "__main__":
     # Test driver setup
     print("Testing Chrome driver setup...")
+    print(f"Containerized environment: {is_containerized_environment()}")
     try:
         driver = get_chrome_driver()
         print("Chrome driver setup successful!")

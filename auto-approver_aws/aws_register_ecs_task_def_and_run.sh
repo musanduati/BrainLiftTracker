@@ -37,28 +37,3 @@ for i in {1..8}; do
 done
 
 echo "✅ Test run completed"
-
-# Check logs to see if ChromeDriver was downloaded correctly
-echo "📋 Checking CloudWatch logs for ChromeDriver setup..."
-
-sleep 30
-
-LOG_STREAM=$(aws logs describe-log-streams \
-    --log-group-name /ecs/twitter-automation \
-    --order-by LastEventTime \
-    --descending \
-    --max-items 1 \
-    --query "logStreams[0].logStreamName" --output text)
-
-echo "Latest log stream: $LOG_STREAM"
-
-if [ "$LOG_STREAM" != "None" ] && [ "$LOG_STREAM" != "" ]; then
-    echo "📖 Recent log events:"
-    aws logs get-log-events \
-        --log-group-name /ecs/twitter-automation \
-        --log-stream-name $LOG_STREAM \
-        --start-from-head \
-        --limit 30 \
-        --query "events[*].message" \
-        --output text
-fi
