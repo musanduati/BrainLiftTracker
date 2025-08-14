@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
@@ -9,9 +9,11 @@ import { AccountDetail } from './pages/AccountDetail';
 import { InactiveAccounts } from './pages/InactiveAccounts';
 import { Lists } from './pages/Lists';
 import { ListMembers } from './pages/ListMembers';
-import { Analytics } from './pages/Analytics';
 import { useStore } from './store/useStore';
 import { notificationPoller } from './services/notificationPoller';
+
+// Lazy load the Analytics page to reduce initial bundle size
+const Analytics = lazy(() => import('./pages/Analytics').then(module => ({ default: module.Analytics })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,7 +64,18 @@ function App() {
             <Route path="accounts/inactive" element={<InactiveAccounts />} />
             <Route path="lists" element={<Lists />} />
             <Route path="lists/:listId" element={<ListMembers />} />
-            <Route path="analytics" element={<Analytics />} />
+            <Route path="analytics" element={
+              <Suspense fallback={
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+                    <p className="mt-4 text-muted-foreground">Loading analytics...</p>
+                  </div>
+                </div>
+              }>
+                <Analytics />
+              </Suspense>
+            } />
           </Route>
         </Routes>
       </BrowserRouter>
