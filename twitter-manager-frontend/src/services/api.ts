@@ -46,6 +46,7 @@ class ApiClient {
       tokenExpiresAt: account.token_expires_at,
       tokenRefreshFailures: account.token_refresh_failures,
       tokenStatus: account.token_status || (account.status === 'active' ? 'healthy' : 'expired'),
+      workflowyUrl: account.workflowy_url,
     }));
   }
 

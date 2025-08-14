@@ -36,6 +36,7 @@ def get_accounts():
             a.account_type,
             a.display_name,
             a.profile_picture,
+            a.workflowy_url,
             COUNT(DISTINCT CASE WHEN t.thread_id IS NULL THEN t.id END) as tweet_count,
             COUNT(DISTINCT CASE WHEN t.status = 'pending' AND t.thread_id IS NULL THEN t.id END) as pending_tweets,
             COUNT(DISTINCT t.thread_id) as thread_count,
@@ -94,7 +95,8 @@ def get_accounts():
             'account_type': account['account_type'] or 'managed',
             'display_name': account['display_name'],
             'profile_picture': account['profile_picture'],
-            'followerCount': account['follower_count']
+            'followerCount': account['follower_count'],
+            'workflowy_url': account['workflowy_url']
         })
     
     conn.close()
