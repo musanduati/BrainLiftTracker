@@ -181,7 +181,8 @@ def get_account(account_id):
             'token_health': token_health,
             'account_type': account['account_type'] or 'managed',
             'display_name': account['display_name'],
-            'profile_picture': account['profile_picture']
+            'profile_picture': account['profile_picture'],
+            'workflowy_url': account['workflowy_url']
         },
         'stats': {
             'standalone_tweets': account['standalone_tweets'],  # Changes (not part of threads)

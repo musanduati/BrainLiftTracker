@@ -19,6 +19,7 @@ export interface TwitterAccount {
   verified?: boolean;
   description?: string;
   twitterUserId?: string;
+  workflowyUrl?: string;
   stats?: {  // Detailed stats from API
     standalone_tweets: number;
     thread_tweets: number;

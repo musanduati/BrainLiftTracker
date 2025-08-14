@@ -74,6 +74,7 @@ class ApiClient {
       verified: account.verified,
       description: account.description,
       twitterUserId: account.twitter_user_id,
+      workflowyUrl: account.workflowy_url,
       stats: data.stats ? {
         standalone_tweets: data.stats.standalone_tweets,
         thread_tweets: data.stats.thread_tweets,

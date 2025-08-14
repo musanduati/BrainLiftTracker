@@ -43,7 +43,8 @@ def init_database():
                 refresh_failure_count INTEGER DEFAULT 0,
                 account_type TEXT DEFAULT 'managed',
                 display_name TEXT,
-                profile_picture TEXT
+                profile_picture TEXT,
+                workflowy_url TEXT
             )
         ''')
         
@@ -157,6 +158,7 @@ def _migrate_database(conn):
         ('twitter_account', "account_type TEXT DEFAULT 'managed'"),
         ('twitter_account', 'display_name TEXT'),
         ('twitter_account', 'profile_picture TEXT'),
+        ('twitter_account', 'workflowy_url TEXT'),
         ('tweet', 'thread_id TEXT'),
         ('tweet', 'reply_to_tweet_id TEXT'),
         ('tweet', 'thread_position INTEGER'),

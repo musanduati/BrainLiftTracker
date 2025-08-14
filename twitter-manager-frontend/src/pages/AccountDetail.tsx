@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, ChevronDown, ChevronRight, Hash, CheckCircle, XCircle, Clock, ChevronLeft, TrendingUp, BarChart3, Activity, Shield, Users, Zap, Target, Flame, Timer, TrendingDown } from 'lucide-react';
+import { ArrowLeft, Calendar, ChevronDown, ChevronRight, Hash, CheckCircle, XCircle, Clock, ChevronLeft, TrendingUp, BarChart3, Activity, Shield, Users, Zap, Target, Flame, Timer, TrendingDown, ExternalLink, FileText } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -543,6 +543,18 @@ export const AccountDetail: React.FC = () => {
                     >
                       @{account.username}
                     </a>
+                    {account.workflowyUrl && (
+                      <a
+                        href={account.workflowyUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 mt-1 text-sm text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        <FileText size={14} />
+                        <span>View Workflowy</span>
+                        <ExternalLink size={12} />
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>
