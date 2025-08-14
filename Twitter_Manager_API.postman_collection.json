@@ -2877,6 +2877,96 @@
 					]
 				},
 				{
+					"name": "Update Workflowy URL",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"workflowy_url\": \"https://workflowy.com/s/example-url\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/workflowy",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"workflowy"
+							]
+						},
+						"description": "Update the Workflowy URL for a specific account. Pass an empty string to clear the URL."
+					},
+					"response": [
+						{
+							"name": "Workflowy URL Updated",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"workflowy_url\": \"https://workflowy.com/s/example-url\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/1/workflowy",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"1",
+										"workflowy"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Workflowy URL updated successfully for @username\",\n    \"account_id\": 1,\n    \"workflowy_url\": \"https://workflowy.com/s/example-url\"\n}"
+						}
+					]
+				},
+				{
 					"name": "Cleanup Inactive Accounts",
 					"request": {
 						"method": "POST",

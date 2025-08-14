@@ -535,26 +535,28 @@ export const AccountDetail: React.FC = () => {
                       {account.displayName || account.username}
                       {account.verified && <Shield size={20} className="text-blue-500 fill-blue-500" />}
                     </h2>
-                    <a 
-                      href={`https://x.com/${account.username}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-muted-foreground text-lg hover:text-primary transition-colors"
-                    >
-                      @{account.username}
-                    </a>
-                    {account.workflowyUrl && (
-                      <a
-                        href={account.workflowyUrl}
+                    <div className="flex flex-col">
+                      <a 
+                        href={`https://x.com/${account.username}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 mt-1 text-sm text-muted-foreground hover:text-primary transition-colors"
+                        className="text-muted-foreground text-lg hover:text-primary transition-colors"
                       >
-                        <FileText size={14} />
-                        <span>View Workflowy</span>
-                        <ExternalLink size={12} />
+                        @{account.username}
                       </a>
-                    )}
+                      {account.workflowyUrl && (
+                        <a
+                          href={account.workflowyUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 mt-2 text-sm text-primary hover:text-primary/80 transition-colors"
+                        >
+                          <FileText size={14} />
+                          <span>View Brainlift</span>
+                          <ExternalLink size={12} />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

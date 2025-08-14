@@ -324,6 +324,53 @@ def delete_account(account_id):
         conn.close()
         return jsonify({'error': str(e)}), 500
 
+@accounts_bp.route('/api/v1/accounts/<int:account_id>/workflowy', methods=['PUT'])
+@require_api_key
+def update_workflowy_url(account_id):
+    """Update the Workflowy URL for an account"""
+    data = request.get_json()
+    
+    if not data or 'workflowy_url' not in data:
+        return jsonify({'error': 'workflowy_url is required in request body'}), 400
+    
+    workflowy_url = data['workflowy_url']
+    
+    # Allow empty string to clear the URL
+    if workflowy_url and not workflowy_url.startswith('http'):
+        return jsonify({'error': 'Invalid URL format. URL must start with http or https'}), 400
+    
+    conn = get_db()
+    
+    try:
+        # Check if account exists
+        account = conn.execute(
+            'SELECT username FROM twitter_account WHERE id = ?',
+            (account_id,)
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'Account not found'}), 404
+        
+        # Update the workflowy_url
+        conn.execute(
+            'UPDATE twitter_account SET workflowy_url = ? WHERE id = ?',
+            (workflowy_url if workflowy_url else None, account_id)
+        )
+        conn.commit()
+        
+        conn.close()
+        
+        return jsonify({
+            'message': f'Workflowy URL updated successfully for @{account["username"]}',
+            'account_id': account_id,
+            'workflowy_url': workflowy_url
+        })
+        
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
 @accounts_bp.route('/api/v1/accounts/<int:account_id>/followers', methods=['GET'])
 @require_api_key
 def get_account_followers(account_id):
