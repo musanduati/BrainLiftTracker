@@ -98,11 +98,11 @@ class S3SessionManager:
                 ContentType='application/json'
             )
             
-            print(f"   ✅ Session saved to S3 for {username}")
+            print(f"{username} - [INFO] ✅ Session saved to S3")
             return True
             
         except Exception as e:
-            print(f"   ❌ Failed to save session for {username}: {str(e)}")
+            print(f"{username} - [ERROR] ❌ Failed to save session: {str(e)}")
             return False
     
     def load_session(self, username: str, driver) -> bool:
@@ -122,11 +122,11 @@ class S3SessionManager:
             
             # Check if session is expired
             if self._is_session_expired(session_data):
-                print(f"   ⏰ Session expired for {username}, will login normally")
+                print(f"{username} - [INFO] ⏰ Session expired, will login normally")
                 self.delete_session(username)  # Clean up expired session
                 return False
             
-            print(f"   🔄 Loading saved session for {username}...")
+            print(f"{username} - [INFO] 🔄 Loading saved session")
             
             # Navigate to Twitter first
             driver.get("https://x.com")
@@ -170,21 +170,21 @@ class S3SessionManager:
             # Verify session is valid by checking if we're logged in
             if self._verify_logged_in(driver):
                 age_hours = (datetime.now() - datetime.fromisoformat(session_data['timestamp'])).total_seconds() / 3600
-                print(f"   ✅ Session restored successfully for {username} (age: {age_hours:.1f}h)")
+                print(f"{username} - [OK] Session restored successfully (age: {age_hours:.1f}h)")
                 return True
             else:
-                print(f"   ❌ Session invalid for {username}, will login normally")
+                print(f"{username} - [ERROR] Session invalid, will login normally")
                 self.delete_session(username)  # Clean up invalid session
                 return False
                 
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchKey':
-                print(f"   📝 No saved session found for {username}")
+                print(f"{username} - [INFO] 📝 No saved session found")
             else:
-                print(f"   ❌ S3 error loading session for {username}: {str(e)}")
+                print(f"{username} - [ERROR] S3 error loading session: {str(e)}")
             return False
         except Exception as e:
-            print(f"   ❌ Error loading session for {username}: {str(e)}")
+            print(f"{username} - [ERROR] Error loading session: {str(e)}")
             return False
     
     def _verify_logged_in(self, driver) -> bool:
@@ -223,10 +223,10 @@ class S3SessionManager:
                 Bucket=self.bucket_name,
                 Key=session_key
             )
-            print(f"   🗑️ Deleted session for {username}")
+            print(f"{username} - [INFO] 🗑️ Deleted session")
             return True
         except Exception as e:
-            print(f"   ⚠️ Could not delete session for {username}: {str(e)}")
+            print(f"{username} - [ERROR] Could not delete session: {str(e)}")
             return False
     
     def list_sessions(self) -> List[str]:
@@ -274,7 +274,7 @@ class S3SessionManager:
                     cleaned += 1
                     
             except Exception as e:
-                print(f"⚠️ Error checking session for {username}: {str(e)}")
+                print(f"{username} - [ERROR] Error checking session: {str(e)}")
         
         if cleaned > 0:
             print(f"🧹 Cleaned up {cleaned} expired sessions")
