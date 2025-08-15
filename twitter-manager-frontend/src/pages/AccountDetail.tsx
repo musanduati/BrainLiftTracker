@@ -29,7 +29,6 @@ export const AccountDetail: React.FC = () => {
   const [threadDetails, setThreadDetails] = useState<Map<string, Thread>>(new Map());
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'all' | 'week' | 'month'>('all');
-  const [contentView, setContentView] = useState<'threads' | 'tweets'>('threads');
   const [savedFollowerCount, setSavedFollowerCount] = useState(0);
 
   useEffect(() => {
@@ -166,13 +165,17 @@ export const AccountDetail: React.FC = () => {
 
   // Stats calculations - use account stats if available, otherwise calculate from local data
   const totalIndividualTweets = account?.stats?.standalone_tweets || individualTweets.length;
-  const totalTweets = totalIndividualTweets; // Only count standalone tweets, not thread tweets
-  const totalPosted = account?.stats?.posted_standalone || individualTweets.filter(t => t.status === 'posted').length;
   const totalThreads = account?.stats?.total_threads || threads.length;
+  const totalPosts = totalIndividualTweets + totalThreads; // Combined posts count
+  
+  // Count posted items: individual tweets with status='posted' + threads where all tweets are posted
+  const postedTweets = individualTweets.filter(t => t.status === 'posted').length;
+  const postedThreads = threads.filter(t => t.posted_count > 0 && t.posted_count === t.tweet_count).length;
+  const totalPosted = postedTweets + postedThreads;
 
   // Calculate engagement stats (mock data for now)
   const engagementRate = 2.4;
-  const avgTweetsPerThread = threads.length > 0 ? (totalTweets / threads.length).toFixed(1) : '0';
+  const avgPostsPerWeek = totalPosts > 0 ? (totalPosts / 4).toFixed(1) : '0'; // Rough estimate for past 4 weeks
   const postsThisWeek = threads.filter(t => {
     const threadDate = new Date(t.created_at);
     const weekAgo = new Date();
@@ -424,7 +427,7 @@ export const AccountDetail: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {format(new Date(thread.created_at), 'MMM d, yyyy')} • {thread.tweet_count} tweet{thread.tweet_count !== 1 ? 's' : ''}
+                  {format(new Date(thread.created_at), 'MMM d, yyyy')} • {thread.tweet_count} post{thread.tweet_count !== 1 ? 's' : ''}
                 </p>
               </div>
             </div>
@@ -568,7 +571,7 @@ export const AccountDetail: React.FC = () => {
             )}
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-6">
               <div className="p-3 rounded-lg bg-muted/50">
                 <div className="flex items-center">
                   <Users size={16} className="text-blue-500" />
@@ -578,18 +581,8 @@ export const AccountDetail: React.FC = () => {
               </div>
               
               <div className="p-3 rounded-lg bg-muted/50">
-                <div className="text-2xl font-bold">{totalThreads}</div>
-                <div className="text-xs text-muted-foreground">Threads</div>
-              </div>
-              
-              <div className="p-3 rounded-lg bg-muted/50">
-                <div className="text-2xl font-bold">{totalTweets}</div>
-                <div className="text-xs text-muted-foreground">Total Tweets</div>
-              </div>
-              
-              <div className="p-3 rounded-lg bg-muted/50">
-                <div className="text-2xl font-bold text-green-600">{totalPosted}</div>
-                <div className="text-xs text-muted-foreground">Posted</div>
+                <div className="text-2xl font-bold">{totalPosts}</div>
+                <div className="text-xs text-muted-foreground">Total Posts</div>
               </div>
               
               <div className="p-3 rounded-lg bg-muted/50">
@@ -715,30 +708,12 @@ export const AccountDetail: React.FC = () => {
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Content</h3>
                 <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
-                  {threads.length > 0 && (
-                    <Button
-                      variant={contentView === 'threads' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => {
-                        setContentView('threads');
-                        setCurrentPage(1);
-                      }}
-                    >
-                      Threads ({threads.length})
-                    </Button>
-                  )}
-                  {individualTweets.length > 0 && (
-                    <Button
-                      variant={contentView === 'tweets' ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => {
-                        setContentView('tweets');
-                        setCurrentPage(1);
-                      }}
-                    >
-                      Tweets ({individualTweets.length})
-                    </Button>
-                  )}
+                  <Button
+                    variant="primary"
+                    size="sm"
+                  >
+                    Posts ({threads.length + individualTweets.length})
+                  </Button>
                 </div>
               </div>
 
@@ -786,30 +761,23 @@ export const AccountDetail: React.FC = () => {
               </div>
             ) : (
               <>
-                {/* Show Threads */}
-                {contentView === 'threads' && threads.length > 0 && (
+                {/* Show All Posts (Threads and Tweets combined) */}
+                {(threads.length > 0 || individualTweets.length > 0) ? (
                   <div className="space-y-3">
+                    {/* Show threads first */}
                     {paginatedThreads.map(renderThread)}
+                    {/* Then show individual tweets if on first page and have room */}
+                    {currentPage === 1 && paginatedThreads.length < THREADS_PER_PAGE && 
+                      individualTweets
+                        .filter(tweet => tweet.status !== 'failed')
+                        .slice(0, THREADS_PER_PAGE - paginatedThreads.length)
+                        .map(renderIndividualTweet)
+                    }
                   </div>
-                )}
-
-                {/* Show Individual Tweets - Only when explicitly selected */}
-                {contentView === 'tweets' && individualTweets.length > 0 && (
-                  <div className="space-y-3">
-                    {individualTweets
-                      .filter(tweet => tweet.status !== 'failed')
-                      .slice((currentPage - 1) * THREADS_PER_PAGE, currentPage * THREADS_PER_PAGE)
-                      .map(renderIndividualTweet)}
-                  </div>
-                )}
-
-
-                {/* No Content */}
-                {((contentView === 'threads' && filteredThreads.length === 0) ||
-                  (contentView === 'tweets' && individualTweets.length === 0)) && (
+                ) : (
                   <Card>
                     <CardContent className="p-8 text-center text-muted-foreground">
-                      No {contentView} found {selectedTimeRange !== 'all' && 'in this time range'}
+                      No posts found {selectedTimeRange !== 'all' && 'in this time range'}
                     </CardContent>
                   </Card>
                 )}
@@ -871,8 +839,8 @@ export const AccountDetail: React.FC = () => {
                 
                 <div className="pt-2 space-y-3 border-t">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Avg Tweets/Thread</span>
-                    <span className="text-sm font-bold bg-muted px-2 py-0.5 rounded">{avgTweetsPerThread}</span>
+                    <span className="text-sm text-muted-foreground">Avg Posts/Week</span>
+                    <span className="text-sm font-bold bg-muted px-2 py-0.5 rounded">{avgPostsPerWeek}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Posts This Week</span>
@@ -881,7 +849,7 @@ export const AccountDetail: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Success Rate</span>
                     <span className="text-sm font-bold bg-muted px-2 py-0.5 rounded">
-                      {totalTweets > 0 ? Math.round((totalPosted / totalTweets) * 100) : 0}%
+                      {totalPosts > 0 ? Math.round((totalPosted / totalPosts) * 100) : 0}%
                     </span>
                   </div>
                 </div>
@@ -896,7 +864,7 @@ export const AccountDetail: React.FC = () => {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Activity size={18} className="text-purple-500" />
-                  Recent Activity
+                  Recent Updates
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -909,7 +877,7 @@ export const AccountDetail: React.FC = () => {
                       )} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm line-clamp-1">
-                          {thread.tweet_count} tweet{thread.tweet_count !== 1 ? 's' : ''} posted
+                          {thread.tweet_count} post{thread.tweet_count !== 1 ? 's' : ''}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {formatChangeTime(thread.created_at)}
@@ -924,14 +892,14 @@ export const AccountDetail: React.FC = () => {
             {/* Quick Stats */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Thread Distribution</CardTitle>
+                <CardTitle className="text-base">Post Activity</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Single tweets</span>
+                    <span className="text-muted-foreground">Total Posts</span>
                     <span className="font-semibold">
-                      {threads.filter(t => t.tweet_count === 1).length}
+                      {threads.length + individualTweets.length}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">

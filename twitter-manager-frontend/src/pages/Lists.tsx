@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Users, Activity } from 'lucide-react';
+import { ArrowLeft, Users, Activity } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/common/Card';
 import { Button } from '../components/common/Button';
@@ -28,7 +28,6 @@ interface ListWithStats {
 export const Lists: React.FC = () => {
   const [lists, setLists] = useState<ListWithStats[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -74,20 +73,6 @@ export const Lists: React.FC = () => {
     }
   };
 
-  const handleSync = async () => {
-    try {
-      setSyncing(true);
-      // Call sync endpoint (you may need to implement this in the API client)
-      toast.success('Sync started successfully');
-      // Reload lists after sync
-      await loadLists();
-    } catch (error) {
-      toast.error('Failed to sync lists');
-      console.error('Sync error:', error);
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -118,23 +103,11 @@ export const Lists: React.FC = () => {
             </Button>
           </Link>
 
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-semibold">Org/Function Groups</h2>
-              <p className="text-muted-foreground mt-1">
-                Managing {lists.length} groups with {lists.reduce((sum, l) => sum + l.member_count, 0)} total brainlifts
-              </p>
-            </div>
-            
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleSync}
-              disabled={syncing}
-            >
-              <RefreshCw size={16} className={`mr-2 ${syncing ? 'animate-spin' : ''}`} />
-              Sync Groups
-            </Button>
+          <div>
+            <h2 className="text-2xl font-semibold">Org/Function Groups</h2>
+            <p className="text-muted-foreground mt-1">
+              Managing {lists.length} groups with {lists.reduce((sum, l) => sum + l.member_count, 0)} total brainlifts
+            </p>
           </div>
         </div>
 

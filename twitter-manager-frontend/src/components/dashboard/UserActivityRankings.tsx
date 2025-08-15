@@ -351,7 +351,7 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
           >
             <option value="all">All Brainlifts</option>
             {lists.length > 0 && (
-              <optgroup label="Lists">
+              <optgroup label="Org/Function">
                 {lists.map((list) => (
                   <option key={list.id} value={list.id}>
                     {list.name} ({list.member_count || 0})
@@ -425,7 +425,7 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
                       {/* Hover Tooltip */}
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
                         <span className="bg-gray-900/95 text-white text-xs px-3 py-1.5 rounded-lg shadow-xl backdrop-blur-sm">
-                          {user.total} posts ({user.posted} posted, {user.pending} pending)
+                          {user.total} posts
                         </span>
                       </div>
                     </div>

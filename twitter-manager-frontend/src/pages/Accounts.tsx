@@ -27,7 +27,7 @@ export const Accounts: React.FC = () => {
   }>({ lists: [], unassigned_accounts: [] });
   const [filteredAccounts, setFilteredAccounts] = useState<TwitterAccount[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortBy, setSortBy] = useState<'followers-desc' | 'followers-asc' | 'username' | 'displayName' | 'lastActive' | 'tweets' | 'threads' | 'activity' | 'onboarded-newest' | 'onboarded-oldest'>('followers-desc');
+  const [sortBy, setSortBy] = useState<'followers-desc' | 'followers-asc' | 'username' | 'displayName' | 'lastActive' | 'posts' | 'activity' | 'onboarded-newest' | 'onboarded-oldest'>('followers-desc');
   const [accountsPerPage, setAccountsPerPage] = useState(40);
 
   useEffect(() => {
@@ -74,16 +74,17 @@ export const Accounts: React.FC = () => {
           return dateB - dateA;
         });
         break;
-      case 'tweets':
-        sorted.sort((a, b) => (b.tweetCount || 0) - (a.tweetCount || 0));
-        break;
-      case 'threads':
-        sorted.sort((a, b) => (b.threadCount || 0) - (a.threadCount || 0));
+      case 'posts':
+        sorted.sort((a, b) => {
+          const postsA = a.postCount || ((a.tweetCount || 0) + (a.threadCount || 0));
+          const postsB = b.postCount || ((b.tweetCount || 0) + (b.threadCount || 0));
+          return postsB - postsA;
+        });
         break;
       case 'activity':
         sorted.sort((a, b) => {
-          const totalA = (a.tweetCount || 0) + (a.threadCount || 0);
-          const totalB = (b.tweetCount || 0) + (b.threadCount || 0);
+          const totalA = a.postCount || ((a.tweetCount || 0) + (a.threadCount || 0));
+          const totalB = b.postCount || ((b.tweetCount || 0) + (b.threadCount || 0));
           return totalB - totalA;
         });
         break;
@@ -352,8 +353,7 @@ export const Accounts: React.FC = () => {
               <option value="onboarded-oldest">Oldest Onboarded</option>
               <option value="lastActive">Most Recently Active</option>
               <option value="activity">Total Activity</option>
-              <option value="tweets">Most Tweets</option>
-              <option value="threads">Most Threads</option>
+              <option value="posts">Most Posts</option>
             </select>
           </div>
         </div>

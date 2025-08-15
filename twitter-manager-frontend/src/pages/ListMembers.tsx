@@ -266,7 +266,7 @@ export const ListMembers: React.FC = () => {
                           <p className="text-sm text-muted-foreground">Total Activity</p>
                           <p className="text-2xl font-bold mt-1">{formatNumber(totalActivity)}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {formatNumber(totalTweets)} tweets • {formatNumber(totalThreads)} threads
+                            {formatNumber(totalActivity)} posts
                           </p>
                         </div>
                         <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/20">

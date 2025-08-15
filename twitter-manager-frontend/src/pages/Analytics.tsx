@@ -15,7 +15,6 @@ interface AnalyticsData {
   performanceMetrics: any;
   topPerformers: any[];
   weeklyComparison: any;
-  engagementMetrics: any;
 }
 
 export const Analytics: React.FC = () => {
@@ -23,12 +22,11 @@ export const Analytics: React.FC = () => {
     activityTrends: [],
     performanceMetrics: {},
     topPerformers: [],
-    weeklyComparison: {},
-    engagementMetrics: {}
+    weeklyComparison: {}
   });
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('7D');
-  const [primaryMetric, setPrimaryMetric] = useState('activity');
+  const [primaryMetric, setPrimaryMetric] = useState('posts');
   const [secondaryMetric, setSecondaryMetric] = useState('none');
   const [chartType, setChartType] = useState('area');
 
@@ -85,11 +83,10 @@ export const Analytics: React.FC = () => {
       
       return {
         date: format(date, 'MMM dd'),
-        activity: dayTweets.length + dayThreads.length,
+        posts: dayTweets.length + dayThreads.length, // Combined posts metric
         tweets: dayTweets.length,
         threads: dayThreads.length,
-        posted: dayTweets.filter(t => t.status === 'posted').length,
-        engagement: Math.floor(Math.random() * 100) // Placeholder
+        posted: dayTweets.filter(t => t.status === 'posted').length
       };
     });
 
@@ -149,7 +146,7 @@ export const Analytics: React.FC = () => {
     };
 
     const weeklyComparison = {
-      activity: { current: thisWeekActivity, change: weeklyChange },
+      activity: { current: thisWeekActivity, change: Math.round(weeklyChange) },
       tweets: { 
         current: totalTweets,  // Show total tweets, not just this week
         change: 15 // Placeholder
@@ -160,22 +157,6 @@ export const Analytics: React.FC = () => {
       }
     };
 
-    const engagementMetrics = {
-      impressions: Math.floor(Math.random() * 10000),
-      impressionsChange: -54,
-      engagementRate: 31,
-      engagementRateChange: 396,
-      engagements: totalActivity,
-      engagementsChange: 125,
-      profileVisits: Math.floor(Math.random() * 100),
-      profileVisitsChange: -100,
-      replies: Math.floor(Math.random() * 50),
-      repliesChange: 106,
-      likes: Math.floor(Math.random() * 200),
-      reposts: Math.floor(Math.random() * 50),
-      bookmarks: Math.floor(Math.random() * 30),
-      shares: Math.floor(Math.random() * 20)
-    };
 
     // Top performers
     const userActivity = new Map<string, { tweets: number, threads: number, total: number, name: string }>();
@@ -205,8 +186,7 @@ export const Analytics: React.FC = () => {
       activityTrends,
       performanceMetrics,
       topPerformers,
-      weeklyComparison,
-      engagementMetrics
+      weeklyComparison
     };
   };
 
@@ -277,10 +257,7 @@ export const Analytics: React.FC = () => {
                   onChange={(e) => setPrimaryMetric(e.target.value)}
                   className="px-3 py-1.5 text-sm border rounded-lg bg-background"
                 >
-                  <option value="activity">Total Activity</option>
-                  <option value="tweets">Tweets</option>
-                  <option value="threads">Threads</option>
-                  <option value="engagement">Engagement</option>
+                  <option value="posts">Posts</option>
                 </select>
 
                 {/* Secondary Metric Selector */}
@@ -290,9 +267,6 @@ export const Analytics: React.FC = () => {
                   className="px-3 py-1.5 text-sm border rounded-lg bg-background text-muted-foreground"
                 >
                   <option value="none">Select secondary metric</option>
-                  <option value="tweets">Tweets</option>
-                  <option value="threads">Threads</option>
-                  <option value="engagement">Engagement</option>
                 </select>
               </div>
 
@@ -397,25 +371,21 @@ export const Analytics: React.FC = () => {
                   <XAxis dataKey="date" stroke="#9CA3AF" fontSize={10} />
                   <YAxis stroke="#9CA3AF" fontSize={10} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="activity" stroke="#8B5CF6" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="posts" stroke="#8B5CF6" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* Posts & Threads Bar Chart */}
+          {/* Posts Activity Bar Chart */}
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium">Posts & Threads</h3>
+                <h3 className="text-sm font-medium">Posts Activity</h3>
                 <div className="flex items-center gap-3 text-xs">
                   <span className="flex items-center gap-1">
                     <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                     Posts
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-pink-500 rounded-full"></div>
-                    Threads
                   </span>
                 </div>
               </div>
@@ -425,8 +395,7 @@ export const Analytics: React.FC = () => {
                   <XAxis dataKey="date" stroke="#9CA3AF" fontSize={10} />
                   <YAxis stroke="#9CA3AF" fontSize={10} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="tweets" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="threads" fill="#EC4899" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="posts" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -434,7 +403,7 @@ export const Analytics: React.FC = () => {
         </div>
 
         {/* Metrics Grid - Single Row */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Active Brainlifts */}
           <Card>
             <CardContent className="p-3">
@@ -446,43 +415,15 @@ export const Analytics: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Total Activity */}
+          {/* Posts */}
           <Card>
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground mb-1">Total Activity</p>
+              <p className="text-xs text-muted-foreground mb-1">Posts</p>
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold">{data.engagementMetrics.engagements}</span>
-                <span className={`text-xs flex items-center gap-0.5 ${getChangeColor(data.engagementMetrics.engagementsChange)}`}>
-                  {getChangeIcon(data.engagementMetrics.engagementsChange)}
-                  {Math.abs(data.engagementMetrics.engagementsChange)}%
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Tweets */}
-          <Card>
-            <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground mb-1">Tweets</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold">{data.weeklyComparison.tweets.current}</span>
-                <span className={`text-xs flex items-center gap-0.5 ${getChangeColor(data.weeklyComparison.tweets.change)}`}>
-                  {getChangeIcon(data.weeklyComparison.tweets.change)}
-                  {Math.abs(data.weeklyComparison.tweets.change)}%
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Threads */}
-          <Card>
-            <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground mb-1">Threads</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold">{data.weeklyComparison.threads.current}</span>
-                <span className={`text-xs flex items-center gap-0.5 ${getChangeColor(data.weeklyComparison.threads.change)}`}>
-                  {getChangeIcon(data.weeklyComparison.threads.change)}
-                  {Math.abs(data.weeklyComparison.threads.change)}%
+                <span className="text-2xl font-bold">{data.weeklyComparison.tweets.current + data.weeklyComparison.threads.current}</span>
+                <span className={`text-xs flex items-center gap-0.5 ${getChangeColor(data.weeklyComparison.activity.change)}`}>
+                  {getChangeIcon(data.weeklyComparison.activity.change)}
+                  {Math.round(Math.abs(data.weeklyComparison.activity.change))}%
                 </span>
               </div>
             </CardContent>
