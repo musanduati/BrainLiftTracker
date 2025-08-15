@@ -617,6 +617,24 @@ class TwitterAutoApprover {
             approvedFollowers: this.approvedFollowers
         };
     }
+
+    // Human-like delay with variation
+    async humanDelay(baseMs = 2000) {
+        // Add realistic variation (±30%)
+        const variation = 0.3;
+        const min = baseMs * (1 - variation);
+        const max = baseMs * (1 + variation);
+        const actualDelay = Math.random() * (max - min) + min;
+        
+        // Occasionally add longer pauses (humans get distracted)
+        if (Math.random() < 0.05) { // 5% chance
+            const extraDelay = Math.random() * 3000 + 1000; // 1-4 second pause
+            console.log('Taking a human-like pause...');
+            await this.sleep(extraDelay);
+        }
+        
+        await this.sleep(actualDelay);
+    }
 }
 
 // Create global instance
