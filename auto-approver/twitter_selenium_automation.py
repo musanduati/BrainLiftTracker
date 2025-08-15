@@ -1935,7 +1935,7 @@ class TwitterSeleniumAutomation:
             }
             
             response = requests.post(
-                f"{api_url}/api/v1/accounts/batch-update-followers",
+                f"{api_url}/accounts/batch-update-followers",
                 json=batch_data,
                 headers=headers,
                 timeout=30

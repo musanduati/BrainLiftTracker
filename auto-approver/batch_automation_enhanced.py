@@ -260,6 +260,7 @@ class WorkingEnhancedBatchAutomation:
                     # Monitor progress
                     last_count = 0
                     no_change_counter = 0
+                    approved_followers_data = []  # Store the data here
                     
                     while True:
                         time.sleep(5)
@@ -278,9 +279,25 @@ class WorkingEnhancedBatchAutomation:
                             
                             if not is_running or no_change_counter > 6:
                                 result['approved_count'] = current_count
+                                # ✅ RETRIEVE APPROVED FOLLOWERS HERE - BEFORE BROWSER CLOSES
+                                try:
+                                    approved_followers_data = automation.driver.execute_script("""
+                                        if (window.twitterAutoApprover && window.twitterAutoApprover.approvedFollowers) {
+                                            return window.twitterAutoApprover.approvedFollowers;
+                                        }
+                                        return [];
+                                    """)
+                                    print(f"{username} - [INFO] Retrieved {len(approved_followers_data)} approved followers for saving")
+                                except Exception as e:
+                                    print(f"{username} - [WARNING] Could not retrieve followers data: {e}")
+                                    approved_followers_data = []
+                                
                                 break
                         else:
                             break
+                    
+                    # Store data in automation object for later use
+                    automation._approved_followers_data = approved_followers_data
                     
                 except Exception as e:
                     print(f"{username} - [ERROR] Error in auto-approver: {str(e)}")
@@ -294,25 +311,16 @@ class WorkingEnhancedBatchAutomation:
             
             # Try to save approved followers to the API
             try:
-                if hasattr(automation, 'driver') and automation.driver:
-                    try:
-                        automation.driver.current_url
-                        
-                        approved_followers = automation.driver.execute_script("""
-                            if (window.approver && window.approver.approvedFollowers) {
-                                return window.approver.approvedFollowers;
-                            }
-                            return [];
-                        """)
-                        
-                        if approved_followers:
-                            print(f"{username} - [OK] Found {len(approved_followers)} approved followers to save")
-                            saved_count = automation.save_approved_followers_to_api(approved_followers)
-                            result['followers_saved'] = saved_count
-                        else:
-                            print(f"{username} - [INFO] No followers to save")
-                    except:
-                        print(f"{username} - [WARNING] Browser closed before followers could be retrieved")
+                # Use the stored data instead of trying to retrieve from closed browser
+                approved_followers = getattr(automation, '_approved_followers_data', [])
+                
+                if approved_followers:
+                    print(f"{username} - [OK] Found {len(approved_followers)} approved followers to save")
+                    saved_count = automation.save_approved_followers_to_api(approved_followers)
+                    result['followers_saved'] = saved_count
+                else:
+                    print(f"{username} - [INFO] No followers to save")
+                    
             except Exception as e:
                 print(f"{username} - [WARNING] Could not save followers: {str(e)}")
             
