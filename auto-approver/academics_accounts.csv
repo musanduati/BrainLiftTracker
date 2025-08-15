@@ -1,5 +1,5 @@
 username,password,email,max_approvals,delay_seconds
-@brainlift_k8alp,Kl41rM0n1t0r!,brainlift.monitor+alpha.k8.copy@trilogy.com,50,3
+@brainlift_k8alp,Kl41rM0n1t0r!,brainlift.monitor+alpha.k8@trilogy.com,50,3
 @brainlift_alph2,Kl41rM0n1t0r!,brainlift.monitor+alpha.k8-v2@trilogy.com,50,3
 @brainlift_alph3,Kl41rM0n1t0r!,brainlift.monitor+alpha.k8.v3@trilogy.com,50,3
 @brainlift_hsnov,Kl41rM0n1t0r!,brainlift.monitor+alpha.hs@trilogy.com,50,3
