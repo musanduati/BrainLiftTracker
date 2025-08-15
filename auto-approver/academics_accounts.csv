@@ -124,5 +124,4 @@ username,password,email,max_approvals,delay_seconds
 @brainlift_aplea,Kl41rM0n1t0r!,brainlift.monitor+ap.learning.metric@trilogy.com,50,3
 @brainlift_aphar,Kl41rM0n1t0r!,brainlift.monitor+ap.brainlift@trilogy.com,50,3
 @brainlift_apprt,Kl41rM0n1t0r!,brainlift.monitor+ap.practice.tests@trilogy.com,50,3
-@brainlift_phy1design,Kl41rM0n1t0r!,brainlift.monitor+ap.phy1.design@trilogy.com,50,3
 @brainlift_harsb,Kl41rM0n1t0r!,brainlift.monitor+hari.second.brain@trilogy.com,50,3
