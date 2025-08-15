@@ -21,6 +21,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from dotenv import load_dotenv
+from s3_session_manager import S3SessionManager
+from human_behavior import HumanBehavior
 
 # Load environment variables
 load_dotenv()
@@ -68,6 +70,12 @@ class TwitterSeleniumAutomation:
         # if not self.username or not self.password:
         #     raise ValueError("Twitter credentials not found in environment variables")
         
+        # Session management
+        self.session_manager = S3SessionManager()
+        
+        # Add to __init__ method:
+        self.human = None  # Will be initialized after driver setup
+        
     def setup_driver(self):
         """Set up the Selenium WebDriver with automatic driver management"""
         if self.browser_type == "chrome":
@@ -104,6 +112,90 @@ class TwitterSeleniumAutomation:
         except Exception as e:
             print(f"⚠️ Anti-detection script failed (continuing without it): {str(e)[:100]}")
             # Modern Chrome versions prevent this - continue without anti-detection
+        
+        # Initialize human behavior after driver is ready
+        self.human = HumanBehavior(self.driver)
+        
+        # Call this after driver setup
+        self.verify_stealth_working()
+
+    def verify_stealth_working(self, max_retries=3):
+        """Verify stealth measures are working, retry if needed"""
+        for attempt in range(max_retries):
+            try:
+                # Test webdriver detection
+                webdriver_detected = self.driver.execute_script("return navigator.webdriver")
+                
+                if webdriver_detected is None:
+                    print(f"✅ Stealth verification passed (attempt {attempt + 1})")
+                    return True
+                else:
+                    print(f"⚠️ Stealth failed (attempt {attempt + 1}), retrying...")
+                    # Re-apply stealth measures
+                    self.driver.execute_script("""
+                        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                        delete navigator.__proto__.webdriver;
+                    """)
+                    time.sleep(1)
+                    
+            except Exception as e:
+                print(f"⚠️ Stealth verification error (attempt {attempt + 1}): {e}")
+                
+        print("❌ Stealth verification failed after all retries")
+        return False
+
+    def login_to_twitter_with_human_behavior(self):
+        """Enhanced login with human-like behavior"""
+        print(f"\n🤖 Performing human-like login for @{self.username}")
+        
+        try:
+            self.driver.get("https://x.com/i/flow/login")
+            self.human.human_delay(2, 4)  # Page load time
+            
+            # Username field
+            username_input = self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'input[autocomplete="username"]'))
+            )
+            
+            # Human-like typing
+            self.human.realistic_click_delay()
+            self.human.human_type(username_input, self.username)
+            self.human.human_delay(0.5, 1.0)
+            
+            # Next button
+            next_button = self.driver.find_element(By.XPATH, "//span[text()='Next']/..")
+            self.human.realistic_click_delay()
+            next_button.click()
+            self.human.human_delay(2, 3)
+            
+            # Password field
+            password_input = self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name="password"]'))
+            )
+            
+            self.human.realistic_click_delay()
+            self.human.human_type(password_input, self.password)
+            self.human.human_delay(0.5, 1.0)
+            
+            # Login button
+            login_button = self.driver.find_element(By.XPATH, "//span[text()='Log in']/..")
+            self.human.realistic_click_delay()
+            login_button.click()
+            
+            # Wait and check for success
+            self.human.human_delay(3, 5)
+            
+            # Check if login was successful
+            if self.driver.current_url.find('home') != -1 or self.driver.current_url.find('twitter.com') != -1:
+                print(f"   ✅ Human-like login successful for @{self.username}")
+                return True
+            else:
+                # Handle 2FA if needed
+                return self.handle_auth_code_if_needed()
+                
+        except Exception as e:
+            print(f"   ❌ Human-like login failed: {str(e)}")
+            return False
 
     def login_to_twitter(self):
         """Log into Twitter using credentials"""
@@ -1874,7 +1966,7 @@ class TwitterSeleniumAutomation:
             self.setup_driver()
             
             # Login to Twitter
-            if not self.login_to_twitter():
+            if not self.login_with_session_management():
                 print(f"{self.username} - [ERROR] Failed to login to Twitter")
                 print(f"{self.username} - Please check:")
                 print(f"{self.username} - 1. Username and password in .env file")
@@ -2090,6 +2182,53 @@ class TwitterSeleniumAutomation:
         except Exception as e:
             print(f"{self.username} - [ERROR] Error retrieving verification code via IMAP: {str(e)}")
             return None
+
+    def login_with_session_management(self):
+        """Enhanced login that tries session restoration first"""
+        print(f"\n🔐 Attempting login for @{self.username}")
+        
+        # Clean up expired sessions first
+        if hasattr(self.session_manager, 'cleanup_expired_sessions'):
+            self.session_manager.cleanup_expired_sessions()
+        
+        # Try to restore existing session
+        if self.session_manager.load_session(self.username, self.driver):
+            print(f"   ✅ Session restored successfully for @{self.username}")
+            
+            # Verify we can access follow requests (basic functionality test)
+            try:
+                self.driver.get("https://x.com/follower_requests")
+                time.sleep(3)
+                
+                # Check if we're on the right page
+                if "follow" in self.driver.current_url.lower() or "follower" in self.driver.current_url.lower():
+                    print(f"   ✅ Session is fully functional for @{self.username}")
+                    return True
+                else:
+                    print(f"   ⚠️ Session restored but cannot access follow requests")
+            except Exception as e:
+                print(f"   ⚠️ Session verification failed: {str(e)}")
+        
+        # Fall back to normal login
+        print(f"   🔑 Performing fresh login for @{self.username}")
+        login_success = self.login_to_twitter()
+        
+        # NEW: If standard login fails, try human behavior as last resort
+        if not login_success:
+            print(f"   🤖 Standard login failed, trying human-like login for @{self.username}")
+            login_success = self.login_to_twitter_with_human_behavior()
+            
+            if login_success:
+                print(f"   ✅ Human-like login succeeded where standard failed!")
+            else:
+                print(f"   ❌ Both login methods failed for @{self.username}")
+        
+        if login_success:
+            # Save the new session
+            print(f"   💾 Saving new session for @{self.username}")
+            self.session_manager.save_session(self.username, self.driver)
+        
+        return login_success
 
 
 def main():
