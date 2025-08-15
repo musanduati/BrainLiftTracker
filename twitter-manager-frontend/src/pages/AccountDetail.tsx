@@ -164,24 +164,28 @@ export const AccountDetail: React.FC = () => {
   );
 
   // Stats calculations - use account stats if available, otherwise calculate from local data
-  const totalIndividualTweets = account?.stats?.standalone_tweets || individualTweets.length;
-  const totalThreads = account?.stats?.total_threads || threads.length;
+  const totalIndividualTweets = Number(account?.stats?.standalone_tweets) || individualTweets.length || 0;
+  const totalThreads = Number(account?.stats?.total_threads) || threads.length || 0;
   const totalPosts = totalIndividualTweets + totalThreads; // Combined posts count
   
   // Count posted items: individual tweets with status='posted' + threads where all tweets are posted
-  const postedTweets = individualTweets.filter(t => t.status === 'posted').length;
-  const postedThreads = threads.filter(t => t.posted_count > 0 && t.posted_count === t.tweet_count).length;
+  const postedTweets = (individualTweets || []).filter(t => t.status === 'posted').length || 0;
+  const postedThreads = (threads || []).filter(t => Number(t.posted_count) > 0 && Number(t.posted_count) === Number(t.tweet_count)).length || 0;
   const totalPosted = postedTweets + postedThreads;
 
   // Calculate engagement stats (mock data for now)
   const engagementRate = 2.4;
   const avgPostsPerWeek = totalPosts > 0 ? (totalPosts / 4).toFixed(1) : '0'; // Rough estimate for past 4 weeks
-  const postsThisWeek = threads.filter(t => {
-    const threadDate = new Date(t.created_at);
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    return threadDate >= weekAgo;
-  }).length;
+  const postsThisWeek = (threads || []).filter(t => {
+    try {
+      const threadDate = new Date(t.created_at);
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return threadDate >= weekAgo;
+    } catch (error) {
+      return false;
+    }
+  }).length || 0;
 
   // Advanced metrics calculations
   const last28DaysData = useMemo(() => {
@@ -189,19 +193,27 @@ export const AccountDetail: React.FC = () => {
       const date = subDays(new Date(), 27 - i);
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      const dayThreads = threads.filter(t => 
-        format(new Date(t.created_at), 'yyyy-MM-dd') === dateStr
-      );
+      const dayThreads = (threads || []).filter(t => {
+        try {
+          return format(new Date(t.created_at), 'yyyy-MM-dd') === dateStr;
+        } catch (error) {
+          return false;
+        }
+      });
       
-      const dayTweets = individualTweets.filter(t => 
-        format(new Date(t.createdAt), 'yyyy-MM-dd') === dateStr
-      );
+      const dayTweets = (individualTweets || []).filter(t => {
+        try {
+          return format(new Date(t.createdAt), 'yyyy-MM-dd') === dateStr;
+        } catch (error) {
+          return false;
+        }
+      });
       
       return {
         date: dateStr,
-        count: dayThreads.length + dayTweets.length,
-        threads: dayThreads.length,
-        tweets: dayTweets.length
+        count: (dayThreads.length || 0) + (dayTweets.length || 0),
+        threads: dayThreads.length || 0,
+        tweets: dayTweets.length || 0
       };
     });
     
@@ -218,11 +230,23 @@ export const AccountDetail: React.FC = () => {
       const date = subDays(today, i);
       const dateStr = format(date, 'yyyy-MM-dd');
       
-      const dayCount = threads.filter(t => 
-        format(new Date(t.created_at), 'yyyy-MM-dd') === dateStr
-      ).length + individualTweets.filter(t => 
-        format(new Date(t.createdAt), 'yyyy-MM-dd') === dateStr
-      ).length;
+      const threadsCount = (threads || []).filter(t => {
+        try {
+          return format(new Date(t.created_at), 'yyyy-MM-dd') === dateStr;
+        } catch (error) {
+          return false;
+        }
+      }).length || 0;
+      
+      const tweetsCount = (individualTweets || []).filter(t => {
+        try {
+          return format(new Date(t.createdAt), 'yyyy-MM-dd') === dateStr;
+        } catch (error) {
+          return false;
+        }
+      }).length || 0;
+      
+      const dayCount = threadsCount + tweetsCount;
       
       data.unshift({ date: dateStr, count: dayCount });
     }
@@ -232,21 +256,32 @@ export const AccountDetail: React.FC = () => {
 
   // Calculate posting consistency
   const postingConsistency = useMemo(() => {
-    const daysWithPosts = last28DaysData.filter(d => d.count > 0).length;
-    return Math.round((daysWithPosts / 28) * 100);
+    const daysWithPosts = (last28DaysData || []).filter(d => (d?.count || 0) > 0).length || 0;
+    return Math.round((daysWithPosts / 28) * 100) || 0;
   }, [last28DaysData]);
 
   // Calculate best posting hour (mock for now)
   const bestPostingHour = useMemo(() => {
-    const hours = threads.map(t => new Date(t.created_at).getHours());
+    const hours = (threads || []).map(t => {
+      try {
+        return new Date(t.created_at).getHours();
+      } catch (error) {
+        return null;
+      }
+    }).filter(hour => hour !== null);
+    
     if (hours.length === 0) return 14; // Default to 2 PM
     const hourCounts = hours.reduce((acc, hour) => {
-      acc[hour] = (acc[hour] || 0) + 1;
+      if (hour !== null) {
+        acc[hour] = (acc[hour] || 0) + 1;
+      }
       return acc;
     }, {} as Record<number, number>);
     
-    return parseInt(Object.entries(hourCounts)
-      .sort(([, a], [, b]) => b - a)[0]?.[0] || '14');
+    const bestHour = Object.entries(hourCounts)
+      .sort(([, a], [, b]) => b - a)[0]?.[0];
+    
+    return parseInt(bestHour || '14');
   }, [threads]);
 
   // Calculate streak
@@ -324,7 +359,7 @@ export const AccountDetail: React.FC = () => {
     </Card>
   );
 
-  const renderThreadTweet = (tweet: ThreadTweet, isLast: boolean = false) => (
+  const renderThreadTweet = (tweet: ThreadTweet, isLast: boolean = false, index: number = 0) => (
     <div className={cn(
       "relative",
       !isLast && "pb-6"
@@ -361,7 +396,7 @@ export const AccountDetail: React.FC = () => {
               {getStatusIcon(tweet.status)}
             </div>
             <Badge variant="outline" className="text-xs">
-              {tweet.position + 1}
+              {Number(tweet.position) >= 0 ? tweet.position + 1 : index + 1}
             </Badge>
           </div>
 
@@ -402,13 +437,13 @@ export const AccountDetail: React.FC = () => {
     }
 
     return (
-      <Card key={thread.thread_id} className="overflow-hidden hover:shadow-md transition-shadow">
+      <Card key={thread.thread_id} className="overflow-hidden hover:shadow-md transition-shadow" data-thread-id={thread.thread_id}>
         <button
           onClick={() => toggleThread(thread.thread_id)}
           className="w-full hover:bg-muted/30 transition-colors text-left"
         >
           <CardContent className="p-4">
-            <div className="flex items-start justify-between">
+            <div className="flex items-start">
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   {isExpanded ? (
@@ -419,9 +454,9 @@ export const AccountDetail: React.FC = () => {
                   <Hash size={16} className="text-blue-500" />
                   <h3 className="font-semibold line-clamp-1">{topic}</h3>
                   <div className="flex items-center gap-2 ml-auto">
-                    {thread.posted_count && thread.posted_count > 0 && (
+                    {Number(thread.posted_count) > 0 && (
                       <Badge variant="secondary" className="text-xs">
-                        {thread.posted_count || 0} posted
+                        {thread.posted_count} posted
                       </Badge>
                     )}
                   </div>
@@ -439,9 +474,10 @@ export const AccountDetail: React.FC = () => {
             <div className="space-y-0">
               {details.tweets && details.tweets
                 .filter(tweet => tweet.status !== 'failed')
+                .sort((a, b) => (Number(a.position) || 0) - (Number(b.position) || 0))
                 .map((tweet, index, filteredTweets) => (
                   <React.Fragment key={tweet.id || `tweet-${index}`}>
-                    {renderThreadTweet(tweet, index === filteredTweets.length - 1)}
+                    {renderThreadTweet(tweet, index === filteredTweets.length - 1, index)}
                   </React.Fragment>
                 )
               )}
