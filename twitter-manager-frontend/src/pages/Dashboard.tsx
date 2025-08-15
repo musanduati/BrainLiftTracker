@@ -10,21 +10,10 @@ import toast from 'react-hot-toast';
 import { TwitterAccount } from '../types';
 import { UserActivityRankings } from '../components/dashboard/UserActivityRankings';
 import { ListActivityRankings } from '../components/dashboard/ListActivityRankings';
-import { UserActivityStats } from '../components/dashboard/UserActivityStats';
 
 export const Dashboard: React.FC = () => {
   const { accounts, setAccounts, setTweets, setLoadingAccounts, setLoadingTweets } = useStore();
   const [inactiveAccounts, setInactiveAccounts] = useState<TwitterAccount[]>([]);
-  const [userActivityData, setUserActivityData] = useState<{
-    rankings: any[];
-    totalChanges: number;
-    selectedListId: string;
-    listName?: string;
-  }>({
-    rankings: [],
-    totalChanges: 0,
-    selectedListId: 'all'
-  });
 
   useEffect(() => {
     loadData();
@@ -35,25 +24,53 @@ export const Dashboard: React.FC = () => {
       setLoadingAccounts(true);
       setLoadingTweets(true);
 
-      const [accountsData, tweetsData, threadsData] = await Promise.all([
-        apiClient.getAccounts(),
-        apiClient.getTweets(),
-        apiClient.getThreads()
-      ]);
+      let accountsData: any[] = [];
+      let tweetsData: any[] = [];
+      let activeUsernames = new Set<string>();
 
-      // Filter accounts to only show those with tweets or threads
-      const accountsWithContent = accountsData.filter(account => {
-        const hasTweets = tweetsData.some((tweet: any) => tweet.username === account.username);
-        const hasThreads = threadsData.some((thread: any) => thread.account_username === account.username);
-        return hasTweets || hasThreads;
-      });
+      try {
+        // Try using the new posts endpoint
+        const [accounts, postsData, tweets] = await Promise.all([
+          apiClient.getAccounts(),
+          apiClient.getPosts(),
+          apiClient.getTweets() // Keep for backward compatibility
+        ]);
+        
+        accountsData = accounts;
+        tweetsData = tweets;
+        
+        // Use account_stats from posts endpoint to determine active accounts
+        activeUsernames = new Set(postsData.account_stats.map((stat: any) => stat.username));
+      } catch (error) {
+        // Fallback to old approach if posts endpoint is not available
+        const [accounts, tweets, threads] = await Promise.all([
+          apiClient.getAccounts(),
+          apiClient.getTweets(),
+          apiClient.getThreads()
+        ]);
+        
+        accountsData = accounts;
+        tweetsData = tweets;
+        
+        // Determine active accounts using old method
+        accountsData.forEach(account => {
+          const hasTweets = tweets.some((tweet: any) => tweet.username === account.username);
+          const hasThreads = threads.some((thread: any) => thread.account_username === account.username);
+          if (hasTweets || hasThreads) {
+            activeUsernames.add(account.username);
+          }
+        });
+      }
       
-      // Filter accounts without tweets or threads (inactive)
-      const accountsWithoutContent = accountsData.filter(account => {
-        const hasTweets = tweetsData.some((tweet: any) => tweet.username === account.username);
-        const hasThreads = threadsData.some((thread: any) => thread.account_username === account.username);
-        return !hasTweets && !hasThreads;
-      });
+      // Filter accounts to only show those with posts
+      const accountsWithContent = accountsData.filter(account => 
+        activeUsernames.has(account.username)
+      );
+      
+      // Filter accounts without posts (inactive)
+      const accountsWithoutContent = accountsData.filter(account => 
+        !activeUsernames.has(account.username)
+      );
 
       setAccounts(accountsWithContent);
       setTweets(tweetsData);
@@ -89,7 +106,7 @@ export const Dashboard: React.FC = () => {
     {
       title: 'Active Brainlifts',
       value: activeAccountsCount,
-      description: 'Brainlifts with tweets',
+      description: 'Brainlifts with posts',
       icon: TrendingUp,
       color: 'text-green-500',
       bgColor: 'bg-green-100 dark:bg-green-900/20',
@@ -98,7 +115,7 @@ export const Dashboard: React.FC = () => {
     {
       title: 'Inactive Brainlifts',
       value: inactiveAccountsCount,
-      description: 'No tweets posted',
+      description: 'No posts yet',
       icon: UserX,
       color: 'text-orange-500',
       bgColor: 'bg-orange-100 dark:bg-orange-900/20',
@@ -162,18 +179,12 @@ export const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Left Column - Brainlift Activity Rankings */}
           <div>
-            <UserActivityRankings onDataChange={setUserActivityData} />
+            <UserActivityRankings />
           </div>
           
-          {/* Right Column - List Activity Rankings and Brainlift Activity Stats */}
-          <div className="space-y-6">
+          {/* Right Column - List Activity Rankings */}
+          <div>
             <ListActivityRankings />
-            <UserActivityStats 
-              rankings={userActivityData.rankings}
-              totalChanges={userActivityData.totalChanges}
-              selectedListId={userActivityData.selectedListId}
-              listName={userActivityData.listName}
-            />
           </div>
         </div>
 

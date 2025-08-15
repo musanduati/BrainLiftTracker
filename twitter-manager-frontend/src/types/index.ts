@@ -10,6 +10,7 @@ export interface TwitterAccount {
   tweetCount?: number;  // Standalone tweets (changes not in threads)
   threadCount?: number;  // Number of threads
   threadTweetCount?: number;  // Number of tweets that are part of threads
+  postCount?: number;  // Total posts (tweets + threads combined)
   createdAt: string;
   lastActiveAt?: string;
   tokenExpiresAt?: string;

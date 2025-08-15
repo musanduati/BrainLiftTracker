@@ -108,6 +108,124 @@ def get_user_activity_rankings():
         'timestamp': datetime.now(UTC).isoformat()
     })
 
+@utils_bp.route('/api/v1/posts', methods=['GET'])
+@require_api_key
+def get_posts():
+    """Get unified posts data (tweets + threads)"""
+    conn = get_db()
+    
+    # Get all tweets
+    tweets = conn.execute('''
+        SELECT 
+            t.id,
+            t.username,
+            t.content,
+            t.status,
+            t.posted_at,
+            t.created_at,
+            t.thread_id,
+            'tweet' as post_type,
+            ta.display_name,
+            ta.profile_picture
+        FROM tweet t
+        LEFT JOIN twitter_account ta ON t.username = ta.username
+        ORDER BY t.created_at DESC
+    ''').fetchall()
+    
+    # Get all threads (grouped)
+    threads = conn.execute('''
+        SELECT 
+            thread_id,
+            account_username as username,
+            status,
+            posted_at,
+            created_at,
+            'thread' as post_type,
+            COUNT(*) as tweet_count,
+            ta.display_name,
+            ta.profile_picture
+        FROM thread
+        LEFT JOIN twitter_account ta ON thread.account_username = ta.username
+        GROUP BY thread_id
+        ORDER BY created_at DESC
+    ''').fetchall()
+    
+    # Combine into posts list
+    posts = []
+    
+    # Add tweets (excluding those that are part of threads)
+    for tweet in tweets:
+        if not tweet['thread_id']:  # Only standalone tweets
+            posts.append({
+                'id': f"tweet_{tweet['id']}",
+                'username': tweet['username'],
+                'display_name': tweet['display_name'],
+                'profile_picture': tweet['profile_picture'],
+                'content': tweet['content'],
+                'status': tweet['status'],
+                'post_type': 'tweet',
+                'posted_at': tweet['posted_at'],
+                'created_at': tweet['created_at']
+            })
+    
+    # Add threads as single posts
+    for thread in threads:
+        posts.append({
+            'id': f"thread_{thread['thread_id']}",
+            'username': thread['username'],
+            'display_name': thread['display_name'],
+            'profile_picture': thread['profile_picture'],
+            'content': f"Thread with {thread['tweet_count']} tweets",
+            'status': thread['status'],
+            'post_type': 'thread',
+            'tweet_count': thread['tweet_count'],
+            'posted_at': thread['posted_at'],
+            'created_at': thread['created_at']
+        })
+    
+    # Get statistics
+    total_posts = len(posts)
+    posted_count = len([p for p in posts if p['status'] == 'posted'])
+    pending_count = len([p for p in posts if p['status'] == 'pending'])
+    failed_count = len([p for p in posts if p['status'] == 'failed'])
+    
+    # Get per-account statistics
+    account_stats = {}
+    for post in posts:
+        username = post['username']
+        if username not in account_stats:
+            account_stats[username] = {
+                'username': username,
+                'display_name': post['display_name'],
+                'profile_picture': post['profile_picture'],
+                'total_posts': 0,
+                'posted': 0,
+                'pending': 0,
+                'failed': 0
+            }
+        
+        account_stats[username]['total_posts'] += 1
+        if post['status'] == 'posted':
+            account_stats[username]['posted'] += 1
+        elif post['status'] == 'pending':
+            account_stats[username]['pending'] += 1
+        elif post['status'] == 'failed':
+            account_stats[username]['failed'] += 1
+    
+    conn.close()
+    
+    return jsonify({
+        'posts': posts,
+        'stats': {
+            'total': total_posts,
+            'posted': posted_count,
+            'pending': pending_count,
+            'failed': failed_count
+        },
+        'account_stats': list(account_stats.values()),
+        'timestamp': datetime.now(UTC).isoformat()
+    })
+
 @utils_bp.route('/api/v1/rate-limits', methods=['GET'])
 @require_api_key
 def get_rate_limits():

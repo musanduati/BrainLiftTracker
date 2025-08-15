@@ -27,6 +27,16 @@ class ApiClient {
     );
   }
 
+  // Posts Management (unified tweets and threads)
+  async getPosts(): Promise<{
+    posts: any[],
+    stats: { total: number, posted: number, pending: number, failed: number },
+    account_stats: any[]
+  }> {
+    const { data } = await this.client.get('/posts');
+    return data;
+  }
+
   // Account Management
   async getAccounts(): Promise<TwitterAccount[]> {
     const { data } = await this.client.get<{ accounts: any[], total: number }>('/accounts');
@@ -41,6 +51,7 @@ class ApiClient {
       followerCount: account.followerCount || account.follower_count,
       tweetCount: account.tweet_count,
       threadCount: account.thread_count,
+      postCount: (account.tweet_count || 0) + (account.thread_count || 0), // Combined post count
       createdAt: account.created_at,
       lastActiveAt: account.last_active_at,
       tokenExpiresAt: account.token_expires_at,

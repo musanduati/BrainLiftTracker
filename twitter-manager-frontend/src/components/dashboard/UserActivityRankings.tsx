@@ -13,8 +13,7 @@ interface UserRanking {
   username: string;
   displayName: string;
   profilePicture: string;
-  tweetCount: number;
-  threadCount?: number;
+  postCount: number;
   totalActivity?: number;
   postedCount: number;
   pendingCount: number;
@@ -45,15 +44,81 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
   const loadData = async () => {
     try {
       setLoading(true);
-      const [, listsData, tweetsData, threadsData] = await Promise.all([
-        apiClient.getUserActivityRankings(),
-        apiClient.getAccountsByLists(),
-        apiClient.getTweets(),
-        apiClient.getThreads()
-      ]);
       
-      // Get ALL accounts with activity, not just top 10
-      const accounts = await apiClient.getAccounts();
+      // Try to use the new posts endpoint, fallback to old approach if not available
+      let postsData: any = { account_stats: [] };
+      let listsData: any;
+      let accounts: any[];
+      
+      try {
+        const [listsResponse, posts, accountsResponse] = await Promise.all([
+          apiClient.getAccountsByLists(),
+          apiClient.getPosts(),
+          apiClient.getAccounts()
+        ]);
+        postsData = posts;
+        listsData = listsResponse;
+        accounts = accountsResponse;
+      } catch (error: any) {
+        // Fallback to old approach if posts endpoint fails
+        const [listsResponse, accountsResponse, tweetsData, threadsData] = await Promise.all([
+          apiClient.getAccountsByLists(),
+          apiClient.getAccounts(),
+          apiClient.getTweets(),
+          apiClient.getThreads()
+        ]);
+        
+        listsData = listsResponse;
+        accounts = accountsResponse;
+        
+        // Build account_stats from tweets and threads data (old approach)
+        const statsMap = new Map<string, any>();
+        
+        // Process tweets
+        tweetsData.forEach((tweet: any) => {
+          if (!statsMap.has(tweet.username)) {
+            const account = accounts.find((a: any) => a.username === tweet.username);
+            statsMap.set(tweet.username, {
+              username: tweet.username,
+              display_name: account?.displayName || tweet.username,
+              profile_picture: account?.profilePicture,
+              total_posts: 0,
+              posted: 0,
+              pending: 0,
+              failed: 0
+            });
+          }
+          const stats = statsMap.get(tweet.username);
+          stats.total_posts++;
+          if (tweet.status === 'posted') stats.posted++;
+          else if (tweet.status === 'pending') stats.pending++;
+          else if (tweet.status === 'failed') stats.failed++;
+        });
+        
+        // Process threads
+        threadsData.forEach((thread: any) => {
+          const username = thread.account_username;
+          if (!statsMap.has(username)) {
+            const account = accounts.find((a: any) => a.username === username);
+            statsMap.set(username, {
+              username: username,
+              display_name: account?.displayName || username,
+              profile_picture: account?.profilePicture,
+              total_posts: 0,
+              posted: 0,
+              pending: 0,
+              failed: 0
+            });
+          }
+          const stats = statsMap.get(username);
+          stats.total_posts++;
+          if (thread.status === 'posted') stats.posted++;
+          else if (thread.status === 'pending') stats.pending++;
+          else if (thread.status === 'failed') stats.failed++;
+        });
+        
+        postsData = { account_stats: Array.from(statsMap.values()) };
+      }
       
       // Initialize list colors based on list IDs
       const listIds = (listsData.lists || []).map((list: any) => list.id);
@@ -67,36 +132,28 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
         });
       });
       
-      // Calculate activity for ALL brainlifts
-      const allUsersWithActivity = accounts.map((account: any) => {
-        const userTweets = tweetsData.filter((tweet: any) => tweet.username === account.username);
-        const userThreads = threadsData.filter((thread: any) => thread.account_username === account.username);
-        
-        const tweetCount = userTweets.length;
-        const threadCount = userThreads.length;
-        const totalActivity = tweetCount + threadCount;
-        const postedCount = userTweets.filter((t: any) => t.status === 'posted').length;
-        const pendingCount = userTweets.filter((t: any) => t.status === 'pending').length;
-        const failedCount = userTweets.filter((t: any) => t.status === 'failed').length;
-        
-        // Find which list this user belongs to
-        const listId = usernameToListId.get(account.username);
-        
-        return {
-          id: account.id,
-          username: account.username,
-          displayName: account.display_name || account.displayName || account.username,
-          profilePicture: account.profile_picture || account.profilePicture,
-          tweetCount,
-          threadCount,
-          totalActivity,
-          postedCount,
-          pendingCount,
-          failedCount,
-          rank: 0,
-          listId
-        };
-      }).filter((user: any) => user.totalActivity > 0) // Only include brainlifts with activity
+      // Use the account_stats from the posts endpoint for activity data
+      const allUsersWithActivity = (postsData.account_stats || [])
+        .map((stats: any) => {
+          const account = accounts.find((a: any) => a.username === stats.username);
+          // If no account found, create a minimal entry from stats
+          const accountId = account ? account.id : 0;
+          
+          return {
+            id: accountId,
+            username: stats.username,
+            displayName: stats.display_name || (account ? account.displayName : null) || stats.username,
+            profilePicture: stats.profile_picture || (account ? account.profilePicture : null),
+            postCount: stats.total_posts,
+            totalActivity: stats.total_posts,
+            postedCount: stats.posted,
+            pendingCount: stats.pending,
+            failedCount: stats.failed,
+            rank: 0,
+            listId: usernameToListId.get(stats.username)
+          };
+        })
+        .filter((user: any) => user.totalActivity > 0) // Only include brainlifts with posts
         .sort((a: any, b: any) => b.totalActivity - a.totalActivity); // Sort by activity
       
       // Add rank numbers
@@ -131,7 +188,7 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
         const memberUsernames = new Set((selectedList.members || []).map((m: any) => m.username));
         const filtered = allRankings.filter(user => memberUsernames.has(user.username));
         // Sort filtered results by activity to maintain ranking
-        filtered.sort((a, b) => (b.totalActivity || b.tweetCount) - (a.totalActivity || a.tweetCount));
+        filtered.sort((a, b) => (b.totalActivity || b.postCount) - (a.totalActivity || a.postCount));
         // Take top 10 from the filtered list
         setRankings(filtered.slice(0, 10));
       } else {
@@ -142,15 +199,14 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
   };
 
   // Calculate total activity to get percentages
-  const totalChanges = rankings.reduce((sum, user) => sum + (user.totalActivity || user.tweetCount), 0);
+  const totalChanges = rankings.reduce((sum, user) => sum + (user.totalActivity || user.postCount), 0);
 
   // Prepare data for the chart with percentages
   const chartData = rankings.map(user => {
-    const activityCount = user.totalActivity || user.tweetCount;
+    const activityCount = user.totalActivity || user.postCount;
     return {
       name: user.displayName || user.username,
-      tweets: user.tweetCount,
-      threads: user.threadCount || 0,
+      posts: user.postCount,
       total: activityCount,
       percentage: totalChanges > 0 ? Math.round((activityCount / totalChanges) * 100) : 0,
       posted: user.postedCount,
@@ -206,7 +262,7 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
             <Trophy size={20} className="text-yellow-500" />
             Brainlift Activity Rankings
           </CardTitle>
-          <CardDescription>Top 10 brainlifts by activity</CardDescription>
+          <CardDescription>Top 10 brainlifts by posts</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -231,7 +287,7 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
               </CardTitle>
               <CardDescription>
                 {selectedListId === 'all' 
-                  ? 'Top brainlifts by total activity' 
+                  ? 'Top brainlifts by total posts' 
                   : `Top brainlifts in ${lists.find(l => l.id === selectedListId)?.name || 'list'}`
                 }
               </CardDescription>
@@ -283,7 +339,7 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
             </CardTitle>
             <CardDescription>
               {selectedListId === 'all' 
-                ? 'Top brainlifts by total activity (tweets and threads)' 
+                ? 'Top brainlifts by total posts' 
                 : `Top users in ${lists.find(l => l.id === selectedListId)?.name || 'group'}`
               }
             </CardDescription>
@@ -369,7 +425,7 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
                       {/* Hover Tooltip */}
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
                         <span className="bg-gray-900/95 text-white text-xs px-3 py-1.5 rounded-lg shadow-xl backdrop-blur-sm">
-                          {user.threads > 0 ? `${user.total} total: ${user.tweets} tweets, ${user.threads} threads` : `${user.total} tweets`}
+                          {user.total} posts ({user.posted} posted, {user.pending} pending)
                         </span>
                       </div>
                     </div>

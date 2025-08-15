@@ -21,7 +21,7 @@ export const AccountCard: React.FC<AccountCardProps> = ({
     <div 
       className="cursor-pointer transition-transform hover:scale-[1.02] h-full"
       onClick={() => navigate(`/accounts/${account.id}`)}
-      title={`View ${account.displayName || account.username}'s tweets`}
+      title={`View ${account.displayName || account.username}'s posts`}
     >
       <Card className="relative overflow-hidden transition-all duration-200 hover:shadow-xl h-full flex flex-col">
         <CardContent className="p-4 flex-1 flex flex-col">
@@ -58,15 +58,11 @@ export const AccountCard: React.FC<AccountCardProps> = ({
             </p>
           </div>
 
-          {/* Stats - show tweets, threads, and followers */}
-          <div className="flex items-center gap-3 mt-3 text-xs">
+          {/* Stats - show posts and followers */}
+          <div className="flex items-center gap-4 mt-3 text-xs">
             <div className="text-center">
-              <p className="font-semibold text-base">{formatNumber(account.tweetCount || 0)}</p>
-              <p className="text-muted-foreground text-xs">Tweets</p>
-            </div>
-            <div className="text-center">
-              <p className="font-semibold text-base">{formatNumber(account.threadCount || 0)}</p>
-              <p className="text-muted-foreground text-xs">Threads</p>
+              <p className="font-semibold text-base">{formatNumber(account.postCount || (account.tweetCount || 0) + (account.threadCount || 0))}</p>
+              <p className="text-muted-foreground text-xs">Posts</p>
             </div>
             <div className="text-center">
               <p className="font-semibold text-base">{formatNumber(account.followerCount || 0)}</p>

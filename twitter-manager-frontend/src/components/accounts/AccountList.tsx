@@ -54,7 +54,7 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts }) => {
 
                 {/* Stats */}
                 <div className="space-y-1">
-                  {/* Followers and Threads in one line */}
+                  {/* Followers and Posts in one line */}
                   <div className="flex items-center justify-center gap-2 text-[10px]">
                     <div className="flex items-center">
                       <span className="font-semibold">{formatNumber(account.followerCount || 0)}</span>
@@ -62,8 +62,8 @@ export const AccountList: React.FC<AccountListProps> = ({ accounts }) => {
                     </div>
                     <span className="text-muted-foreground">·</span>
                     <div className="flex items-center">
-                      <span className="font-semibold">{formatNumber(account.threadCount || 0)}</span>
-                      <span className="text-muted-foreground ml-0.5">threads</span>
+                      <span className="font-semibold">{formatNumber(account.postCount || (account.tweetCount || 0) + (account.threadCount || 0))}</span>
+                      <span className="text-muted-foreground ml-0.5">posts</span>
                     </div>
                   </div>
                   
