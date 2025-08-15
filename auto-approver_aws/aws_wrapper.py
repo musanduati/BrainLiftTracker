@@ -13,11 +13,13 @@ import csv
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Dict, Any
 
 # Add auto-approver to path
 sys.path.append('/app/auto-approver')
 from batch_automation_enhanced import WorkingEnhancedBatchAutomation
 from email_service import AutomationEmailService
+from s3_session_manager import S3SessionManager
 
 class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
     def __init__(self):
@@ -44,6 +46,16 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
         else:
             print(f"   ⚠️ No recipients configured")
         
+        # Initialize session manager
+        self.session_manager = S3SessionManager(bucket_name=self.bucket_name)
+        print(f"💾 Session management: {'✅ Available' if self.session_manager.s3_available else '❌ Not available'}")
+        
+        # Clean up expired sessions at startup
+        if self.session_manager.s3_available:
+            cleaned = self.session_manager.cleanup_expired_sessions()
+            if cleaned > 0:
+                print(f"🧹 Cleaned up {cleaned} expired sessions at startup")
+    
     def load_accounts_from_csv_files(self):
         """Load accounts from CSV files (test or production)"""
         all_accounts = []
@@ -354,6 +366,24 @@ Full Traceback:
         except Exception as e:
             print(f"❌ Error sending error notification: {str(e)}")
             return False
+
+    def _get_session_statistics(self) -> Dict[str, Any]:
+        """Get session usage statistics"""
+        if not hasattr(self, 'session_manager') or not self.session_manager.s3_available:
+            return {'session_management': 'disabled'}
+        
+        try:
+            active_sessions = self.session_manager.list_sessions()
+            return {
+                'session_management': 'enabled',
+                'active_sessions_count': len(active_sessions),
+                'active_sessions': active_sessions
+            }
+        except Exception as e:
+            return {
+                'session_management': 'error',
+                'error': str(e)
+            }
 
 def main():
     """Main entry point"""
