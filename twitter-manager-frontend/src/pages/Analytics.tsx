@@ -27,7 +27,6 @@ export const Analytics: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState('7D');
   const [primaryMetric, setPrimaryMetric] = useState('posts');
-  const [secondaryMetric, setSecondaryMetric] = useState('none');
   const [chartType, setChartType] = useState('area');
 
   const dateRangeOptions = [
@@ -260,14 +259,6 @@ export const Analytics: React.FC = () => {
                   <option value="posts">Posts</option>
                 </select>
 
-                {/* Secondary Metric Selector */}
-                <select
-                  value={secondaryMetric}
-                  onChange={(e) => setSecondaryMetric(e.target.value)}
-                  className="px-3 py-1.5 text-sm border rounded-lg bg-background text-muted-foreground"
-                >
-                  <option value="none">Select secondary metric</option>
-                </select>
               </div>
 
               <div className="flex items-center gap-2">
@@ -331,15 +322,6 @@ export const Analytics: React.FC = () => {
                     fill="url(#primaryGradient)" 
                     strokeWidth={2}
                   />
-                  {secondaryMetric !== 'none' && (
-                    <Area 
-                      type="monotone" 
-                      dataKey={secondaryMetric} 
-                      stroke="#EC4899" 
-                      fill="url(#secondaryGradient)" 
-                      strokeWidth={2}
-                    />
-                  )}
                 </AreaChart>
               ) : (
                 <BarChart data={data.activityTrends}>
@@ -348,9 +330,6 @@ export const Analytics: React.FC = () => {
                   <YAxis stroke="#9CA3AF" fontSize={11} />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar dataKey={primaryMetric} fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                  {secondaryMetric !== 'none' && (
-                    <Bar dataKey={secondaryMetric} fill="#EC4899" radius={[4, 4, 0, 0]} />
-                  )}
                 </BarChart>
               )}
             </ResponsiveContainer>

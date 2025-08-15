@@ -889,34 +889,6 @@ export const AccountDetail: React.FC = () => {
               </CardContent>
             </Card>
 
-            {/* Quick Stats */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Post Activity</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Total Posts</span>
-                    <span className="font-semibold">
-                      {threads.length + individualTweets.length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Short threads (2-5)</span>
-                    <span className="font-semibold">
-                      {threads.filter(t => t.tweet_count >= 2 && t.tweet_count <= 5).length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Long threads (6+)</span>
-                    <span className="font-semibold">
-                      {threads.filter(t => t.tweet_count > 5).length}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </div>
