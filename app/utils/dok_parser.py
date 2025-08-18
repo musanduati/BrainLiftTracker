@@ -12,6 +12,8 @@ def parse_dok_metadata(tweet_content):
     Looks for patterns like:
     - ADDED: DOK3: ...
     - DELETED: DOK4: ...
+    - 🟢 ADDED: DOK3: ...
+    - ❌ DELETED: DOK4: ...
     
     Args:
         tweet_content (str): The tweet text content
@@ -23,8 +25,11 @@ def parse_dok_metadata(tweet_content):
         >>> parse_dok_metadata("ADDED: DOK3: New feature implemented")
         ('DOK3', 'ADDED')
         
-        >>> parse_dok_metadata("DELETED: DOK4: Removed old functionality")
-        ('DOK4', 'DELETED')
+        >>> parse_dok_metadata("🟢 ADDED: DOK4: New feature with emoji")
+        ('DOK4', 'ADDED')
+        
+        >>> parse_dok_metadata("❌ DELETED: DOK3: Removed functionality")
+        ('DOK3', 'DELETED')
         
         >>> parse_dok_metadata("Regular tweet without DOK info")
         (None, None)
@@ -32,8 +37,9 @@ def parse_dok_metadata(tweet_content):
     if not tweet_content:
         return None, None
     
-    # Pattern to match ADDED/DELETED: DOK3/DOK4: at start of tweet
-    pattern = r'^(ADDED|DELETED):\s+(DOK[34]):'
+    # Pattern to match optional emoji + ADDED/DELETED: DOK3/DOK4: at start of tweet
+    # Handles: "ADDED: DOK3:", "🟢 ADDED: DOK4:", "❌ DELETED: DOK3:", etc.
+    pattern = r'^(?:[🟢❌]\s*)?(ADDED|DELETED):\s+(DOK[34]):'
     
     match = re.match(pattern, tweet_content.strip())
     if match:
