@@ -195,12 +195,37 @@ def get_all_accounts_dok_summary(conn):
         }
         accounts.append(account)
     
+    # Calculate aggregated summary for all accounts
+    total_changes = sum(acc['total_dok_changes'] for acc in accounts)
+    
+    # Aggregate DOK3 changes
+    dok3_total_added = sum(acc['dok3_changes']['added'] for acc in accounts)
+    dok3_total_updated = sum(acc['dok3_changes']['updated'] for acc in accounts)
+    dok3_total_deleted = sum(acc['dok3_changes']['deleted'] for acc in accounts)
+    dok3_total = dok3_total_added + dok3_total_updated + dok3_total_deleted
+    
+    # Aggregate DOK4 changes  
+    dok4_total_added = sum(acc['dok4_changes']['added'] for acc in accounts)
+    dok4_total_updated = sum(acc['dok4_changes']['updated'] for acc in accounts)
+    dok4_total_deleted = sum(acc['dok4_changes']['deleted'] for acc in accounts)
+    dok4_total = dok4_total_added + dok4_total_updated + dok4_total_deleted
+    
     return {
         'accounts': accounts,
         'summary': {
             'total_accounts': len(accounts),
-            'total_dok_changes': sum(acc['total_dok_changes'] for acc in accounts),
-            'total_dok3_changes': sum(acc['dok3_changes']['total'] for acc in accounts),
-            'total_dok4_changes': sum(acc['dok4_changes']['total'] for acc in accounts)
+            'total_changes': total_changes,
+            'dok3_changes': {
+                'added': dok3_total_added,
+                'updated': dok3_total_updated,
+                'deleted': dok3_total_deleted,
+                'total': dok3_total
+            },
+            'dok4_changes': {
+                'added': dok4_total_added,
+                'updated': dok4_total_updated,  
+                'deleted': dok4_total_deleted,
+                'total': dok4_total
+            }
         }
     }
