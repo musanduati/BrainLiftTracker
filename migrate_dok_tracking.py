@@ -63,9 +63,9 @@ def add_dok_columns(conn, dry_run=False):
 
 def parse_dok_metadata(tweet_content):
     """Parse DOK metadata from tweet content (same as main app)"""
-    # Pattern to match optional emoji + ADDED/DELETED/UPDATED: DOK3/DOK4: at start of tweet
-    # Handles: "ADDED: DOK3:", "🟢 ADDED: DOK4:", "❌ DELETED: DOK3:", "🔄 UPDATED: DOK4:", etc.
-    pattern = r'^(?:[🟢❌🔄]\s*)?(ADDED|DELETED|UPDATED):\s+(DOK[34]):'
+    # Pattern to match optional emoji + ADDED/DELETED/UPDATED: DOK3/DOK4 at start of tweet
+    # Handles: "ADDED: DOK3:", "🟢 ADDED: DOK4:", "❌ DELETED: DOK3:", "🔄 UPDATED: DOK4 (similarity):", etc.
+    pattern = r'^(?:[🟢❌🔄]\s*)?(ADDED|DELETED|UPDATED):\s+(DOK[34])(?:\s*\([^)]*\))?:'
     match = re.match(pattern, tweet_content.strip())
     if match:
         change_type = match.group(1)  # ADDED, DELETED, or UPDATED
