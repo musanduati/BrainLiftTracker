@@ -139,9 +139,7 @@ batch_report_*.json
 verify_migration.py
 
 # Markdown files
-*.md
-postman.md
-prodsetup.md
+markdowns/
 
 # Claude AI settings
 .claude/
