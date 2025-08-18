@@ -57,7 +57,6 @@ class AutomationEmailService:
             'successful_accounts': summary.get('successful_accounts', 0),
             'failed_accounts': summary.get('failed_accounts', 0),
             'total_approvals': summary.get('total_approvals', 0),
-            'total_followers_saved': summary.get('total_followers_saved', 0),
             'success_rate': 0,
             'auth_stats': {},
             'top_performers': [],
@@ -146,7 +145,7 @@ class AutomationEmailService:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
     <meta name="supported-color-schemes" content="light dark">
-    <title>Twitter Automation Results</title>
+    <title>Twitter Approval Automation Results</title>
     <style>
         /* Dark mode compatibility */
         :root {{
@@ -282,13 +281,13 @@ class AutomationEmailService:
             border-radius: 6px;
             text-align: center;
             border: 1px solid #e9ecef;
-            -webkit-box-flex: 1;
-            -webkit-flex: 1 1 140px;
-            -moz-box-flex: 1;
-            -ms-flex: 1 1 140px;
-            flex: 1 1 140px;
-            min-width: 140px;
-            max-width: 180px;
+            -webkit-box-flex: 0;
+            -webkit-flex: 0 0 160px;
+            -moz-box-flex: 0;
+            -ms-flex: 0 0 160px;
+            flex: 0 0 160px;
+            min-width: 160px;
+            max-width: 160px;
             margin: 5px;
         }}
         .stat-number {{
@@ -415,7 +414,7 @@ class AutomationEmailService:
 <body>
     <div class="container">
         <div class="header">
-            <h1>🐦 Twitter Automation Results</h1>
+            <h1>🐦 Twitter Approval Automation Results</h1>
             <div class="subtitle">Batch ID: {batch_id} | {execution_mode} Mode</div>
         </div>
         
@@ -442,34 +441,8 @@ class AutomationEmailService:
                     <span class="stat-number">{stats['total_approvals']}</span>
                     <div class="stat-label">Total Approvals</div>
                 </div>
-                <div class="stat-card">
-                    <span class="stat-number">{stats['total_followers_saved']}</span>
-                    <div class="stat-label">Followers Saved</div>
-                </div>
             </div>
         '''
-        
-        # Top Performers Section
-        if stats['top_performers']:
-            html_content += '''
-            <div class="section">
-                <h3>🏆 Top Performing Accounts</h3>
-                <div class="account-list">
-            '''
-            for account in stats['top_performers']:
-                username = account.get('username', 'Unknown')
-                approved = account.get('approved_count', 0)
-                duration = self._format_duration(account.get('duration_seconds', 0))
-                html_content += f'''
-                    <div class="account-item">
-                        <div>
-                            <div class="account-name">@{username}</div>
-                            <div class="account-stats">{duration}</div>
-                        </div>
-                        <div class="success-text">{approved} approvals</div>
-                    </div>
-                '''
-            html_content += '</div></div>'
         
         # Failed Accounts Section
         if stats['failed_accounts_details']:
@@ -586,7 +559,7 @@ class AutomationEmailService:
         
         text_content = f"""
 ==========================================
-TWITTER AUTOMATION RESULTS
+TWITTER APPROVAL AUTOMATION RESULTS
 ==========================================
 
 Batch ID: {batch_id}
@@ -604,29 +577,16 @@ Failed Accounts: {stats['failed_accounts']}
 Success Rate: {stats['success_rate']}%
 
 Total Follow Requests Approved: {stats['total_approvals']}
-Total Followers Saved to Database: {stats['total_followers_saved']}
 
-==========================================
-TOP PERFORMING ACCOUNTS
-==========================================
-"""
-        
-        for i, account in enumerate(stats['top_performers'], 1):
-            username = account.get('username', 'Unknown')
-            approved = account.get('approved_count', 0)
-            duration = self._format_duration(account.get('duration_seconds', 0))
-            text_content += f"{i}. @{username}: {approved} approvals ({duration})\n"
-        
-        if stats['failed_accounts_details']:
-            text_content += f"""
 ==========================================
 FAILED ACCOUNTS ({len(stats['failed_accounts_details'])})
 ==========================================
 """
-            for account in stats['failed_accounts_details']:
-                username = account.get('username', 'Unknown')
-                error = account.get('error', 'Unknown error')
-                text_content += f"• @{username}: {error}\n"
+        
+        for account in stats['failed_accounts_details']:
+            username = account.get('username', 'Unknown')
+            error = account.get('error', 'Unknown error')
+            text_content += f"• @{username}: {error}\n"
         
         # Authentication Statistics
         auth_stats = stats['auth_stats']
@@ -813,7 +773,6 @@ def test_email_service():
             'successful_accounts': 2,
             'failed_accounts': 1,
             'total_approvals': 15,
-            'total_followers_saved': 12
         },
         'detailed_results': [
             {
