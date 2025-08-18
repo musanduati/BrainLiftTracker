@@ -321,20 +321,43 @@ class LMService:
     def _fallback_to_pattern_matching(self, query: str) -> str:
         """Fallback to pattern matching when LLM fails"""
         try:
-            # Extract node name and nodes from query
+            # Extract node name and nodes from query - handle both old and new formats
             query_lines = query.split('\n')
             if len(query_lines) >= 2:
-                node_to_find = query_lines[0].replace("Node to find: ", "").strip()
-                nodes_str = query_lines[1].replace("List of nodes: ", "").strip()
+                # Handle both "Node to find:" and "Node type to find:" formats
+                first_line = query_lines[0]
+                if "Node to find:" in first_line:
+                    node_to_find = first_line.replace("Node to find:", "").strip()
+                elif "Node type to find:" in first_line:
+                    node_to_find = first_line.replace("Node type to find:", "").strip()
+                else:
+                    logger.warning(f"Unknown query format: {first_line}")
+                    return ""
                 
-                nodes = ast.literal_eval(nodes_str)
+                # Handle both "List of nodes:" and "list of nodes:" formats  
+                second_line = query_lines[1]
+                if "List of nodes:" in second_line:
+                    nodes_str = second_line.replace("List of nodes:", "").strip()
+                elif "list of nodes:" in second_line:
+                    nodes_str = second_line.replace("list of nodes:", "").strip()
+                else:
+                    logger.warning(f"Unknown nodes format: {second_line}")
+                    return ""
                 
-                # Use the existing fallback logic
+                # Parse the nodes safely
+                try:
+                    nodes = ast.literal_eval(nodes_str)
+                except (ValueError, SyntaxError) as e:
+                    logger.error(f"Failed to parse nodes string: {repr(nodes_str)}, error: {e}")
+                    return ""
+                
+                # Use the existing fallback logic (single node)
                 result = _fallback_node_matching(node_to_find, nodes)
                 logger.info("Fallback pattern matching returned: %s", result)
                 return result or ""
+                
         except Exception as e:
-            logger.error("Fallback pattern matching also failed: %s", e)
+            logger.error("Fallback pattern matching failed: %s", e)
         
         return ""
 
