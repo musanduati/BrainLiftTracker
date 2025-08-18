@@ -97,6 +97,85 @@ export interface ListMembership {
   addedAt: string;
 }
 
+// DOK Analytics Types
+export interface DOKBreakdown {
+  dok3: {
+    added: number;
+    deleted: number;
+    updated: number;
+    total: number;
+    percentage: number;
+  };
+  dok4: {
+    added: number;
+    deleted: number;
+    updated: number;
+    total: number;
+    percentage: number;
+  };
+}
+
+export interface DOKProgressBarData {
+  account: {
+    id: number;
+    username: string;
+    display_name: string;
+  };
+  overview: {
+    total_tweets: number;
+    total_changes: number;
+    change_percentage: number;
+  };
+  dok_breakdown: DOKBreakdown;
+  change_breakdown: {
+    added: number;
+    deleted: number;
+    updated: number;
+  };
+}
+
+export interface DOKSummary {
+  accounts: Array<{
+    id: number;
+    username: string;
+    display_name: string;
+    total_tweets: number;
+    dok_tweets: number;
+    dok3_changes: {
+      added: number;
+      deleted: number;
+      total: number;
+    };
+    dok4_changes: {
+      added: number;
+      deleted: number;
+      total: number;
+    };
+    total_dok_changes: number;
+  }>;
+  summary: {
+    total_accounts: number;
+    total_dok_changes: number;
+    total_dok3_changes: number;
+    total_dok4_changes: number;
+  };
+}
+
+export interface UserRankingWithDOK {
+  rank: number;
+  id: number;
+  username: string;
+  displayName: string;
+  profilePicture: string;
+  postCount: number;
+  totalActivity?: number;
+  postedCount: number;
+  pendingCount: number;
+  failedCount: number;
+  listId?: string;
+  dokBreakdown?: DOKBreakdown;
+}
+
 export interface ThreadTweet {
   id: number;
   content: string;

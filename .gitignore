@@ -140,6 +140,7 @@ verify_migration.py
 
 # Markdown files
 *.md
+postman.md
 
 # Claude AI settings
 .claude/

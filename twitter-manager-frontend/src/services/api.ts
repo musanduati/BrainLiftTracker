@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import { ApiResponse, TwitterAccount, Tweet, TokenHealth, BatchPostRequest, TwitterList, Thread } from '../types';
+import { ApiResponse, TwitterAccount, Tweet, TokenHealth, BatchPostRequest, TwitterList, Thread, DOKProgressBarData, DOKSummary } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5555/api/v1';
 const API_KEY = import.meta.env.VITE_API_KEY || '';
@@ -383,6 +383,65 @@ class ApiClient {
     };
   }> {
     const { data } = await this.client.get('/accounts/by-lists');
+    return data;
+  }
+
+  // DOK Analytics Methods
+  async getDOKSummary(): Promise<DOKSummary> {
+    const { data } = await this.client.get('/analytics/dok-summary');
+    return data;
+  }
+
+  async getDOKProgressBar(accountId: number): Promise<DOKProgressBarData> {
+    const { data } = await this.client.get(`/analytics/progress-bar/${accountId}`);
+    return data;
+  }
+
+  async getDOKProgressBarBatch(accountIds: number[]): Promise<DOKProgressBarData[]> {
+    // Batch fetch DOK progress data for multiple accounts
+    const promises = accountIds.map(id => 
+      this.getDOKProgressBar(id).catch(() => null)
+    );
+    const results = await Promise.all(promises);
+    return results.filter((data): data is DOKProgressBarData => data !== null);
+  }
+
+  async getDOKAccountSummary(accountId: number, startDate?: string, endDate?: string): Promise<any> {
+    const params = new URLSearchParams();
+    if (startDate) params.append('start_date', startDate);
+    if (endDate) params.append('end_date', endDate);
+    
+    const queryString = params.toString();
+    const url = `/analytics/dok-summary/${accountId}${queryString ? `?${queryString}` : ''}`;
+    const { data } = await this.client.get(url);
+    return data;
+  }
+
+  async getDOKTimeline(accountId: number): Promise<any> {
+    const { data } = await this.client.get(`/analytics/dok-timeline/${accountId}`);
+    return data;
+  }
+
+  async getDOKLeaderboard(): Promise<any> {
+    const { data } = await this.client.get('/analytics/dok-leaderboard');
+    return data;
+  }
+
+  async searchDOKTweets(params: {
+    dok_type?: 'DOK3' | 'DOK4';
+    change_type?: 'ADDED' | 'DELETED';
+    account_id?: number;
+    limit?: number;
+  }): Promise<any> {
+    const queryParams = new URLSearchParams();
+    if (params.dok_type) queryParams.append('dok_type', params.dok_type);
+    if (params.change_type) queryParams.append('change_type', params.change_type);
+    if (params.account_id) queryParams.append('account_id', params.account_id.toString());
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    
+    const queryString = queryParams.toString();
+    const url = `/analytics/dok-search${queryString ? `?${queryString}` : ''}`;
+    const { data } = await this.client.get(url);
     return data;
   }
 }

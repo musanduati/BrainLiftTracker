@@ -11,6 +11,7 @@ import { Lists } from './pages/Lists';
 import { ListMembers } from './pages/ListMembers';
 import { useStore } from './store/useStore';
 import { notificationPoller } from './services/notificationPoller';
+import { DOKProgressBarTest } from './components/test/DOKProgressBarTest';
 
 // Lazy load the Analytics page to reduce initial bundle size
 const Analytics = lazy(() => import('./pages/Analytics').then(module => ({ default: module.Analytics })));
@@ -76,6 +77,8 @@ function App() {
                 <Analytics />
               </Suspense>
             } />
+            {/* DOK Test Route - For Development Only */}
+            <Route path="test/dok-progress" element={<DOKProgressBarTest />} />
           </Route>
         </Routes>
       </BrowserRouter>

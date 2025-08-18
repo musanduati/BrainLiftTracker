@@ -1,7 +1,6 @@
 """
 Twitter Manager API - Modular Architecture
-This file now serves as the entry point for the modularized application.
-The original monolithic version is preserved in app_original.py
+This file serves as the entry point for the modularized application.
 """
 
 import os
@@ -31,6 +30,6 @@ if __name__ == '__main__':
     print("  GET  /api/v1/accounts/<id> - Get account details")
     print("  POST /api/v1/accounts/<id>/refresh-token - Refresh token")
     print("  GET  /api/v1/accounts/token-health - Check token health")
-    print("\nNote: Additional endpoints are being migrated. Use app_original.py for full functionality.")
+    print("\nNote: All endpoints have been migrated to the modular architecture.")
     
     app.run(host='0.0.0.0', port=5555, debug=True)
