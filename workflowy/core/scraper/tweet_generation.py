@@ -38,18 +38,31 @@ def convert_markdown_urls_to_plain(text: str) -> str:
 def create_combined_content(main_content: str, sub_points: List[str]) -> str:
     """
     Combine main point with sub-points into one text block.
+    Returns empty string if no meaningful content exists.
     
     Args:
         main_content: Main content text
         sub_points: List of sub-points
         
     Returns:
-        Combined content string
+        Combined content string, or empty string if no meaningful content
     """
-    combined = main_content
+    # Filter out empty or whitespace-only content
+    clean_main = main_content.strip() if main_content else ""
+    clean_sub_points = [sub.strip() for sub in sub_points if sub.strip()] if sub_points else []
     
-    if sub_points:
-        for sub_point in sub_points:
+    # If no meaningful content exists, return empty string
+    if not clean_main and not clean_sub_points:
+        return ""
+        
+    # If main content is too short to be meaningful, skip
+    if clean_main and len(clean_main) < 2:
+        clean_main = ""
+    
+    combined = clean_main
+    
+    if clean_sub_points:
+        for sub_point in clean_sub_points:
             combined += f" {sub_point}"
     
     return combined.strip()
@@ -118,21 +131,24 @@ def split_content_for_twitter(content: str, max_chars: int = 230) -> List[str]:
 def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: bool = False) -> List[Dict]:
     """
     Generate tweets with advanced change detection information.
-    
-    Args:
-        changes: Dictionary containing added/updated/deleted changes
-        section: Section name (e.g., "DOK4", "DOK3")
-        is_first_run: Whether this is the first run for the project
-        
-    Returns:
-        List of tweet dictionaries with formatted content
+    Now filters out empty content to prevent meaningless tweets.
     """
     tweets = []
     timestamp = datetime.now().isoformat()
     
+    def should_create_tweet(point: Dict) -> bool:
+        """Check if a point has enough content to warrant a tweet."""
+        combined_content = create_combined_content(point["main_content"], point["sub_points"])
+        return len(combined_content.strip()) > 0
+    
     # Handle first run - all content is "added"
     if is_first_run:
         for point in changes.get("added", []):
+            # Skip empty points
+            if not should_create_tweet(point):
+                logger.info(f"⏭️ Skipping empty {section} point {point.get('point_number', '?')}")
+                continue
+                
             combined_content = create_combined_content(point["main_content"], point["sub_points"])
             content_chunks = split_content_for_twitter(combined_content)
             
@@ -176,6 +192,11 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
     
     # Added points (completely new)
     for point in changes.get("added", []):
+        # Skip empty points
+        if not should_create_tweet(point):
+            logger.info(f"⏭️ Skipping empty {section} point {point.get('point_number', '?')}")
+            continue
+            
         combined_content = create_combined_content(point["main_content"], point["sub_points"])
         content_chunks = split_content_for_twitter(combined_content)
         
@@ -207,6 +228,11 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
         similarity_score = update_info.get("similarity_score", 0)
         change_details = update_info.get("change_details", {})
         
+        # Skip empty points
+        if not should_create_tweet(current_point):
+            logger.info(f"⏭️ Skipping empty {section} point {current_point.get('point_number', '?')}")
+            continue
+            
         combined_content = create_combined_content(current_point["main_content"], current_point["sub_points"])
         content_chunks = split_content_for_twitter(combined_content)
         
@@ -244,6 +270,11 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
     
     # Deleted points
     for point in changes.get("deleted", []):
+        # Skip empty points
+        if not should_create_tweet(point):
+            logger.info(f"⏭️ Skipping empty {section} point {point.get('point_number', '?')}")
+            continue
+            
         combined_content = create_combined_content(point["main_content"], point["sub_points"])
         content_chunks = split_content_for_twitter(combined_content)
         
