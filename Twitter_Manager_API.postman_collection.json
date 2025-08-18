@@ -4415,6 +4415,165 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "DOK Analytics",
+			"item": [
+				{
+					"name": "Get DOK Summary (All Accounts)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/analytics/dok-summary",
+							"host": ["{{base_url}}"],
+							"path": ["analytics", "dok-summary"]
+						},
+						"description": "Get overall DOK statistics across all accounts"
+					},
+					"response": []
+				},
+				{
+					"name": "Get DOK Summary (Specific Account)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/analytics/dok-summary/{{account_id}}?start_date={{start_date}}&end_date={{end_date}}",
+							"host": ["{{base_url}}"],
+							"path": ["analytics", "dok-summary", "{{account_id}}"],
+							"query": [
+								{
+									"key": "start_date",
+									"value": "{{start_date}}",
+									"description": "Optional start date filter (ISO format)"
+								},
+								{
+									"key": "end_date", 
+									"value": "{{end_date}}",
+									"description": "Optional end date filter (ISO format)"
+								}
+							]
+						},
+						"description": "Get DOK statistics for a specific account with optional date filtering"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Progress Bar Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/analytics/progress-bar/{{account_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["analytics", "progress-bar", "{{account_id}}"]
+						},
+						"description": "Get progress bar data optimized for frontend display with DOK3 vs DOK4 breakdown"
+					},
+					"response": []
+				},
+				{
+					"name": "Get DOK Timeline",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/analytics/dok-timeline/{{account_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["analytics", "dok-timeline", "{{account_id}}"]
+						},
+						"description": "Get DOK changes over time for timeline visualization"
+					},
+					"response": []
+				},
+				{
+					"name": "Get DOK Leaderboard",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/analytics/dok-leaderboard",
+							"host": ["{{base_url}}"],
+							"path": ["analytics", "dok-leaderboard"]
+						},
+						"description": "Get leaderboard of accounts by DOK change activity"
+					},
+					"response": []
+				},
+				{
+					"name": "Search DOK Tweets",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/analytics/dok-search?dok_type={{dok_type}}&change_type={{change_type}}&account_id={{account_id}}&limit={{limit}}",
+							"host": ["{{base_url}}"],
+							"path": ["analytics", "dok-search"],
+							"query": [
+								{
+									"key": "dok_type",
+									"value": "{{dok_type}}",
+									"description": "Filter by DOK3 or DOK4"
+								},
+								{
+									"key": "change_type",
+									"value": "{{change_type}}",
+									"description": "Filter by ADDED or DELETED"
+								},
+								{
+									"key": "account_id",
+									"value": "{{account_id}}",
+									"description": "Filter by specific account"
+								},
+								{
+									"key": "limit",
+									"value": "{{limit}}",
+									"description": "Limit number of results (default 50)"
+								}
+							]
+						},
+						"description": "Search for tweets with specific DOK patterns and filters"
+					},
+					"response": []
+				}
+			]
 		}
 	],
 	"event": [
@@ -4482,6 +4641,36 @@
 			"key": "twitter_list_id",
 			"value": "123456789",
 			"type": "string"
+		},
+		{
+			"key": "dok_type",
+			"value": "DOK4",
+			"type": "string",
+			"description": "DOK3 or DOK4"
+		},
+		{
+			"key": "change_type",
+			"value": "ADDED",
+			"type": "string",
+			"description": "ADDED or DELETED"
+		},
+		{
+			"key": "start_date",
+			"value": "2025-01-01",
+			"type": "string",
+			"description": "ISO date format (YYYY-MM-DD)"
+		},
+		{
+			"key": "end_date",
+			"value": "2025-12-31",
+			"type": "string",
+			"description": "ISO date format (YYYY-MM-DD)"
+		},
+		{
+			"key": "limit",
+			"value": "50",
+			"type": "string",
+			"description": "Number of results to return"
 		}
 	]
 }
