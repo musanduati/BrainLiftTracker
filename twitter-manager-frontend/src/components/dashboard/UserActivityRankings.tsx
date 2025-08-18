@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { Trophy, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../common/Card';
 import { Skeleton } from '../common/Skeleton';
+import { DOKProgressBar, DOKLegend } from '../common/DOKProgressBar';
+import { Toggle } from '../common/Toggle';
 import { apiClient } from '../../services/api';
 import toast from 'react-hot-toast';
 import { getListGradient, getListShadow, initializeListColors } from '../../utils/listColors';
+import { DOKProgressBarData } from '../../types';
 
 interface UserRanking {
   rank: number;
@@ -31,6 +34,9 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
   const [lists, setLists] = useState<any[]>([]);
   const [selectedListId, setSelectedListId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [dokData, setDokData] = useState<Map<number, DOKProgressBarData>>(new Map());
+  const [showDOKBreakdown, setShowDOKBreakdown] = useState(false);
+  const [loadingDOK, setLoadingDOK] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -40,6 +46,12 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
   useEffect(() => {
     filterByList();
   }, [selectedListId, allRankings, lists]);
+
+  useEffect(() => {
+    if (showDOKBreakdown && rankings.length > 0) {
+      loadDOKData();
+    }
+  }, [showDOKBreakdown, rankings]);
 
   const loadData = async () => {
     try {
@@ -173,6 +185,39 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
       setLists([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDOKData = async () => {
+    try {
+      setLoadingDOK(true);
+      const accountIds = rankings.map(r => r.id).filter(id => id > 0);
+      console.log('🔍 Loading DOK data for account IDs:', accountIds);
+      
+      if (accountIds.length === 0) {
+        console.log('❌ No account IDs to load DOK data for');
+        return;
+      }
+
+      const dokResults = await apiClient.getDOKProgressBarBatch(accountIds);
+      console.log('📊 DOK API results:', dokResults);
+      
+      const dokMap = new Map<number, DOKProgressBarData>();
+      
+      dokResults.forEach(data => {
+        if (data) {
+          dokMap.set(data.account.id, data);
+          console.log(`✅ Loaded DOK data for account ${data.account.id}:`, data);
+        }
+      });
+      
+      console.log('🎯 Final DOK data map:', dokMap);
+      setDokData(dokMap);
+    } catch (error) {
+      console.error('❌ Failed to load DOK data:', error);
+      // Don't show error toast as DOK data is optional enhancement
+    } finally {
+      setLoadingDOK(false);
     }
   };
 
@@ -342,28 +387,55 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
                 ? 'Top brainlifts by total posts' 
                 : `Top users in ${lists.find(l => l.id === selectedListId)?.name || 'group'}`
               }
+              {showDOKBreakdown && ' - DOK breakdown view'}
             </CardDescription>
           </div>
-          <select
-            value={selectedListId}
-            onChange={(e) => setSelectedListId(e.target.value)}
-            className="px-3 py-1.5 text-sm border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="all">All Brainlifts</option>
-            {lists.length > 0 && (
-              <optgroup label="Org/Function">
-                {lists.map((list) => (
-                  <option key={list.id} value={list.id}>
-                    {list.name} ({list.member_count || 0})
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+          <div className="flex items-center gap-3">
+            {/* Modern DOK Toggle Switch */}
+            <Toggle
+              enabled={showDOKBreakdown}
+              onChange={(enabled) => {
+                console.log('🔄 DOK toggle clicked. Current state:', showDOKBreakdown);
+                setShowDOKBreakdown(enabled);
+                console.log('🔄 DOK toggle new state:', enabled);
+              }}
+              leftLabel="Simple View"
+              rightLabel="DOK View"
+              loading={loadingDOK}
+              variant="purple"
+              size="md"
+            />
+            
+            {/* List Selector */}
+            <select
+              value={selectedListId}
+              onChange={(e) => setSelectedListId(e.target.value)}
+              className="px-3 py-1.5 text-sm border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="all">All Brainlifts</option>
+              {lists.length > 0 && (
+                <optgroup label="Org/Function">
+                  {lists.map((list) => (
+                    <option key={list.id} value={list.id}>
+                      {list.name} ({list.member_count || 0})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {/* Show DOK Legend when in DOK view */}
+          {showDOKBreakdown && (
+            <div className="px-6 py-3 rounded-lg bg-muted/50">
+              <div className="text-sm font-medium mb-2">DOK Activity Legend:</div>
+              <DOKLegend />
+            </div>
+          )}
+
           {/* Horizontal Bar Chart Container with Glass Effect */}
           <div className="p-6 rounded-xl bg-white/5 dark:bg-gray-900/20 backdrop-blur-sm border border-white/10 dark:border-gray-700/50 shadow-xl">
             <div className="space-y-3">
@@ -372,6 +444,16 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
                 const userRanking = rankings[index]; // Get the actual user from rankings
                 const barGradient = getBarGradient(userRanking, index);
                 const barShadow = getBarShadow(userRanking);
+                const userDOKData = dokData.get(userRanking.id);
+                
+                // Debug logging
+                if (index === 0) { // Only log for first user to avoid spam
+                  console.log(`🎨 Rendering progress bar for ${userRanking.username}:`);
+                  console.log(`  showDOKBreakdown: ${showDOKBreakdown}`);
+                  console.log(`  userDOKData exists: ${!!userDOKData}`);
+                  console.log(`  userDOKData:`, userDOKData);
+                  console.log(`  Will show DOK bar: ${showDOKBreakdown && userDOKData}`);
+                }
                 
                 return (
                   <div 
@@ -398,43 +480,53 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
                       </span>
                     </div>
                     
-                    {/* Enhanced Progress Bar with List Color */}
-                    <div className="relative w-full h-6 bg-gradient-to-r from-gray-200/30 to-gray-200/50 dark:from-gray-800/30 dark:to-gray-800/50 rounded-full overflow-hidden backdrop-blur-sm group-hover:from-gray-200/50 group-hover:to-gray-200/70 dark:group-hover:from-gray-800/50 dark:group-hover:to-gray-800/70 transition-all duration-300">
-                      {/* Animated gradient bar */}
-                      <div
-                        className="absolute top-0 left-0 h-full rounded-full transition-all duration-700 ease-out"
-                        style={{
-                          width: `${percentage}%`,
-                          background: barGradient,
-                          boxShadow: `0 2px 10px ${barShadow}, inset 0 1px 0 rgba(255,255,255,0.3)`,
-                        }}
-                      >
-                        {/* Shimmer effect */}
-                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                          <div className="h-full w-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                    {/* Progress Bar - DOK or Traditional */}
+                    {showDOKBreakdown && userDOKData ? (
+                      /* DOK Progress Bar */
+                      <DOKProgressBar
+                        dokBreakdown={userDOKData.dok_breakdown}
+                        totalTweets={userDOKData.overview.total_tweets}
+                        className="cursor-pointer"
+                        height="md"
+                      />
+                    ) : (
+                      /* Traditional Progress Bar */
+                      <div className="relative w-full h-6 bg-gradient-to-r from-gray-200/30 to-gray-200/50 dark:from-gray-800/30 dark:to-gray-800/50 rounded-full overflow-hidden backdrop-blur-sm group-hover:from-gray-200/50 group-hover:to-gray-200/70 dark:group-hover:from-gray-800/50 dark:group-hover:to-gray-800/70 transition-all duration-300">
+                        {/* Animated gradient bar */}
+                        <div
+                          className="absolute top-0 left-0 h-full rounded-full transition-all duration-700 ease-out"
+                          style={{
+                            width: `${percentage}%`,
+                            background: barGradient,
+                            boxShadow: `0 2px 10px ${barShadow}, inset 0 1px 0 rgba(255,255,255,0.3)`,
+                          }}
+                        >
+                          {/* Shimmer effect */}
+                          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                            <div className="h-full w-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                          </div>
+                        </div>
+                        
+                        {/* Percentage label inside bar (if wide enough) */}
+                        {percentage > 15 && (
+                          <div className="absolute left-2 top-1/2 -translate-y-1/2 text-white text-xs font-semibold drop-shadow-lg">
+                            {percentage}%
+                          </div>
+                        )}
+                        
+                        {/* Hover Tooltip for traditional view */}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                          <span className="bg-gray-900/95 text-white text-xs px-3 py-1.5 rounded-lg shadow-xl backdrop-blur-sm">
+                            {user.total} posts
+                          </span>
                         </div>
                       </div>
-                      
-                      {/* Percentage label inside bar (if wide enough) */}
-                      {percentage > 15 && (
-                        <div className="absolute left-2 top-1/2 -translate-y-1/2 text-white text-xs font-semibold drop-shadow-lg">
-                          {percentage}%
-                        </div>
-                      )}
-                      
-                      {/* Hover Tooltip */}
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                        <span className="bg-gray-900/95 text-white text-xs px-3 py-1.5 rounded-lg shadow-xl backdrop-blur-sm">
-                          {user.total} posts
-                        </span>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
-
 
         </div>
       </CardContent>
