@@ -30,6 +30,7 @@ def create_app():
     from app.api.threads.routes import threads_bp
     from app.api.lists.routes import lists_bp
     from app.api.utils.routes import utils_bp
+    from app.api.analytics.routes import analytics_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(accounts_bp)
@@ -37,6 +38,7 @@ def create_app():
     app.register_blueprint(threads_bp)
     app.register_blueprint(lists_bp)
     app.register_blueprint(utils_bp)
+    app.register_blueprint(analytics_bp)
     
     # Register basic routes
     @app.route('/api/v1/health', methods=['GET'])

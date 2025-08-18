@@ -166,6 +166,8 @@ def _migrate_database(conn):
         ('twitter_list', 'external_owner_username VARCHAR(255)'),
         ('twitter_list', 'last_synced_at DATETIME'),
         ('twitter_list', 'is_managed BOOLEAN DEFAULT 1'),
+        ('tweet', 'dok_type VARCHAR(10)'),
+        ('tweet', 'change_type VARCHAR(10)'),
     ]
     
     for table, column_def in migrations:

@@ -11,6 +11,7 @@ from app.db.database import get_db
 from app.utils.security import require_api_key
 from app.services.twitter import post_to_twitter
 from app.utils.rate_limit import get_rate_limit_delay
+from app.utils.dok_parser import parse_dok_metadata
 
 tweets_bp = Blueprint('tweets', __name__)
 
@@ -27,18 +28,31 @@ def create_tweet():
     
     try:
         conn = get_db()
+        
+        # Parse DOK metadata from tweet content
+        dok_type, change_type = parse_dok_metadata(data['text'])
+        
         cursor = conn.execute(
-            'INSERT INTO tweet (twitter_account_id, content, status, created_at) VALUES (?, ?, ?, ?)',
-            (data['account_id'], data['text'], 'pending', datetime.now(UTC).isoformat())
+            'INSERT INTO tweet (twitter_account_id, content, status, created_at, dok_type, change_type) VALUES (?, ?, ?, ?, ?, ?)',
+            (data['account_id'], data['text'], 'pending', datetime.now(UTC).isoformat(), dok_type, change_type)
         )
         tweet_id = cursor.lastrowid
         conn.commit()
         conn.close()
         
-        return jsonify({
+        result = {
             'message': 'Tweet created successfully',
             'tweet_id': tweet_id
-        }), 201
+        }
+        
+        # Include DOK metadata in response if found
+        if dok_type and change_type:
+            result['dok_metadata'] = {
+                'dok_type': dok_type,
+                'change_type': change_type
+            }
+        
+        return jsonify(result), 201
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -96,7 +110,9 @@ def get_tweets():
             'thread_id': tweet['thread_id'],  # Keep snake_case, frontend maps to camelCase
             'thread_position': tweet['thread_position'],
             'twitter_id': tweet['twitter_id'],
-            'reply_to_tweet_id': tweet['reply_to_tweet_id']
+            'reply_to_tweet_id': tweet['reply_to_tweet_id'],
+            'dok_type': tweet['dok_type'],
+            'change_type': tweet['change_type']
         })
     
     return jsonify({

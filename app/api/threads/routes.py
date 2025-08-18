@@ -9,6 +9,7 @@ except ImportError:
 from app.db.database import get_db
 from app.utils.security import require_api_key
 from app.services.twitter import post_to_twitter
+from app.utils.dok_parser import parse_dok_metadata
 
 threads_bp = Blueprint('threads', __name__)
 
@@ -40,13 +41,16 @@ def create_thread():
             conn.close()
             return jsonify({'error': 'Account not found'}), 404
         
+        # Parse DOK metadata from first tweet
+        dok_type, change_type = parse_dok_metadata(tweets[0]) if tweets else (None, None)
+        
         # Create all tweets in the thread as pending
         created_tweets = []
         for i, tweet_text in enumerate(tweets):
             cursor = conn.execute(
-                '''INSERT INTO tweet (twitter_account_id, content, thread_id, thread_position, status) 
-                   VALUES (?, ?, ?, ?, ?)''',
-                (account_id, tweet_text, thread_id, i, 'pending')
+                '''INSERT INTO tweet (twitter_account_id, content, thread_id, thread_position, status, dok_type, change_type) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                (account_id, tweet_text, thread_id, i, 'pending', dok_type, change_type)
             )
             tweet_id = cursor.lastrowid
             created_tweets.append({
@@ -58,11 +62,20 @@ def create_thread():
         conn.commit()
         conn.close()
         
-        return jsonify({
+        result = {
             'message': f'Thread created with {len(tweets)} tweets',
             'thread_id': thread_id,
             'tweets': created_tweets
-        }), 201
+        }
+        
+        # Include DOK metadata in response if found
+        if dok_type and change_type:
+            result['dok_metadata'] = {
+                'dok_type': dok_type,
+                'change_type': change_type
+            }
+        
+        return jsonify(result), 201
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
