@@ -77,70 +77,136 @@ def _fallback_find_all_matching_nodes(node_name: str, nodes: list[dict[str, str]
     Fallback fuzzy matching logic for finding ALL nodes that match the requested type.
     Returns list of all matching node IDs.
     """
-    node_name_lower = node_name.lower().strip()
-    matching_node_ids = []
-    
-    # Direct mapping for common variations (same as existing)
-    node_mappings = {
-        'dok4': ['spiky pov', 'spov', 'dok4', 'dok 4', 'spiky point of views', 'spiky points of view', 'spikey pov', 'spikey povs'],
-        'spikypovs': ['spiky pov', 'spov', 'dok4', 'dok 4', 'spiky point of views', 'spiky points of view', 'spikey pov', 'spikey povs'],
-        'experts': ['expert', 'experts', 'thought leader'],
-        'dok3': ['dok3', 'dok 3', 'insight', 'insights'],
-        'insights': ['dok3', 'dok 3', 'insight', 'insights'],
-        'purpose': ['purpose'],
-        'owner': ['owner'],
-        'dok2': ['dok2', 'dok 2', 'knowledge tree', 'categories', 'category'],
-        'knowledge tree': ['dok2', 'dok 2', 'knowledge tree', 'categories', 'category'],
-        'categories': ['dok2', 'dok 2', 'knowledge tree', 'categories', 'category']
-    }
-    
-    # Helper function to clean node names (same as existing)
-    def clean_name(name: str) -> str:
-        clean = re.sub(r'<[^>]+>', '', name)
-        return clean.strip().lower()
-    
-    # First pass: exact matching on cleaned names
-    for node in nodes:
-        clean_node_name = clean_name(node['name'])
-        if clean_node_name == node_name_lower:
-            logger.debug("Exact match found: %s -> %s", node_name, node['id'])
-            matching_node_ids.append(node['id'])
-    
-    # Second pass: fuzzy matching using mappings (only if no exact matches)
-    if not matching_node_ids:
-        for node in nodes:
-            clean_node_name = clean_name(node['name'])
+    try:
+        logger.debug(f"Starting fallback matching for: {repr(node_name)}")
+        logger.debug(f"Nodes input type: {type(nodes)}, length: {len(nodes)}")
+        
+        # Validate input parameters
+        if not isinstance(node_name, str):
+            logger.error(f"Invalid node_name type: {type(node_name)}, value: {repr(node_name)}")
+            return []
             
-            # Check if the node_name matches any known pattern
-            for canonical_name, variations in node_mappings.items():
-                if node_name_lower in variations or canonical_name == node_name_lower:
-                    # Check if current node matches any variation of this canonical name
-                    for variation in variations:
-                        if variation in clean_node_name:
-                            logger.debug("Pattern match found: %s (%s) -> %s", node_name, variation, node['id'])
-                            matching_node_ids.append(node['id'])
-                            break  # Avoid duplicate matches for same node
-    
-    # Third pass: substring matching as final fallback (only if no matches yet)
-    if not matching_node_ids:
-        for node in nodes:
-            clean_node_name = clean_name(node['name'])
-            if node_name_lower in clean_node_name or clean_node_name in node_name_lower:
-                logger.debug("Substring match found: %s -> %s", node_name, node['id'])
-                matching_node_ids.append(node['id'])
-    
-    # Remove duplicates while preserving order
-    unique_node_ids = []
-    for node_id in matching_node_ids:
-        if node_id not in unique_node_ids:
-            unique_node_ids.append(node_id)
-    
-    if unique_node_ids:
-        logger.info(f"Found {len(unique_node_ids)} matching nodes for {node_name}: {unique_node_ids}")
-    else:
-        logger.warning("Could not find any nodes for: %s in nodes: %s", node_name, [clean_name(n['name']) for n in nodes])
-    
-    return unique_node_ids
+        if not isinstance(nodes, list):
+            logger.error(f"Invalid nodes type: {type(nodes)}, value: {repr(nodes)}")
+            return []
+        
+        node_name_lower = node_name.lower().strip()
+        matching_node_ids = []
+        
+        # Direct mapping for common variations (same as existing)
+        node_mappings = {
+            'dok4': ['spiky pov', 'spov', 'dok4', 'dok 4', 'spiky point of views', 'spiky points of view', 'spikey pov', 'spikey povs'],
+            'spikypovs': ['spiky pov', 'spov', 'dok4', 'dok 4', 'spiky point of views', 'spiky points of view', 'spikey pov', 'spikey povs'],
+            'experts': ['expert', 'experts', 'thought leader'],
+            'dok3': ['dok3', 'dok 3', 'insight', 'insights'],
+            'insights': ['dok3', 'dok 3', 'insight', 'insights'],
+            'purpose': ['purpose'],
+            'owner': ['owner'],
+            'dok2': ['dok2', 'dok 2', 'knowledge tree', 'categories', 'category'],
+            'knowledge tree': ['dok2', 'dok 2', 'knowledge tree', 'categories', 'category'],
+            'categories': ['dok2', 'dok 2', 'knowledge tree', 'categories', 'category']
+        }
+        
+        # Helper function to clean node names (same as existing)
+        def clean_name(name: str) -> str:
+            try:
+                clean = re.sub(r'<[^>]+>', '', name)
+                return clean.strip().lower()
+            except Exception as e:
+                logger.error(f"Error cleaning name {repr(name)}: {e}")
+                return str(name).lower()  # Fallback
+        
+        # First pass: exact matching
+        for i, node in enumerate(nodes):
+            try:
+                if not isinstance(node, dict):
+                    logger.warning(f"Node {i} is not a dict: {type(node)}, value: {repr(node)}")
+                    continue
+                    
+                if 'name' not in node or 'id' not in node:
+                    logger.warning(f"Node {i} missing required keys: {node.keys()}")
+                    continue
+                
+                node_name_raw = node.get('name', '')
+                node_id = node.get('id', '')
+                
+                logger.debug(f"Processing node {i}: name={repr(node_name_raw)}, id={repr(node_id)}")
+                
+                clean_node_name = clean_name(node_name_raw)
+                if clean_node_name == node_name_lower:
+                    logger.debug("Exact match found: %s -> %s", node_name, node_id)
+                    matching_node_ids.append(node_id)
+                    
+            except Exception as e:
+                logger.error(f"Error processing node {i}: {type(e).__name__}: {e}")
+                logger.error(f"Problem node: {repr(node)}")
+                continue
+        
+        # Second pass: fuzzy matching using mappings (only if no exact matches)
+        if not matching_node_ids:
+            for i, node in enumerate(nodes):
+                try:
+                    if not isinstance(node, dict) or 'name' not in node or 'id' not in node:
+                        continue
+                        
+                    node_name_raw = node.get('name', '')
+                    node_id = node.get('id', '')
+                    clean_node_name = clean_name(node_name_raw)
+                    
+                    # Check if the node_name matches any known pattern
+                    for canonical_name, variations in node_mappings.items():
+                        if node_name_lower in variations or canonical_name == node_name_lower:
+                            # Check if current node matches any variation of this canonical name
+                            for variation in variations:
+                                if variation in clean_node_name:
+                                    logger.debug("Pattern match found: %s (%s) -> %s", node_name, variation, node_id)
+                                    matching_node_ids.append(node_id)
+                                    break  # Avoid duplicate matches for same node
+                            break  # Move to next node
+                                
+                except Exception as e:
+                    logger.error(f"Error in fuzzy matching for node {i}: {e}")
+                    continue
+
+        # Third pass: substring matching as final fallback (only if no matches yet)
+        if not matching_node_ids:
+            for i, node in enumerate(nodes):
+                try:
+                    if not isinstance(node, dict) or 'name' not in node or 'id' not in node:
+                        continue
+                        
+                    node_name_raw = node.get('name', '')
+                    node_id = node.get('id', '')
+                    clean_node_name = clean_name(node_name_raw)
+                    
+                    if node_name_lower in clean_node_name or clean_node_name in node_name_lower:
+                        logger.debug("Substring match found: %s -> %s", node_name, node_id)
+                        matching_node_ids.append(node_id)
+                        
+                except Exception as e:
+                    logger.error(f"Error in substring matching for node {i}: {e}")
+                    continue
+        
+        # Remove duplicates while preserving order
+        unique_node_ids = []
+        for node_id in matching_node_ids:
+            if node_id not in unique_node_ids:
+                unique_node_ids.append(node_id)
+        
+        if unique_node_ids:
+            logger.info(f"Found {len(unique_node_ids)} matching nodes for {node_name}: {unique_node_ids}")
+        else:
+            logger.warning("Could not find any nodes for: %s in %d available nodes", node_name, len(nodes))
+        
+        return unique_node_ids
+        
+    except Exception as e:
+        logger.error(f"Critical error in _fallback_find_all_matching_nodes: {type(e).__name__}: {e}")
+        logger.error(f"Node name: {repr(node_name)}")
+        logger.error(f"Nodes: {repr(nodes)[:500]}...")  # Truncated for safety
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        return []  # Safe fallback
 
 @dataclass
 class GenerateSimpleTextRequest:
@@ -447,13 +513,18 @@ async def extract_all_dok_node_ids_using_llm(
     Returns:
         list[str]: List of all matching node IDs
     """
-    # Use provided instance or create a new one
-    if lm_service_instance is None:
-        lm_service_instance = get_lm_service()
-    
     try:
-        logger.info(f"Extracting ALL node IDs for: {node_name}")
-        logger.info(f"Available nodes: {[node['name'] for node in nodes]}")
+        logger.info(f"Extracting ALL node IDs for: {repr(node_name)}")
+        logger.info(f"Available nodes: {len(nodes)} nodes")
+        
+        # Use provided instance or create a new one
+        if lm_service_instance is None:
+            lm_service_instance = get_lm_service()
+        
+        # If still None after initialization attempt, use fallback immediately
+        if lm_service_instance is None:
+            logger.warning("No LMService available, using fallback pattern matching")
+            return _fallback_find_all_matching_nodes(node_name, nodes)
         
         query = f"Node type to find: {node_name} \n list of nodes: {nodes}"
 
@@ -465,44 +536,85 @@ async def extract_all_dok_node_ids_using_llm(
         )
         response = await lm_service_instance.generate_simple_text_using_slm(request)
         
-        # Parse LLM response
+        # Parse LLM response with comprehensive error handling
         if response and response.strip():
-            # Handle comma-separated node IDs
-            node_ids = [id.strip() for id in response.split(',') if id.strip()]
-            
-            # Validate that returned IDs actually exist in the node list
-            valid_node_ids = []
-            available_ids = {node['id'] for node in nodes}
-            
-            for node_id in node_ids:
-                if node_id in available_ids:
-                    valid_node_ids.append(node_id)
+            try:
+                raw_response = response.strip()
+                logger.debug(f"Raw LLM response for {node_name}: {repr(raw_response)}")
+                
+                # Check if response looks like it might contain code/eval
+                if any(suspicious in raw_response.lower() for suspicious in ['eval', 'exec', 'import', '__', 'lambda']):
+                    logger.error(f"Suspicious LLM response detected: {repr(raw_response)}")
+                    return _fallback_find_all_matching_nodes(node_name, nodes)
+                
+                # Handle comma-separated node IDs
+                node_ids = []
+                for id_part in raw_response.split(','):
+                    cleaned_id = id_part.strip()
+                    # Basic validation - node IDs should look like UUIDs
+                    if cleaned_id and (len(cleaned_id) > 10) and ('-' in cleaned_id or len(cleaned_id) == 32):
+                        node_ids.append(cleaned_id)
+                    elif cleaned_id:
+                        logger.warning(f"Unexpected node ID format from LLM: {repr(cleaned_id)}")
+                
+                if not node_ids:
+                    logger.warning(f"No valid node IDs found in LLM response: {repr(raw_response)}")
+                    return _fallback_find_all_matching_nodes(node_name, nodes)
+                
+                logger.debug(f"Parsed valid node IDs: {node_ids}")
+                
+                # Validate that returned IDs actually exist in the node list
+                valid_node_ids = []
+                available_ids = {node['id'] for node in nodes}
+                
+                for node_id in node_ids:
+                    if node_id in available_ids:
+                        valid_node_ids.append(node_id)
+                    else:
+                        logger.warning(f"LLM returned invalid node ID: {node_id}")
+                
+                if valid_node_ids:
+                    logger.info(f"LLM found {len(valid_node_ids)} valid nodes for {node_name}: {valid_node_ids}")
+                    return valid_node_ids
                 else:
-                    logger.warning(f"LLM returned invalid node ID: {node_id}")
-            
-            if valid_node_ids:
-                logger.info(f"LLM found {len(valid_node_ids)} valid nodes for {node_name}: {valid_node_ids}")
-                return valid_node_ids
-            else:
-                logger.debug("LLM returned no valid node IDs, using fallback for: %s", node_name)
+                    logger.debug("LLM returned no valid node IDs, using fallback for: %s", node_name)
+                    return _fallback_find_all_matching_nodes(node_name, nodes)
+                
+            except Exception as e:
+                logger.error(f"Exception parsing LLM response: {type(e).__name__}: {e}")
+                logger.error(f"Raw response was: {repr(response)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 return _fallback_find_all_matching_nodes(node_name, nodes)
         else:
             logger.debug("LLM returned empty response, using fallback for: %s", node_name)
             return _fallback_find_all_matching_nodes(node_name, nodes)
         
     except Exception as e:
-        logger.error("Error finding all DOK nodes using LLM: %s", e)
+        logger.error(f"TOP-LEVEL ERROR in extract_all_dok_node_ids_using_llm: {type(e).__name__}: {e}")
+        logger.warning("Falling back to pattern matching")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return _fallback_find_all_matching_nodes(node_name, nodes)
 
 # Global LLM service instance
 _lm_service_instance = None
 
 
-def get_lm_service() -> LMService:
+def get_lm_service() -> Optional[LMService]:  # Change return type to Optional
     """Get or create the global LMService instance."""
     global _lm_service_instance
     if _lm_service_instance is None:
-        _lm_service_instance = LMService()
+        try:
+            logger.debug("Initializing LMService...")
+            _lm_service_instance = LMService()
+            logger.debug("✅ LMService initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize LMService: {type(e).__name__}: {e}")
+            logger.warning("Will use fallback pattern matching only")
+            import traceback
+            logger.error(f"LMService initialization traceback: {traceback.format_exc()}")
+            return None  # Return None on initialization failure
     return _lm_service_instance
 
 
