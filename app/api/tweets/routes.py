@@ -623,3 +623,101 @@ def delete_tweet(tweet_id):
         'message': 'Tweet deleted successfully',
         'tweet_id': tweet_id
     })
+
+@tweets_bp.route('/api/v1/accounts/<int:account_id>/tweets/cleanup', methods=['DELETE'])
+@require_api_key
+def cleanup_account_tweets(account_id):
+    """Delete all tweets from a specific account"""
+    data = request.get_json() or {}
+    
+    # Optional filters
+    statuses = data.get('statuses', [])  # Filter by specific statuses (optional)
+    days_old = data.get('days_old')      # Filter by age (optional)
+    confirm = data.get('confirm', False) # Safety confirmation required
+    
+    if not confirm:
+        return jsonify({
+            'error': 'This operation will delete tweets permanently. Set "confirm": true to proceed.'
+        }), 400
+    
+    try:
+        conn = get_db()
+        
+        # Check if account exists
+        account = conn.execute(
+            'SELECT username FROM twitter_account WHERE id = ?',
+            (account_id,)
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'Account not found'}), 404
+        
+        # Build query conditions
+        conditions = ['twitter_account_id = ?']
+        params = [account_id]
+        
+        if statuses:
+            # Filter by specific statuses
+            status_placeholders = ','.join(['?' for _ in statuses])
+            conditions.append(f'status IN ({status_placeholders})')
+            params.extend(statuses)
+        
+        if days_old:
+            # Filter by age
+            conditions.append("created_at < datetime('now', ? || ' days')")
+            params.append(-days_old)
+        
+        where_clause = ' AND '.join(conditions)
+        
+        # Count tweets to delete
+        count_query = f'SELECT COUNT(*) as count FROM tweet WHERE {where_clause}'
+        count = conn.execute(count_query, params).fetchone()['count']
+        
+        if count == 0:
+            conn.close()
+            return jsonify({
+                'message': 'No tweets found matching the criteria',
+                'count': 0,
+                'account_username': account['username']
+            })
+        
+        # Get breakdown by status before deletion
+        breakdown_query = f'''
+            SELECT status, COUNT(*) as count 
+            FROM tweet 
+            WHERE {where_clause} 
+            GROUP BY status
+        '''
+        breakdown = conn.execute(breakdown_query, params).fetchall()
+        status_breakdown = {row['status']: row['count'] for row in breakdown}
+        
+        # Delete tweets
+        delete_query = f'DELETE FROM tweet WHERE {where_clause}'
+        conn.execute(delete_query, params)
+        conn.commit()
+        conn.close()
+        
+        # Build filter description
+        filter_desc = []
+        if statuses:
+            filter_desc.append(f"status: {', '.join(statuses)}")
+        if days_old:
+            filter_desc.append(f"older than {days_old} days")
+        
+        filter_text = f" ({', '.join(filter_desc)})" if filter_desc else ""
+        
+        return jsonify({
+            'message': f'Deleted {count} tweets from account @{account["username"]}{filter_text}',
+            'count': count,
+            'account_id': account_id,
+            'account_username': account['username'],
+            'status_breakdown': status_breakdown,
+            'filters_applied': {
+                'statuses': statuses or 'all',
+                'days_old': days_old or 'all'
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
