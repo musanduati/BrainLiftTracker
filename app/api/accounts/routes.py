@@ -1201,3 +1201,48 @@ def cleanup_inactive_accounts():
         'message': f'Deleted {len(deleted)} inactive accounts',
         'deleted': deleted
     })
+
+@accounts_bp.route('/api/v1/accounts/<int:account_id>/followers/<int:follower_id>', methods=['DELETE'])
+@require_api_key
+def delete_follower(account_id, follower_id):
+    """Delete a specific follower from an account"""
+    try:
+        conn = get_db()
+        
+        # Check if account exists
+        account = conn.execute(
+            'SELECT username FROM twitter_account WHERE id = ?',
+            (account_id,)
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'Account not found'}), 404
+        
+        # Check if follower exists for this account
+        follower = conn.execute(
+            'SELECT id, follower_username FROM follower WHERE id = ? AND account_id = ?',
+            (follower_id, account_id)
+        ).fetchone()
+        
+        if not follower:
+            conn.close()
+            return jsonify({'error': 'Follower not found for this account'}), 404
+        
+        # Delete the follower
+        conn.execute('DELETE FROM follower WHERE id = ? AND account_id = ?', (follower_id, account_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': f'Successfully deleted follower @{follower["follower_username"]} from account @{account["username"]}',
+            'deleted_follower': {
+                'id': follower_id,
+                'username': follower['follower_username'],
+                'account_id': account_id,
+                'account_username': account['username']
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
