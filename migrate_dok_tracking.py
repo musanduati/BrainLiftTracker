@@ -63,12 +63,12 @@ def add_dok_columns(conn, dry_run=False):
 
 def parse_dok_metadata(tweet_content):
     """Parse DOK metadata from tweet content (same as main app)"""
-    # Pattern to match optional emoji + ADDED/DELETED: DOK3/DOK4: at start of tweet
-    # Handles: "ADDED: DOK3:", "🟢 ADDED: DOK4:", "❌ DELETED: DOK3:", etc.
-    pattern = r'^(?:[🟢❌]\s*)?(ADDED|DELETED):\s+(DOK[34]):'
+    # Pattern to match optional emoji + ADDED/DELETED/UPDATED: DOK3/DOK4: at start of tweet
+    # Handles: "ADDED: DOK3:", "🟢 ADDED: DOK4:", "❌ DELETED: DOK3:", "🔄 UPDATED: DOK4:", etc.
+    pattern = r'^(?:[🟢❌🔄]\s*)?(ADDED|DELETED|UPDATED):\s+(DOK[34]):'
     match = re.match(pattern, tweet_content.strip())
     if match:
-        change_type = match.group(1)  # ADDED or DELETED
+        change_type = match.group(1)  # ADDED, DELETED, or UPDATED
         dok_type = match.group(2)     # DOK3 or DOK4
         return dok_type, change_type
     return None, None
@@ -77,11 +77,11 @@ def migrate_historical_data(conn, dry_run=False):
     """Migrate historical tweet data to include DOK metadata"""
     print("\n2. Analyzing historical tweets...")
     
-    # Get tweets that are thread starters (position 1) or standalone tweets
+    # Get tweets that are thread starters (position 0 or 1) or standalone tweets
     cursor = conn.execute('''
         SELECT id, content, thread_id, thread_position
         FROM tweet 
-        WHERE (thread_position = 1 OR thread_position IS NULL OR thread_id IS NULL)
+        WHERE (thread_position IN (0, 1) OR thread_position IS NULL OR thread_id IS NULL)
         AND (dok_type IS NULL OR change_type IS NULL)
         ORDER BY id
     ''')
