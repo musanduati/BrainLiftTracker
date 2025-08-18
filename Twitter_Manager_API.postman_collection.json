@@ -3527,6 +3527,198 @@
 					]
 				},
 				{
+					"name": "Delete All Tweets from Account",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"confirm\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/tweets/cleanup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"tweets",
+								"cleanup"
+							]
+						},
+						"description": "Delete all tweets from a specific account. Requires explicit confirmation for safety.\n\nOptional filters:\n- statuses: array of statuses to delete ['pending', 'posted', 'failed']\n- days_old: delete tweets older than X days\n\nSafety: Requires 'confirm: true' to proceed."
+					},
+					"response": [
+						{
+							"name": "All Tweets Deleted",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"confirm\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/1/tweets/cleanup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"1",
+										"tweets",
+										"cleanup"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Deleted 45 tweets from account @example_user\",\n    \"count\": 45,\n    \"account_id\": 1,\n    \"account_username\": \"example_user\",\n    \"status_breakdown\": {\n        \"posted\": 30,\n        \"failed\": 10,\n        \"pending\": 5\n    },\n    \"filters_applied\": {\n        \"statuses\": \"all\",\n        \"days_old\": \"all\"\n    }\n}"
+						},
+						{
+							"name": "Delete Failed Tweets Only",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"confirm\": true,\n    \"statuses\": [\"failed\"]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/1/tweets/cleanup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"1",
+										"tweets",
+										"cleanup"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Deleted 10 tweets from account @example_user (status: failed)\",\n    \"count\": 10,\n    \"account_id\": 1,\n    \"account_username\": \"example_user\",\n    \"status_breakdown\": {\n        \"failed\": 10\n    },\n    \"filters_applied\": {\n        \"statuses\": [\"failed\"],\n        \"days_old\": \"all\"\n    }\n}"
+						},
+						{
+							"name": "Confirmation Required",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"confirm\": false\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/1/tweets/cleanup",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"1",
+										"tweets",
+										"cleanup"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"This operation will delete tweets permanently. Set \\\"confirm\\\": true to proceed.\"\n}"
+						}
+					]
+				},
+				{
 					"name": "Retry Failed Thread",
 					"request": {
 						"method": "POST",
