@@ -15,7 +15,7 @@ import { getAvatarColor, getAvatarText } from '../utils/avatar';
 import { CompactFollowerList } from '../components/followers/CompactFollowerList';
 import { MiniChart } from '../components/charts/MiniChart';
 import { ActivityHeatmap } from '../components/charts/ActivityHeatmap';
-import { DOKProgressBar, DOKLegend } from '../components/common/DOKProgressBar';
+import { DOKProgressBar } from '../components/common/DOKProgressBar';
 import { DOKProgressBarData } from '../types';
 
 const THREADS_PER_PAGE = 10;
