@@ -15,6 +15,8 @@ import { getAvatarColor, getAvatarText } from '../utils/avatar';
 import { CompactFollowerList } from '../components/followers/CompactFollowerList';
 import { MiniChart } from '../components/charts/MiniChart';
 import { ActivityHeatmap } from '../components/charts/ActivityHeatmap';
+import { DOKProgressBar, DOKLegend } from '../components/common/DOKProgressBar';
+import { DOKProgressBarData } from '../types';
 
 const THREADS_PER_PAGE = 10;
 
@@ -30,12 +32,28 @@ export const AccountDetail: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'all' | 'week' | 'month'>('all');
   const [savedFollowerCount, setSavedFollowerCount] = useState(0);
+  const [dokData, setDokData] = useState<DOKProgressBarData | null>(null);
+  const [loadingDOK, setLoadingDOK] = useState(false);
 
   useEffect(() => {
     if (id) {
       loadAccountData(parseInt(id));
+      loadDOKData(parseInt(id));
     }
   }, [id]);
+
+  const loadDOKData = async (accountId: number) => {
+    try {
+      setLoadingDOK(true);
+      const dokProgressBarData = await apiClient.getDOKProgressBar(accountId);
+      setDokData(dokProgressBarData);
+    } catch (error) {
+      console.error('Failed to load DOK data:', error);
+      // Don't show error toast as DOK data is optional
+    } finally {
+      setLoadingDOK(false);
+    }
+  };
 
   const loadAccountData = async (accountId: number) => {
     try {
@@ -631,6 +649,97 @@ export const AccountDetail: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* DOK Knowledge Tracking Stats */}
+        {dokData && (
+          <Card className="mb-6 border-0 shadow-lg">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileText size={20} className="text-purple-500" />
+                  DOK Knowledge Tracking
+                </CardTitle>
+                <Badge variant="outline" className="text-xs">
+                  {dokData.overview.total_tweets} total posts analyzed
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingDOK ? (
+                <Skeleton className="h-16 w-full" />
+              ) : (
+                <div className="space-y-6">
+                  {/* DOK Progress Bar */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium">Knowledge Distribution</h4>
+                      <span className="text-xs text-muted-foreground">
+                        {dokData.dok_breakdown.dok3.total + dokData.dok_breakdown.dok4.total} DOK changes detected
+                      </span>
+                    </div>
+                    
+                    <DOKProgressBar
+                      dokBreakdown={dokData.dok_breakdown}
+                      totalTweets={dokData.overview.total_tweets}
+                      height="lg"
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* DOK Stats Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                    {/* DOK3 Stats */}
+                    <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                      <div className="text-lg font-bold text-green-700 dark:text-green-400">
+                        {dokData.dok_breakdown.dok3.total}
+                      </div>
+                      <div className="text-xs text-green-600 dark:text-green-500">DOK3 Changes</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        +{dokData.dok_breakdown.dok3.added} ~{dokData.dok_breakdown.dok3.updated} -{dokData.dok_breakdown.dok3.deleted}
+                      </div>
+                    </div>
+
+                    {/* DOK4 Stats */}
+                    <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                      <div className="text-lg font-bold text-blue-700 dark:text-blue-400">
+                        {dokData.dok_breakdown.dok4.total}
+                      </div>
+                      <div className="text-xs text-blue-600 dark:text-blue-500">DOK4 Changes</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        +{dokData.dok_breakdown.dok4.added} ~{dokData.dok_breakdown.dok4.updated} -{dokData.dok_breakdown.dok4.deleted}
+                      </div>
+                    </div>
+
+                    {/* Knowledge Intensity */}
+                    <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                      <div className="text-lg font-bold text-purple-700 dark:text-purple-400">
+                        {dokData.overview.total_tweets > 0 
+                          ? Math.round(((dokData.dok_breakdown.dok3.total + dokData.dok_breakdown.dok4.total) / dokData.overview.total_tweets) * 100) 
+                          : 0}%
+                      </div>
+                      <div className="text-xs text-purple-600 dark:text-purple-500">Knowledge Ratio</div>
+                      <div className="text-xs text-muted-foreground mt-1">DOK posts vs total</div>
+                    </div>
+
+                    {/* Most Active DOK Level */}
+                    <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+                      <div className="text-lg font-bold text-orange-700 dark:text-orange-400">
+                        DOK{dokData.dok_breakdown.dok3.total >= dokData.dok_breakdown.dok4.total ? '3' : '4'}
+                      </div>
+                      <div className="text-xs text-orange-600 dark:text-orange-500">Primary Level</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {dokData.dok_breakdown.dok3.total >= dokData.dok_breakdown.dok4.total 
+                          ? `${dokData.dok_breakdown.dok3.percentage.toFixed(1)}% of DOK`
+                          : `${dokData.dok_breakdown.dok4.percentage.toFixed(1)}% of DOK`
+                        }
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* 28-Day Summary - X Analytics Style */}
         <Card className="mb-6 border-0 shadow-lg">
