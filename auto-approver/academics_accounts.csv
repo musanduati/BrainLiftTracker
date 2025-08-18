@@ -75,7 +75,6 @@ username,password,email,max_approvals,delay_seconds
 @brainlift_apsta,Kl41rM0n1t0r!,brainlift.monitor+ap.statistics@trilogy.com,50,3
 @brainlift_stati,Kl41rM0n1t0r!,brainlift.monitor+statistics@trilogy.com,50,3
 @brainlift_5saps,Kl41rM0n1t0r!,brainlift.monitor+ap.5s.effective@trilogy.com,50,3
-@brainlift_sds,Kl41rM0n1t0r!,brainlift.monitor+reporting.k8@trilogy.com,50,3
 @brainlift_copir,Kl41rM0n1t0r!,brainlift.monitor+coach.piriyanga@trilogy.com,50,3
 @brainlift_mapir,Kl41rM0n1t0r!,brainlift.monitor+math.academy.piri@trilogy.com,50,3
 @brainlift_tupir,Kl41rM0n1t0r!,brainlift.monitor+tutoring.piri@trilogy.com,50,3
