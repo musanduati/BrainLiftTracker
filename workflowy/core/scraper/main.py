@@ -3,6 +3,7 @@ Main WorkflowyTesterV2 class - orchestrates all scraping operations
 """
 
 import json
+import os
 import re
 import aiohttp
 from typing import Optional, List, Dict, Any
@@ -11,7 +12,7 @@ from datetime import datetime
 from workflowy.config.logger import logger
 from workflowy.storage.aws_storage import AWSStorageV2
 from workflowy.storage.project_utils import normalize_project_id
-from workflowy.core.llm_service import extract_node_id_using_llm, get_lm_service
+from workflowy.core.llm_service import extract_node_id_using_llm, extract_all_dok_node_ids_using_llm, get_lm_service
 
 # Import from scraper submodules
 from .models import WorkflowyNode
@@ -76,6 +77,84 @@ async def extract_single_dok_section_llm(item_data_list: list[dict[str, str]], s
     
     # Extract content for this node
     return _extract_node_content(item_data_list, node_id, section_prefix)
+
+
+async def extract_all_dok_sections_llm(item_data_list: list[dict[str, str]], section_prefix: str) -> str:
+    """
+    Extract ALL DOK sections of the same type and combine their content.
+    This handles cases where there are multiple nodes of the same DOK type.
+    """
+    logger.info(f"🔍 Extracting ALL {section_prefix} sections...")
+    
+    # Get top-level nodes first (same logic as single extraction)
+    top_nodes = await extract_top_level_nodes(item_data_list)
+    
+    # If there's only one top-level node (root), get its children instead
+    nodes_for_llm = []
+    if len(top_nodes) == 1:
+        root_id = top_nodes[0]['id']
+        logger.info(f"Found single root node: {top_nodes[0]['name']}, looking for children...")
+        
+        # Get children of the root node
+        for item in item_data_list:
+            if item.get('prnt') == root_id:
+                node_name = _clean_html_content(item.get('nm', '').strip())
+                if node_name:
+                    nodes_for_llm.append({
+                        'name': node_name,
+                        'id': item['id']
+                    })
+                    logger.debug(f"Found child node: {node_name} (ID: {item['id']})")
+    else:
+        # Multiple top-level nodes, use them directly
+        nodes_for_llm = top_nodes
+    
+    logger.info(f"Available nodes for {section_prefix}: {[node['name'] for node in nodes_for_llm]}")
+    
+    # Use LLM to find ALL matching node IDs
+    node_ids = await extract_all_dok_node_ids_using_llm(section_prefix, nodes_for_llm)
+    
+    if not node_ids:
+        logger.warning(f"⚠️ Could not find any {section_prefix} sections")
+        return ""
+    
+    logger.info(f"✅ Found {len(node_ids)} {section_prefix} nodes: {node_ids}")
+    
+    # Extract and combine content from ALL matching nodes
+    combined_content = ""
+    processed_nodes = []
+    
+    for i, node_id in enumerate(node_ids, 1):
+        # Find the node name for better logging
+        node_name = "Unknown"
+        for node in nodes_for_llm:
+            if node['id'] == node_id:
+                node_name = node['name']
+                break
+        
+        logger.info(f"📝 Processing {section_prefix} node {i}/{len(node_ids)}: {node_name}")
+        
+        # Extract content for this node
+        node_content = _extract_node_content(item_data_list, node_id, section_prefix)
+        
+        if node_content.strip():
+            # Add separator between different nodes if this isn't the first node
+            if combined_content:
+                combined_content += "\n\n"
+            
+            combined_content += node_content
+            processed_nodes.append(node_name)
+            logger.debug(f"✅ Added content from node: {node_name} ({len(node_content)} chars)")
+        else:
+            logger.warning(f"⚠️ No content found in node: {node_name} (ID: {node_id})")
+    
+    if combined_content:
+        logger.info(f"✅ Successfully combined {section_prefix} content from {len(processed_nodes)} nodes: {processed_nodes}")
+        logger.debug(f"Total combined content length: {len(combined_content)} characters")
+    else:
+        logger.warning(f"⚠️ No content found in any of the {len(node_ids)} {section_prefix} nodes")
+    
+    return combined_content
 
 
 class WorkflowyTesterV2:
@@ -161,8 +240,8 @@ class WorkflowyTesterV2:
             raw_data = await self.scrape_workflowy_raw_data(url, exclude_node_names)
             
             # Extract DOK sections with LLM-based identification
-            dok4_content = await extract_single_dok_section_llm(raw_data, "DOK4")
-            dok3_content = await extract_single_dok_section_llm(raw_data, "DOK3")
+            dok4_content = await extract_all_dok_sections_llm(raw_data, "DOK4")
+            dok3_content = await extract_all_dok_sections_llm(raw_data, "DOK3")
             
             # Process DOK sections
             all_tweets = []
@@ -178,14 +257,18 @@ class WorkflowyTesterV2:
                 dok4_points = parse_dok_points(dok4_content, "DOK4")
                 current_state['dok4'] = create_dok_state_from_points(dok4_points)  # Use lowercase key
                 
-                # Only generate tweets if NOT first run
-                if not is_first_run:
-                    # Compare with previous state
+                # Check if tweets should be generated
+                skip_migration_tweets = os.environ.get('SKIP_MIGRATION_TWEETS', 'false').lower() == 'true'
+                
+                if not is_first_run and not skip_migration_tweets:
+                    # Normal tweet generation
                     prev_dok4_state = previous_state.get('dok4', []) if previous_state else []
                     changes = advanced_compare_dok_states(prev_dok4_state, current_state['dok4'])
                     dok4_tweets = generate_advanced_change_tweets(changes, "DOK4", is_first_run=False)
                     all_tweets.extend(dok4_tweets)
                     logger.info(f"✅ Generated {len(dok4_tweets)} tweets for DOK4")
+                elif skip_migration_tweets:
+                    logger.info("🚫 Migration deployment - skipping DOK4 tweet generation")
                 else:
                     logger.info("🏁 First run - establishing DOK4 baseline, no tweets generated")
             else:
@@ -197,14 +280,18 @@ class WorkflowyTesterV2:
                 dok3_points = parse_dok_points(dok3_content, "DOK3")
                 current_state['dok3'] = create_dok_state_from_points(dok3_points)  # Use lowercase key
                 
-                # Only generate tweets if NOT first run
-                if not is_first_run:
-                    # Compare with previous state
+                # Check if tweets should be generated
+                skip_migration_tweets = os.environ.get('SKIP_MIGRATION_TWEETS', 'false').lower() == 'true'
+                
+                if not is_first_run and not skip_migration_tweets:
+                    # Normal tweet generation
                     prev_dok3_state = previous_state.get('dok3', []) if previous_state else []
                     changes = advanced_compare_dok_states(prev_dok3_state, current_state['dok3'])
                     dok3_tweets = generate_advanced_change_tweets(changes, "DOK3", is_first_run=False)
                     all_tweets.extend(dok3_tweets)
                     logger.info(f"✅ Generated {len(dok3_tweets)} tweets for DOK3")
+                elif skip_migration_tweets:
+                    logger.info("🚫 Migration deployment - skipping DOK3 tweet generation")
                 else:
                     logger.info("🏁 First run - establishing DOK3 baseline, no tweets generated")
             else:
@@ -395,7 +482,7 @@ async def test_project_processing():
     
     async with WorkflowyTesterV2(environment='test') as tester:
         # Test with a specific project ID
-        result = await tester.process_single_project('wfx-test-1234')
+        result = await tester.process_single_project('project_5d3fd51306ab488890559c58037812b7')
         if result:
             logger.info(f"✅ Test successful: {result}")
         else:

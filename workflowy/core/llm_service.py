@@ -72,6 +72,75 @@ def _fallback_node_matching(node_name: str, nodes: list[dict[str, str]]) -> str 
     logger.warning("Could not find node ID for: %s in nodes: %s", node_name, [clean_name(n['name']) for n in nodes])
     return None
 
+def _fallback_find_all_matching_nodes(node_name: str, nodes: list[dict[str, str]]) -> list[str]:
+    """
+    Fallback fuzzy matching logic for finding ALL nodes that match the requested type.
+    Returns list of all matching node IDs.
+    """
+    node_name_lower = node_name.lower().strip()
+    matching_node_ids = []
+    
+    # Direct mapping for common variations (same as existing)
+    node_mappings = {
+        'dok4': ['spiky pov', 'spov', 'dok4', 'dok 4', 'spiky point of views', 'spiky points of view', 'spikey pov', 'spikey povs'],
+        'spikypovs': ['spiky pov', 'spov', 'dok4', 'dok 4', 'spiky point of views', 'spiky points of view', 'spikey pov', 'spikey povs'],
+        'experts': ['expert', 'experts', 'thought leader'],
+        'dok3': ['dok3', 'dok 3', 'insight', 'insights'],
+        'insights': ['dok3', 'dok 3', 'insight', 'insights'],
+        'purpose': ['purpose'],
+        'owner': ['owner'],
+        'dok2': ['dok2', 'dok 2', 'knowledge tree', 'categories', 'category'],
+        'knowledge tree': ['dok2', 'dok 2', 'knowledge tree', 'categories', 'category'],
+        'categories': ['dok2', 'dok 2', 'knowledge tree', 'categories', 'category']
+    }
+    
+    # Helper function to clean node names (same as existing)
+    def clean_name(name: str) -> str:
+        clean = re.sub(r'<[^>]+>', '', name)
+        return clean.strip().lower()
+    
+    # First pass: exact matching on cleaned names
+    for node in nodes:
+        clean_node_name = clean_name(node['name'])
+        if clean_node_name == node_name_lower:
+            logger.debug("Exact match found: %s -> %s", node_name, node['id'])
+            matching_node_ids.append(node['id'])
+    
+    # Second pass: fuzzy matching using mappings (only if no exact matches)
+    if not matching_node_ids:
+        for node in nodes:
+            clean_node_name = clean_name(node['name'])
+            
+            # Check if the node_name matches any known pattern
+            for canonical_name, variations in node_mappings.items():
+                if node_name_lower in variations or canonical_name == node_name_lower:
+                    # Check if current node matches any variation of this canonical name
+                    for variation in variations:
+                        if variation in clean_node_name:
+                            logger.debug("Pattern match found: %s (%s) -> %s", node_name, variation, node['id'])
+                            matching_node_ids.append(node['id'])
+                            break  # Avoid duplicate matches for same node
+    
+    # Third pass: substring matching as final fallback (only if no matches yet)
+    if not matching_node_ids:
+        for node in nodes:
+            clean_node_name = clean_name(node['name'])
+            if node_name_lower in clean_node_name or clean_node_name in node_name_lower:
+                logger.debug("Substring match found: %s -> %s", node_name, node['id'])
+                matching_node_ids.append(node['id'])
+    
+    # Remove duplicates while preserving order
+    unique_node_ids = []
+    for node_id in matching_node_ids:
+        if node_id not in unique_node_ids:
+            unique_node_ids.append(node_id)
+    
+    if unique_node_ids:
+        logger.info(f"Found {len(unique_node_ids)} matching nodes for {node_name}: {unique_node_ids}")
+    else:
+        logger.warning("Could not find any nodes for: %s in nodes: %s", node_name, [clean_name(n['name']) for n in nodes])
+    
+    return unique_node_ids
 
 @dataclass
 class GenerateSimpleTextRequest:
@@ -262,6 +331,60 @@ Provide the output as a one piece of text.
 <|eot_id|><|start_header_id|>assistant<|end_header_id|>
 """
 
+# LLM prompt template for finding ALL matching nodes
+EXTRACT_ALL_BRAINLIFT_NODE_IDS_PROMPT = """
+<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+You are a formatting assistant. Your task is to find ALL node IDs that match the requested node type.
+
+Top-level Nodes can have same or different variations with extra information:
+   - Owner
+   - Purpose
+   - DOK4 - SPOV / new knowledge (Potentially labeled differently: "Spiky POV," "SPOV," "Spiky point of views," "SpikyPOVs," etc.)
+   - DOK3 - Insights (Potentially labeled differently: "Insights," "DOK3," etc.)
+   - Experts
+   - DOK2 - Knowledge Tree / Categories (Potentially labeled differently: "Knowledge Tree," "Categories," etc.)
+
+Your job is to find ALL node IDs that match the requested node type. Return them as a comma-separated list.
+
+<example>
+Input:
+Node type to find: DOK4
+
+list of nodes:
+[
+  {"name": "Owner", "id": "123"},
+  {"name": "Purpose", "id": "456"},
+  {"name": "DI SpikyPOVs", "id": "789"},
+  {"name": "DOK3 - Insights", "id": "101"},
+  {"name": "Experts", "id": "102"},
+  {"name": "Spiky POV for Texas Prep", "id": "103"},
+]
+
+Output:
+789,103
+</example>
+
+<example>
+Input:
+Node type to find: DOK3
+
+list of nodes:
+[
+  {"name": "Owner", "id": "123"},
+  {"name": "Purpose", "id": "456"},
+  {"name": "DOK4 - SPOV", "id": "789"},
+  {"name": "Insights", "id": "101"},
+  {"name": "DOK3 - Analysis", "id": "102"},
+]
+
+Output:
+101,102
+</example>
+
+Return ONLY the comma-separated node IDs. If no matches found, return empty string.
+<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+"""
+
 
 async def extract_node_id_using_llm(
     node_name: str, 
@@ -308,6 +431,68 @@ async def extract_node_id_using_llm(
         logger.error("Error parsing brainlift content using LLM: %s", e)
         return _fallback_node_matching(node_name, nodes)
 
+async def extract_all_dok_node_ids_using_llm(
+    node_name: str, 
+    nodes: list[dict[str, str]], 
+    lm_service_instance: Optional['LMService'] = None
+) -> list[str]:
+    """
+    Extract ALL node IDs that match the DOK type using LLM-based fuzzy matching.
+    
+    Args:
+        node_name: Name of the node type to find (e.g., "DOK4", "DOK3")
+        nodes: List of node dictionaries with 'name' and 'id' keys
+        lm_service_instance: Optional LMService instance to use
+        
+    Returns:
+        list[str]: List of all matching node IDs
+    """
+    # Use provided instance or create a new one
+    if lm_service_instance is None:
+        lm_service_instance = get_lm_service()
+    
+    try:
+        logger.info(f"Extracting ALL node IDs for: {node_name}")
+        logger.info(f"Available nodes: {[node['name'] for node in nodes]}")
+        
+        query = f"Node type to find: {node_name} \n list of nodes: {nodes}"
+
+        # Use LLM service integration 
+        request = GenerateSimpleTextRequest(
+            query=query, 
+            lm_type="gpt-4o", 
+            custom_instructions=EXTRACT_ALL_BRAINLIFT_NODE_IDS_PROMPT
+        )
+        response = await lm_service_instance.generate_simple_text_using_slm(request)
+        
+        # Parse LLM response
+        if response and response.strip():
+            # Handle comma-separated node IDs
+            node_ids = [id.strip() for id in response.split(',') if id.strip()]
+            
+            # Validate that returned IDs actually exist in the node list
+            valid_node_ids = []
+            available_ids = {node['id'] for node in nodes}
+            
+            for node_id in node_ids:
+                if node_id in available_ids:
+                    valid_node_ids.append(node_id)
+                else:
+                    logger.warning(f"LLM returned invalid node ID: {node_id}")
+            
+            if valid_node_ids:
+                logger.info(f"LLM found {len(valid_node_ids)} valid nodes for {node_name}: {valid_node_ids}")
+                return valid_node_ids
+            else:
+                logger.debug("LLM returned no valid node IDs, using fallback for: %s", node_name)
+                return _fallback_find_all_matching_nodes(node_name, nodes)
+        else:
+            logger.debug("LLM returned empty response, using fallback for: %s", node_name)
+            return _fallback_find_all_matching_nodes(node_name, nodes)
+        
+    except Exception as e:
+        logger.error("Error finding all DOK nodes using LLM: %s", e)
+        return _fallback_find_all_matching_nodes(node_name, nodes)
 
 # Global LLM service instance
 _lm_service_instance = None
