@@ -118,7 +118,7 @@ def get_posts():
     tweets = conn.execute('''
         SELECT 
             t.id,
-            t.username,
+            ta.username,
             t.content,
             t.status,
             t.posted_at,
@@ -128,7 +128,7 @@ def get_posts():
             ta.display_name,
             ta.profile_picture
         FROM tweet t
-        LEFT JOIN twitter_account ta ON t.username = ta.username
+        LEFT JOIN twitter_account ta ON t.twitter_account_id = ta.id
         ORDER BY t.created_at DESC
     ''').fetchall()
     
