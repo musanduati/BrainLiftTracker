@@ -23,16 +23,16 @@ class NotificationPoller {
     // Initial load - mark all existing as seen without notifying
     this.loadInitialData();
     
-    // Start polling every 30 seconds
+    // Start polling every 60 seconds (reduced from 30) to reduce load
     this.intervalId = setInterval(() => {
       this.checkForNewPosts();
-    }, 30000);
+    }, 60000);
 
     // Also check immediately after initial load
     setTimeout(() => {
       this.isFirstLoad = false;
       this.checkForNewPosts();
-    }, 2000);
+    }, 5000); // Increased delay to reduce load
   }
 
   stop() {
@@ -63,10 +63,10 @@ class NotificationPoller {
         }
       });
 
-      // Mark all existing followers as seen
-      for (const account of accounts) {
+      // Mark all existing followers as seen (limit to first 5 accounts to reduce load)
+      for (const account of accounts.slice(0, 5)) {
         try {
-          const followersData = await apiClient.getSavedFollowers(account.id, 1, 100);
+          const followersData = await apiClient.getSavedFollowers(account.id, 1, 20);
           if (followersData.followers) {
             followersData.followers.forEach((follower: any) => {
               const key = `${account.username}-${follower.username}`;
@@ -74,6 +74,7 @@ class NotificationPoller {
             });
           }
         } catch (error) {
+          console.warn(`Failed to load followers for account ${account.username}:`, error);
           // Silently continue if account has no followers
         }
       }
@@ -110,11 +111,11 @@ class NotificationPoller {
         new Date(thread.created_at) > this.lastCheckedTime
       );
 
-      // Check for new followers (limit to 4 most recent)
+      // Check for new followers (limit to 3 most recent, reduce accounts checked)
       const newFollowerUpdates: FollowerUpdate[] = [];
-      for (const account of accounts.slice(0, 10)) { // Check first 10 accounts for performance
+      for (const account of accounts.slice(0, 3)) { // Reduced to 3 accounts for better performance
         try {
-          const followersData = await apiClient.getSavedFollowers(account.id, 1, 20);
+          const followersData = await apiClient.getSavedFollowers(account.id, 1, 10);
           if (followersData.followers) {
             for (const follower of followersData.followers) {
               const key = `${account.username}-${follower.username}`;
@@ -132,6 +133,7 @@ class NotificationPoller {
             }
           }
         } catch (error) {
+          console.warn(`Failed to check followers for account ${account.username} during polling:`, error);
           // Silently continue
         }
       }

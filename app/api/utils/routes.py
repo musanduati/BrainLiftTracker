@@ -132,22 +132,23 @@ def get_posts():
         ORDER BY t.created_at DESC
     ''').fetchall()
     
-    # Get all threads (grouped)
+    # Get all threads (from tweet table where thread_id is not null)
     threads = conn.execute('''
         SELECT 
-            thread_id,
-            account_username as username,
-            status,
-            posted_at,
-            created_at,
+            t.thread_id,
+            ta.username,
+            t.status,
+            MIN(t.posted_at) as posted_at,
+            MIN(t.created_at) as created_at,
             'thread' as post_type,
             COUNT(*) as tweet_count,
             ta.display_name,
             ta.profile_picture
-        FROM thread
-        LEFT JOIN twitter_account ta ON thread.account_username = ta.username
-        GROUP BY thread_id
-        ORDER BY created_at DESC
+        FROM tweet t
+        LEFT JOIN twitter_account ta ON t.twitter_account_id = ta.id
+        WHERE t.thread_id IS NOT NULL
+        GROUP BY t.thread_id, ta.username, ta.display_name, ta.profile_picture
+        ORDER BY MIN(t.created_at) DESC
     ''').fetchall()
     
     # Combine into posts list
