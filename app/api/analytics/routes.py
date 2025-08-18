@@ -107,19 +107,22 @@ def get_progress_bar_data(account_id):
                 'dok3': {
                     'added': stats['dok3_changes']['added'],
                     'deleted': stats['dok3_changes']['deleted'],
+                    'updated': stats['dok3_changes']['updated'],
                     'total': stats['dok3_changes']['total'],
                     'percentage': (stats['dok3_changes']['total'] / stats['total_changes'] * 100) if stats['total_changes'] > 0 else 0
                 },
                 'dok4': {
                     'added': stats['dok4_changes']['added'],
                     'deleted': stats['dok4_changes']['deleted'],
+                    'updated': stats['dok4_changes']['updated'],
                     'total': stats['dok4_changes']['total'],
                     'percentage': (stats['dok4_changes']['total'] / stats['total_changes'] * 100) if stats['total_changes'] > 0 else 0
                 }
             },
             'change_breakdown': {
                 'added': stats['dok3_changes']['added'] + stats['dok4_changes']['added'],
-                'deleted': stats['dok3_changes']['deleted'] + stats['dok4_changes']['deleted']
+                'deleted': stats['dok3_changes']['deleted'] + stats['dok4_changes']['deleted'],
+                'updated': stats['dok3_changes']['updated'] + stats['dok4_changes']['updated']
             }
         }
         
@@ -198,6 +201,7 @@ def get_dok_leaderboard():
                 COUNT(CASE WHEN t.dok_type = 'DOK4' THEN 1 END) as dok4_changes,
                 COUNT(CASE WHEN t.change_type = 'ADDED' THEN 1 END) as added_changes,
                 COUNT(CASE WHEN t.change_type = 'DELETED' THEN 1 END) as deleted_changes,
+                COUNT(CASE WHEN t.change_type = 'UPDATED' THEN 1 END) as updated_changes,
                 MAX(t.created_at) as last_change_date
             FROM twitter_account ta
             LEFT JOIN tweet t ON ta.id = t.twitter_account_id 
@@ -223,6 +227,7 @@ def get_dok_leaderboard():
                 'dok4_changes': account['dok4_changes'],
                 'added_changes': account['added_changes'],
                 'deleted_changes': account['deleted_changes'],
+                'updated_changes': account['updated_changes'],
                 'last_change_date': account['last_change_date']
             })
         

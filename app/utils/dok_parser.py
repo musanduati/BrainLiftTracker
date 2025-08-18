@@ -12,8 +12,10 @@ def parse_dok_metadata(tweet_content):
     Looks for patterns like:
     - ADDED: DOK3: ...
     - DELETED: DOK4: ...
+    - UPDATED: DOK3: ...
     - 🟢 ADDED: DOK3: ...
     - ❌ DELETED: DOK4: ...
+    - 🔄 UPDATED: DOK3: ...
     
     Args:
         tweet_content (str): The tweet text content
@@ -31,19 +33,22 @@ def parse_dok_metadata(tweet_content):
         >>> parse_dok_metadata("❌ DELETED: DOK3: Removed functionality")
         ('DOK3', 'DELETED')
         
+        >>> parse_dok_metadata("🔄 UPDATED: DOK4: Modified existing content")
+        ('DOK4', 'UPDATED')
+        
         >>> parse_dok_metadata("Regular tweet without DOK info")
         (None, None)
     """
     if not tweet_content:
         return None, None
     
-    # Pattern to match optional emoji + ADDED/DELETED: DOK3/DOK4: at start of tweet
-    # Handles: "ADDED: DOK3:", "🟢 ADDED: DOK4:", "❌ DELETED: DOK3:", etc.
-    pattern = r'^(?:[🟢❌]\s*)?(ADDED|DELETED):\s+(DOK[34]):'
+    # Pattern to match optional emoji + ADDED/DELETED/UPDATED: DOK3/DOK4: at start of tweet
+    # Handles: "ADDED: DOK3:", "🟢 ADDED: DOK4:", "❌ DELETED: DOK3:", "🔄 UPDATED: DOK4:", etc.
+    pattern = r'^(?:[🟢❌🔄]\s*)?(ADDED|DELETED|UPDATED):\s+(DOK[34]):'
     
     match = re.match(pattern, tweet_content.strip())
     if match:
-        change_type = match.group(1)  # ADDED or DELETED
+        change_type = match.group(1)  # ADDED, DELETED, or UPDATED
         dok_type = match.group(2)     # DOK3 or DOK4
         return dok_type, change_type
     
@@ -110,8 +115,8 @@ def get_dok_stats_for_account(conn, account_id, start_date=None, end_date=None):
     # Format results
     stats = {
         'total_changes': 0,
-        'dok3_changes': {'added': 0, 'deleted': 0, 'total': 0},
-        'dok4_changes': {'added': 0, 'deleted': 0, 'total': 0},
+        'dok3_changes': {'added': 0, 'deleted': 0, 'updated': 0, 'total': 0},
+        'dok4_changes': {'added': 0, 'deleted': 0, 'updated': 0, 'total': 0},
         'breakdown': []
     }
     
@@ -127,10 +132,10 @@ def get_dok_stats_for_account(conn, account_id, start_date=None, end_date=None):
             'count': count
         })
         
-        if dok_type == 'DOK3':
+        if dok_type == 'DOK3' and change_type in ['added', 'deleted', 'updated']:
             stats['dok3_changes'][change_type] += count
             stats['dok3_changes']['total'] += count
-        elif dok_type == 'DOK4':
+        elif dok_type == 'DOK4' and change_type in ['added', 'deleted', 'updated']:
             stats['dok4_changes'][change_type] += count
             stats['dok4_changes']['total'] += count
     
@@ -155,8 +160,10 @@ def get_all_accounts_dok_summary(conn):
             COUNT(CASE WHEN t.dok_type IS NOT NULL THEN 1 END) as dok_tweets,
             COUNT(CASE WHEN t.dok_type = 'DOK3' AND t.change_type = 'ADDED' THEN 1 END) as dok3_added,
             COUNT(CASE WHEN t.dok_type = 'DOK3' AND t.change_type = 'DELETED' THEN 1 END) as dok3_deleted,
+            COUNT(CASE WHEN t.dok_type = 'DOK3' AND t.change_type = 'UPDATED' THEN 1 END) as dok3_updated,
             COUNT(CASE WHEN t.dok_type = 'DOK4' AND t.change_type = 'ADDED' THEN 1 END) as dok4_added,
-            COUNT(CASE WHEN t.dok_type = 'DOK4' AND t.change_type = 'DELETED' THEN 1 END) as dok4_deleted
+            COUNT(CASE WHEN t.dok_type = 'DOK4' AND t.change_type = 'DELETED' THEN 1 END) as dok4_deleted,
+            COUNT(CASE WHEN t.dok_type = 'DOK4' AND t.change_type = 'UPDATED' THEN 1 END) as dok4_updated
         FROM twitter_account ta
         LEFT JOIN tweet t ON ta.id = t.twitter_account_id
         GROUP BY ta.id, ta.username, ta.display_name
@@ -175,12 +182,14 @@ def get_all_accounts_dok_summary(conn):
             'dok3_changes': {
                 'added': row['dok3_added'],
                 'deleted': row['dok3_deleted'],
-                'total': row['dok3_added'] + row['dok3_deleted']
+                'updated': row['dok3_updated'],
+                'total': row['dok3_added'] + row['dok3_deleted'] + row['dok3_updated']
             },
             'dok4_changes': {
                 'added': row['dok4_added'],
                 'deleted': row['dok4_deleted'],
-                'total': row['dok4_added'] + row['dok4_deleted']
+                'updated': row['dok4_updated'],
+                'total': row['dok4_added'] + row['dok4_deleted'] + row['dok4_updated']
             },
             'total_dok_changes': row['dok_tweets']
         }
