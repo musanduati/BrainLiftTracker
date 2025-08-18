@@ -14,6 +14,7 @@ from workflowy.config.logger import logger
 def parse_dok_points(dok_content: str, section_name: str) -> List[Dict]:
     """
     Parse DOK content into structured main points with sub-points.
+    Filters out empty nodes that have no meaningful content.
     """
     lines = dok_content.split('\n')
     points = []
@@ -31,6 +32,36 @@ def parse_dok_points(dok_content: str, section_name: str) -> List[Dict]:
                 section_title = title_match.group(1).strip()
             break
     
+    def has_meaningful_content(point: Dict) -> bool:
+        """Check if a DOK point has meaningful content."""
+        if not point:
+            return False
+            
+        main_content = point.get("main_content", "").strip()
+        sub_points = point.get("sub_points", [])
+        
+        # Filter out empty main content
+        if not main_content:
+            logger.debug(f"🚫 Filtering out empty DOK point")
+            return False
+            
+        # Filter out points that are just whitespace or minimal content
+        if len(main_content) < 2:  # Less than 2 characters
+            logger.debug(f"🚫 Filtering out minimal content DOK point: '{main_content}'")
+            return False
+            
+        # Filter out sub-points that are empty
+        meaningful_sub_points = [sub.strip() for sub in sub_points if sub.strip()]
+        filtered_count = len(sub_points) - len(meaningful_sub_points)
+        
+        if filtered_count > 0:
+            logger.debug(f"🧹 Filtered out {filtered_count} empty sub-points")
+        
+        # Update sub_points to only include meaningful ones
+        point["sub_points"] = meaningful_sub_points
+        
+        return True
+    
     for line in lines:
         stripped = line.lstrip()
         if stripped:
@@ -38,8 +69,8 @@ def parse_dok_points(dok_content: str, section_name: str) -> List[Dict]:
             
             # Main point (4 spaces indentation)
             if indent == main_indent and stripped.startswith('- '):
-                # Save previous point if exists
-                if current_point:
+                # Save previous point if exists AND has meaningful content
+                if current_point and has_meaningful_content(current_point):
                     points.append(current_point)
                 
                 # Start new point
@@ -52,10 +83,12 @@ def parse_dok_points(dok_content: str, section_name: str) -> List[Dict]:
             # Sub-point (6+ spaces indentation)
             elif current_point and indent >= sub_indent and stripped.startswith('- '):
                 sub_text = stripped[2:].strip()  # Remove "- "
-                current_point["sub_points"].append(sub_text)
+                # Only add non-empty sub-points
+                if sub_text:
+                    current_point["sub_points"].append(sub_text)
     
-    # Don't forget the last point
-    if current_point:
+    # Don't forget the last point (but only if it has meaningful content)
+    if current_point and has_meaningful_content(current_point):
         points.append(current_point)
     
     # Add metadata to each point
