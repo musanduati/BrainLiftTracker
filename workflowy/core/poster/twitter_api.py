@@ -4,7 +4,7 @@ Twitter API client for tweet posting
 
 import aiohttp
 from typing import List, Dict, Optional
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 from workflowy.core.scraper.tweet_generation import convert_markdown_urls_to_plain
 
 
@@ -47,15 +47,15 @@ class TwitterAPIClient:
                 if response.status == 201:
                     data = await response.json()
                     tweet_id = data.get('tweet_id')
-                    logger.debug(f"✅ Tweet created with ID: {tweet_id}")
+                    structured_logger.debug_operation("create_tweet", f"✅ Tweet created with ID: {tweet_id}")
                     return tweet_id
                 else:
                     error_text = await response.text()
-                    logger.error(f"❌ Failed to create tweet: {response.status} - {error_text}")
+                    structured_logger.error_operation("create_tweet", f"❌ Failed to create tweet: {response.status} - {error_text}")
                     return None
                     
         except Exception as e:
-            logger.error(f"❌ Error creating tweet: {e}")
+            structured_logger.error_operation("create_tweet", f"❌ Error creating tweet: {e}")
             return None
     
     async def post_tweet(self, session: aiohttp.ClientSession, tweet_id: int) -> bool:
@@ -74,15 +74,15 @@ class TwitterAPIClient:
             
             async with session.post(f"{self.api_base}/tweet/post/{tweet_id}", json=payload, headers=self.headers) as response:
                 if response.status == 200:
-                    logger.debug(f"✅ Tweet {tweet_id} posted successfully")
+                    structured_logger.debug_operation("post_tweet", f"✅ Tweet {tweet_id} posted successfully")
                     return True
                 else:
                     error_text = await response.text()
-                    logger.error(f"❌ Failed to post tweet {tweet_id}: {response.status} - {error_text}")
+                    structured_logger.error_operation("post_tweet", f"❌ Failed to post tweet {tweet_id}: {response.status} - {error_text}")
                     return False
                     
         except Exception as e:
-            logger.error(f"❌ Error posting tweet {tweet_id}: {e}")
+            structured_logger.error_operation("post_tweet", f"❌ Error posting tweet {tweet_id}: {e}")
             return False
     
     async def create_thread(self, session: aiohttp.ClientSession, thread_tweets: List[Dict], account_id: str) -> Optional[str]:
@@ -116,7 +116,7 @@ class TwitterAPIClient:
                     tweet_texts.append(processed_text)
             
             if not tweet_texts:
-                logger.error("❌ No valid tweet texts found in thread")
+                structured_logger.error_operation("create_thread", "❌ No valid tweet texts found in thread")
                 return None
             
             payload = {
@@ -128,15 +128,15 @@ class TwitterAPIClient:
                 if response.status == 201:
                     data = await response.json()
                     thread_id = data.get('thread_id')
-                    logger.debug(f"✅ Thread created with ID: {thread_id}")
+                    structured_logger.debug_operation("create_thread", f"✅ Thread created with ID: {thread_id}")
                     return thread_id
                 else:
                     error_text = await response.text()
-                    logger.error(f"❌ Failed to create thread: {response.status} - {error_text}")
+                    structured_logger.error_operation("create_thread", f"❌ Failed to create thread: {response.status} - {error_text}")
                     return None
                     
         except Exception as e:
-            logger.error(f"❌ Error creating thread: {e}")
+            structured_logger.error_operation("create_thread", f"❌ Error creating thread: {e}")
             return None
     
     async def post_thread(self, session: aiohttp.ClientSession, thread_id: str) -> bool:
@@ -155,13 +155,13 @@ class TwitterAPIClient:
             
             async with session.post(f"{self.api_base}/thread/post/{thread_id}", json=payload, headers=self.headers) as response:
                 if response.status == 200:
-                    logger.debug(f"✅ Thread {thread_id} posted successfully")
+                    structured_logger.debug_operation("post_thread", f"✅ Thread {thread_id} posted successfully")
                     return True
                 else:
                     error_text = await response.text()
-                    logger.error(f"❌ Failed to post thread {thread_id}: {response.status} - {error_text}")
+                    structured_logger.error_operation("post_thread",    f"❌ Failed to post thread {thread_id}: {response.status} - {error_text}")
                     return False
                     
         except Exception as e:
-            logger.error(f"❌ Error posting thread {thread_id}: {e}")
+            structured_logger.error_operation("post_thread", f"❌ Error posting thread {thread_id}: {e}")
             return False

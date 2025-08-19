@@ -6,7 +6,7 @@ from typing import List, Dict, Optional
 from datetime import datetime
 from workflowy.storage.aws_storage import AWSStorageV2
 from workflowy.storage.project_utils import normalize_project_id
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 
 
 class StorageInterface:
@@ -31,12 +31,12 @@ class StorageInterface:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"❌ Invalid project_id format: {project_id}")
+            structured_logger.error_operation("get_account_id_for_project", f"❌ Invalid project_id format: {project_id}")
             return None
         
         account_id = self.storage.get_account_id_for_project(project_id)
         if not account_id:
-            logger.error(f"❌ No account mapping found for project: {project_id}")
+            structured_logger.error_operation("get_account_id_for_project", f"❌ No account mapping found for project: {project_id}")
         
         return account_id
     
@@ -52,7 +52,7 @@ class StorageInterface:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"❌ Invalid project_id format: {project_id}")
+            structured_logger.error_operation("get_project_tweet_data", f"❌ Invalid project_id format: {project_id}")
             return []
         
         return self.storage.load_latest_tweets_from_s3(project_id)
@@ -67,7 +67,7 @@ class StorageInterface:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"❌ Invalid project_id format: {project_id}")
+            structured_logger.error_operation("save_updated_tweets_for_project", f"❌ Invalid project_id format: {project_id}")
             return
         
         try:
@@ -75,10 +75,10 @@ class StorageInterface:
             
             # Save with updated status
             updated_url = self.storage.save_change_tweets(project_id, tweets, f"{timestamp}_updated")
-            logger.info(f"📄 Updated tweet statuses saved to S3: {updated_url}")
+            structured_logger.info_operation("save_updated_tweets_for_project", f"📄 Updated tweet statuses saved to S3: {updated_url}")
             
         except Exception as e:
-            logger.error(f"❌ Error saving updated tweets for project {project_id}: {e}")
+            structured_logger.error_operation("save_updated_tweets_for_project", f"❌ Error saving updated tweets for project {project_id}: {e}")
     
     def get_all_projects(self) -> List[Dict]:
         """Get all projects from storage."""
