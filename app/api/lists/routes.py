@@ -811,3 +811,212 @@ def add_follower_to_list_accounts(list_id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@lists_bp.route('/api/v1/lists/<int:list_id>/feed', methods=['GET'])
+@require_api_key
+def get_list_feed(list_id):
+    """Get feed of tweets and threads from accounts in a specific list"""
+    try:
+        conn = get_db()
+        
+        # Check if list exists
+        lst = conn.execute(
+            'SELECT id, name FROM twitter_list WHERE id = ?',
+            (list_id,)
+        ).fetchone()
+        
+        if not lst:
+            conn.close()
+            return jsonify({'error': 'List not found'}), 404
+        
+        # Get pagination parameters
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        
+        # Validate limits
+        if limit > 100:
+            limit = 100
+        if limit < 1:
+            limit = 20
+        
+        # Get account IDs that are members of this list
+        list_members = conn.execute('''
+            SELECT account_id 
+            FROM list_membership 
+            WHERE list_id = ?
+        ''', (list_id,)).fetchall()
+        
+        if not list_members:
+            conn.close()
+            return jsonify({
+                'feed': [],
+                'total': 0,
+                'has_more': False,
+                'list_name': lst['name']
+            })
+        
+        member_ids = [member['account_id'] for member in list_members]
+        member_ids_str = ','.join(['?' for _ in member_ids])
+        
+        # Get tweets from list members (excluding thread tweets)
+        tweets_query = f'''
+            SELECT 
+                t.id,
+                t.content,
+                t.status,
+                t.created_at,
+                t.posted_at,
+                t.twitter_id,
+                t.dok_type,
+                t.change_type,
+                a.id as account_id,
+                a.username,
+                a.display_name,
+                a.profile_picture,
+                'tweet' as post_type
+            FROM tweet t
+            JOIN twitter_account a ON t.twitter_account_id = a.id
+            WHERE t.twitter_account_id IN ({member_ids_str})
+            AND t.thread_id IS NULL
+            AND t.status = 'posted'
+        '''
+        
+        # Get threads from list members (using thread_id to group)
+        threads_query = f'''
+            SELECT 
+                t.thread_id,
+                t.twitter_account_id,
+                a.username,
+                a.display_name,
+                a.profile_picture,
+                COUNT(*) as tweet_count,
+                MIN(t.created_at) as created_at,
+                MAX(t.posted_at) as posted_at,
+                GROUP_CONCAT(
+                    CASE WHEN t.thread_position = 0 THEN t.content END
+                ) as first_tweet_content,
+                'thread' as post_type
+            FROM tweet t
+            JOIN twitter_account a ON t.twitter_account_id = a.id
+            WHERE t.twitter_account_id IN ({member_ids_str})
+            AND t.thread_id IS NOT NULL
+            AND t.status = 'posted'
+            GROUP BY t.thread_id, t.twitter_account_id
+        '''
+        
+        # Combine both queries using UNION and order by posted_at/created_at
+        combined_query = f'''
+            SELECT * FROM (
+                {tweets_query}
+                UNION ALL
+                SELECT 
+                    thread_id as id,
+                    first_tweet_content as content,
+                    'posted' as status,
+                    created_at,
+                    posted_at,
+                    NULL as twitter_id,
+                    NULL as dok_type,
+                    NULL as change_type,
+                    twitter_account_id as account_id,
+                    username,
+                    display_name,
+                    profile_picture,
+                    post_type
+                FROM ({threads_query})
+            ) combined
+            ORDER BY 
+                CASE 
+                    WHEN posted_at IS NOT NULL THEN posted_at 
+                    ELSE created_at 
+                END DESC
+            LIMIT ? OFFSET ?
+        '''
+        
+        # Execute query with all member IDs twice (once for tweets, once for threads) plus limit and offset
+        query_params = member_ids + member_ids + [limit + 1, offset]  # +1 to check if there are more
+        
+        feed_items = conn.execute(combined_query, query_params).fetchall()
+        
+        # Check if there are more items
+        has_more = len(feed_items) > limit
+        if has_more:
+            feed_items = feed_items[:-1]  # Remove the extra item
+        
+        # Format feed items
+        formatted_feed = []
+        for item in feed_items:
+            if item['post_type'] == 'thread':
+                # For threads, get the complete thread data
+                thread_tweets = conn.execute('''
+                    SELECT id, content, thread_position, twitter_id
+                    FROM tweet 
+                    WHERE thread_id = ? 
+                    ORDER BY thread_position
+                ''', (item['id'],)).fetchall()
+                
+                formatted_feed.append({
+                    'id': item['id'],
+                    'type': 'thread',
+                    'thread_id': item['id'],
+                    'account_id': item['account_id'],
+                    'username': item['username'],
+                    'display_name': item['display_name'],
+                    'profile_picture': item['profile_picture'],
+                    'created_at': item['created_at'],
+                    'posted_at': item['posted_at'],
+                    'tweet_count': len(thread_tweets),
+                    'first_tweet': item['content'],
+                    'tweets': [dict(tweet) for tweet in thread_tweets]
+                })
+            else:
+                # Regular tweet
+                formatted_feed.append({
+                    'id': item['id'],
+                    'type': 'tweet',
+                    'account_id': item['account_id'],
+                    'username': item['username'],
+                    'display_name': item['display_name'],
+                    'profile_picture': item['profile_picture'],
+                    'content': item['content'],
+                    'status': item['status'],
+                    'created_at': item['created_at'],
+                    'posted_at': item['posted_at'],
+                    'twitter_id': item['twitter_id'],
+                    'dok_type': item['dok_type'],
+                    'change_type': item['change_type']
+                })
+        
+        # Get total count for pagination info
+        total_query = f'''
+            SELECT COUNT(*) as total FROM (
+                SELECT id FROM tweet 
+                WHERE twitter_account_id IN ({member_ids_str})
+                AND thread_id IS NULL 
+                AND status = 'posted'
+                UNION ALL
+                SELECT DISTINCT thread_id as id FROM tweet 
+                WHERE twitter_account_id IN ({member_ids_str})
+                AND thread_id IS NOT NULL 
+                AND status = 'posted'
+            )
+        '''
+        
+        total_count = conn.execute(total_query, member_ids + member_ids).fetchone()['total']
+        
+        conn.close()
+        
+        return jsonify({
+            'feed': formatted_feed,
+            'total': total_count,
+            'has_more': has_more,
+            'list_name': lst['name'],
+            'pagination': {
+                'limit': limit,
+                'offset': offset,
+                'next_offset': offset + limit if has_more else None
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
