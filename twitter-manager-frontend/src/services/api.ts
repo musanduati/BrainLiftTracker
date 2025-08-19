@@ -444,6 +444,43 @@ class ApiClient {
     const { data } = await this.client.get(url);
     return data;
   }
+
+  // List Feed
+  async getListFeed(listId: number, limit: number = 50, offset: number = 0): Promise<{
+    feed: Array<{
+      id: string | number;
+      type: 'tweet' | 'thread';
+      account_id: number;
+      username: string;
+      display_name?: string;
+      profile_picture?: string;
+      content?: string;
+      status?: string;
+      created_at: string;
+      posted_at?: string;
+      twitter_id?: string;
+      dok_type?: string;
+      change_type?: string;
+      // Thread specific
+      thread_id?: string;
+      tweet_count?: number;
+      first_tweet?: string;
+      tweets?: any[];
+    }>;
+    total: number;
+    has_more: boolean;
+    list_name: string;
+    pagination: {
+      limit: number;
+      offset: number;
+      next_offset?: number;
+    };
+  }> {
+    const { data } = await this.client.get(`/lists/${listId}/feed`, {
+      params: { limit, offset }
+    });
+    return data;
+  }
 }
 
 export const apiClient = new ApiClient();

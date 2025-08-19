@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Activity, ExternalLink, ChevronLeft, ChevronRight, TrendingUp, UserCheck, Clock, BarChart3, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Users, Activity, ExternalLink, ChevronLeft, ChevronRight, TrendingUp, UserCheck, Clock, BarChart3, AlertCircle, MessageSquare, X } from 'lucide-react';
 import { TopBar } from '../components/layout/TopBar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
 import { Skeleton } from '../components/common/Skeleton';
+import { ListFeed } from '../components/lists/ListFeed';
 import { apiClient } from '../services/api';
 import toast from 'react-hot-toast';
 import { formatNumber } from '../utils/format';
@@ -39,6 +40,8 @@ export const ListMembers: React.FC = () => {
   const [list, setList] = useState<ListDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showFeed, setShowFeed] = useState(false);
+  const [feedAnimating, setFeedAnimating] = useState(false);
 
   useEffect(() => {
     loadListDetails();
@@ -123,6 +126,33 @@ export const ListMembers: React.FC = () => {
   const handleMemberClick = (memberId: number) => {
     navigate(`/accounts/${memberId}`);
   };
+
+  const openFeed = () => {
+    setShowFeed(true);
+    setTimeout(() => setFeedAnimating(true), 10);
+  };
+
+  const closeFeed = () => {
+    setFeedAnimating(false);
+    setTimeout(() => setShowFeed(false), 300);
+  };
+
+  // Keyboard support
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && showFeed) {
+        closeFeed();
+      }
+    };
+
+    if (showFeed) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showFeed]);
 
   // Calculate paginated brainlifts
   const paginatedMembers = useMemo(() => {
@@ -367,7 +397,7 @@ export const ListMembers: React.FC = () => {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Top Performers</CardTitle>
-                      <CardDescription>Most active brainlifts in this list</CardDescription>
+                      <CardDescription>Most active brainlifts in this Org/Function</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
@@ -412,7 +442,66 @@ export const ListMembers: React.FC = () => {
               </div>
             );
           })()}
+
         </div>
+
+        {/* Floating Feed Button */}
+        <div className="fixed top-20 right-6 z-30">
+          <Button
+            onClick={openFeed}
+            className="bg-primary/90 hover:bg-primary text-primary-foreground shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 rounded-full p-3 backdrop-blur-sm border border-border/20 ring-1 ring-black/5 dark:ring-white/10"
+            size="sm"
+          >
+            <MessageSquare size={20} className="mr-2" />
+            Recent Posts
+          </Button>
+        </div>
+
+        {/* Feed Slide-out Panel */}
+        {showFeed && (
+          <>
+            {/* Invisible click area to close (only on larger screens) */}
+            <div 
+              className="fixed top-20 bottom-4 left-0 right-0 z-40 hidden sm:block"
+              onClick={closeFeed}
+            ></div>
+
+            {/* Slide-out Panel */}
+            <div 
+              className={`fixed top-16 right-0 bottom-0 w-full sm:top-20 sm:right-4 sm:bottom-4 sm:w-80 md:w-96 lg:w-[28rem] bg-background/85 backdrop-blur-lg shadow-2xl z-50 transform transition-transform duration-300 ease-in-out border border-border sm:rounded-2xl overflow-hidden ring-1 ring-black/5 dark:ring-white/10 ${
+                feedAnimating ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              <div className="flex flex-col h-full">
+                {/* Header */}
+                <div className="flex items-center justify-between p-3 border-b border-border flex-shrink-0 bg-muted/30">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-sm">
+                      <MessageSquare size={16} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">Recent Posts</h3>
+                      <p className="text-xs text-muted-foreground">Latest posts from {list.name}</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={closeFeed}
+                    className="rounded-full p-1.5 hover:bg-accent"
+                  >
+                    <X size={16} />
+                  </Button>
+                </div>
+
+                {/* Feed Content */}
+                <div className="flex-1 overflow-y-auto p-3">
+                  <ListFeed listId={parseInt(listId!)} listName={list.name} compact={true} />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Brainlifts Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
