@@ -214,6 +214,9 @@ def advanced_compare_dok_states(previous_state: List[Dict], current_state: List[
     # Create lookup dictionaries with normalized content
     prev_signatures = {}
     curr_signatures = {}
+
+    logger.info(f"Number of items in previous_state: {len(previous_state)}")
+    logger.info(f"Number of items in current_state: {len(current_state)}")
     
     # Build signature maps
     for point in previous_state:
@@ -227,12 +230,14 @@ def advanced_compare_dok_states(previous_state: List[Dict], current_state: List[
     # Exact matches (unchanged content)
     exact_matches = set(prev_signatures.keys()) & set(curr_signatures.keys())
     logger.info(f"Exact matches: {exact_matches}")
+    logger.info(f"Number of exact matches: {len(exact_matches)}")
     
     # Clearly added content (new signatures)
     clearly_added = []
     for signature in curr_signatures:
         if signature not in prev_signatures:
             clearly_added.append(curr_signatures[signature])
+    logger.info(f"Number of clearly added: {len(clearly_added)}")
     logger.info(f"Clearly added: {clearly_added}")
 
     # Clearly deleted content (missing signatures) 
@@ -240,8 +245,31 @@ def advanced_compare_dok_states(previous_state: List[Dict], current_state: List[
     for signature in prev_signatures:
         if signature not in curr_signatures:
             clearly_deleted.append(prev_signatures[signature])
+    logger.info(f"Number of clearly deleted: {len(clearly_deleted)}")
     logger.info(f"Clearly deleted: {clearly_deleted}")
 
+    if len(clearly_deleted) * len(clearly_added) > 1000:
+        logger.warning("⚠️ This is a large changeset. Lambda may timeout.")
+
+    # Add a reasonable limit to prevent runaway processing
+    # if len(clearly_deleted) * len(clearly_added) > 1000:
+    #     # TODO: Uncomment this when we have a better way to handle large changesets (rare scenario)
+    #     O(n^2) v/s O(n * log n)
+    #     logger.warning("⚠️ Skipping similarity matching for large changesets")
+        
+    #     # Return early with pure adds/deletes, no similarity matching
+    #     return {
+    #         "added": clearly_added,
+    #         "updated": [],  # Skip similarity matching = no updates detected
+    #         "deleted": clearly_deleted,
+    #         "stats": {
+    #             "unchanged": len(exact_matches),
+    #             "added": len(clearly_added),
+    #             "updated": 0,
+    #             "deleted": len(clearly_deleted)
+    #         }
+    #     }
+    # else:
     # Advanced similarity matching for potential updates
     updated = []
     added = []
@@ -263,7 +291,7 @@ def advanced_compare_dok_states(previous_state: List[Dict], current_state: List[
                 added_point["main_content"],
                 added_point["sub_points"]
             )
-            
+
             similarity = calculate_similarity_score(deleted_signature, added_signature)
             
             if similarity > best_similarity and similarity > 0.5:  # 50% similarity threshold

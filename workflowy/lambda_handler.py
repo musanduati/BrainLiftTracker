@@ -110,6 +110,9 @@ async def process_and_post_v2(environment: str = 'test'):
     for result in processing_results:
         if result['status'] == 'success' and result.get('total_change_tweets', 0) > 0:
             projects_with_content.append(result['project_id'])
+    
+    logger.info(f"Number of projects with Tweet content: {len(projects_with_content)}")
+    logger.info(f"Projects with content: {projects_with_content}")
 
     if projects_with_content:
         logger.info(f"👥 Projects with new content to post: {projects_with_content}")
