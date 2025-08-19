@@ -234,7 +234,7 @@ def delete_from_twitter(account_id, twitter_id, retry_after_refresh=True):
                 f'https://api.twitter.com/2/tweets/{twitter_id}',
                 headers=headers
             )
-            print(f"Delete response: Status {response.status_code}")
+            print(f"Delete response: Status {response.status_code}, Body: {response.text}")
             
             if response.status_code == 401 and retry_after_refresh:
                 # Token expired, try to refresh
@@ -273,9 +273,19 @@ def delete_from_twitter(account_id, twitter_id, retry_after_refresh=True):
                 error_msg = f"Twitter API error (status {response.status_code}): {response.text}"
                 return False, error_msg
             
-            # Success - tweet was deleted
-            conn.close()
-            return True, "Tweet deleted successfully"
+            # Check if the response actually confirms deletion
+            try:
+                response_data = response.json()
+                if response_data.get('data', {}).get('deleted') == True:
+                    conn.close()
+                    return True, "Tweet deleted successfully"
+                else:
+                    conn.close()
+                    return False, f"Twitter API returned 200 but deletion not confirmed: {response.text}"
+            except:
+                # If we can't parse JSON, assume success based on 200 status
+                conn.close()
+                return True, "Tweet deleted (200 response)"
         
     except Exception as e:
         conn.close()

@@ -774,7 +774,8 @@ def bulk_delete_from_twitter(account_id):
                 FROM tweet t
                 JOIN twitter_account a ON t.twitter_account_id = a.id
                 WHERE t.twitter_account_id = ? AND t.id IN ({placeholders})
-                AND t.twitter_id IS NOT NULL
+                AND t.twitter_id IS NOT NULL 
+                AND t.twitter_id NOT LIKE 'mock_%'
             '''
             params = [account_id] + tweet_ids
         else:
@@ -785,6 +786,7 @@ def bulk_delete_from_twitter(account_id):
                 JOIN twitter_account a ON t.twitter_account_id = a.id
                 WHERE t.twitter_account_id = ? 
                 AND t.twitter_id IS NOT NULL
+                AND t.twitter_id NOT LIKE 'mock_%'
                 ORDER BY t.posted_at DESC
                 LIMIT ?
             '''
@@ -821,6 +823,7 @@ def bulk_delete_from_twitter(account_id):
                     FROM tweet t
                     JOIN twitter_account a ON t.twitter_account_id = a.id
                     WHERE t.thread_id = ? AND t.twitter_id IS NOT NULL
+                    AND t.twitter_id NOT LIKE 'mock_%'
                     ORDER BY t.thread_position ASC
                 ''', (thread_id,)).fetchall()
                 thread_groups[thread_id] = thread_tweets
