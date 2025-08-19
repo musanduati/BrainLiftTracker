@@ -104,7 +104,7 @@ async def process_and_post_v2(environment: str = 'test'):
             project_name = project['name']
             
             # Set project context for this processing
-            LogContext.set_project_id(project_id)
+            LogContext.set_project_context(project_id, project_name)
             structured_logger.info_operation("project_processing", f"🔄 PROCESSING PROJECT {i}/{len(projects)}: {project_name} ({project_id})",
                                            project_index=i, total_projects=len(projects), project_name=project_name, project_id=project_id)
             
@@ -113,6 +113,7 @@ async def process_and_post_v2(environment: str = 'test'):
     
     # Clear project context
     LogContext.set_project_id(None)
+    LogContext.set_project_name(None)
     
     # Step 3: Post tweets for projects that had new content
     structured_logger.info_operation("tweet_posting", "🐦 STEP 3: Posting tweets...")
