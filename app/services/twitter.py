@@ -131,8 +131,13 @@ def refresh_twitter_token(account_id, retry_count=0):
             
         else:
             # Handle refresh failure
-            error_data = response.json() if response.headers.get('content-type') == 'application/json' else {}
-            error_msg = error_data.get('error_description', f'HTTP {response.status_code}')
+            try:
+                error_data = response.json() if 'json' in response.headers.get('content-type', '') else {}
+                error_msg = error_data.get('error_description', error_data.get('error', f'HTTP {response.status_code}'))
+                print(f"Token refresh failed for account {account_id}: Status {response.status_code}, Response: {response.text}")
+            except:
+                error_msg = f'HTTP {response.status_code}: {response.text}'
+                print(f"Token refresh failed for account {account_id}: Status {response.status_code}, Raw response: {response.text}")
             
             # If it's a rate limit error, retry with backoff
             if response.status_code == 429:
@@ -224,20 +229,25 @@ def delete_from_twitter(account_id, twitter_id, retry_after_refresh=True):
                 'Content-Type': 'application/json'
             }
             
+            print(f"Attempting to delete tweet {twitter_id} for account {account_id}")
             response = requests.delete(
                 f'https://api.twitter.com/2/tweets/{twitter_id}',
                 headers=headers
             )
+            print(f"Delete response: Status {response.status_code}")
             
             if response.status_code == 401 and retry_after_refresh:
                 # Token expired, try to refresh
                 conn.close()
-                success, new_token = refresh_twitter_token(account_id)
+                print(f"Token expired for account {account_id}, attempting refresh...")
+                success, result = refresh_twitter_token(account_id)
                 
                 if success:
+                    print(f"Token refreshed successfully for account {account_id}, retrying deletion...")
                     return delete_from_twitter(account_id, twitter_id, retry_after_refresh=False)
                 else:
-                    return False, f"Token refresh failed: {new_token}"
+                    print(f"Token refresh failed for account {account_id}: {result}")
+                    return False, f"Token refresh failed: {result}"
             
             if response.status_code == 429:
                 # Rate limit hit
