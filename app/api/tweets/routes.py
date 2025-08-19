@@ -9,7 +9,7 @@ except ImportError:
 
 from app.db.database import get_db
 from app.utils.security import require_api_key
-from app.services.twitter import post_to_twitter
+from app.services.twitter import post_to_twitter, delete_from_twitter
 from app.utils.rate_limit import get_rate_limit_delay
 from app.utils.dok_parser import parse_dok_metadata
 
@@ -716,6 +716,250 @@ def cleanup_account_tweets(account_id):
             'filters_applied': {
                 'statuses': statuses or 'all',
                 'days_old': days_old or 'all'
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@tweets_bp.route('/api/v1/accounts/<int:account_id>/tweets/delete-from-twitter', methods=['POST'])
+@require_api_key
+def bulk_delete_from_twitter(account_id):
+    """Delete tweets from Twitter (X) using the official API"""
+    data = request.get_json() or {}
+    
+    # Parameters
+    limit = data.get('limit', 10)  # How many tweets to delete
+    include_threads = data.get('include_threads', True)  # Whether to delete complete threads
+    tweet_ids = data.get('tweet_ids', [])  # Specific tweet IDs to delete
+    confirm = data.get('confirm', False)  # Safety confirmation
+    
+    # Validation
+    if not confirm:
+        return jsonify({
+            'error': 'This will permanently delete tweets from X/Twitter. Set "confirm": true to proceed.',
+            'warning': 'Deleted tweets cannot be recovered'
+        }), 400
+    
+    if limit > 50:
+        return jsonify({'error': 'Maximum 50 tweets can be deleted at once due to rate limits'}), 400
+    
+    try:
+        conn = get_db()
+        
+        # Verify account exists
+        account = conn.execute(
+            'SELECT username FROM twitter_account WHERE id = ?',
+            (account_id,)
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'Account not found'}), 404
+        
+        results = {
+            'deleted_from_twitter': [],
+            'failed_to_delete': [],
+            'rate_limited': [],
+            'already_deleted': [],
+            'threads_deleted': {}
+        }
+        
+        # Get tweets to delete
+        if tweet_ids:
+            # Delete specific tweet IDs
+            placeholders = ','.join(['?' for _ in tweet_ids])
+            query = f'''
+                SELECT t.*, a.username 
+                FROM tweet t
+                JOIN twitter_account a ON t.twitter_account_id = a.id
+                WHERE t.twitter_account_id = ? AND t.id IN ({placeholders})
+                AND t.twitter_id IS NOT NULL
+            '''
+            params = [account_id] + tweet_ids
+        else:
+            # Delete most recent tweets with twitter_id (posted tweets)
+            query = '''
+                SELECT t.*, a.username 
+                FROM tweet t
+                JOIN twitter_account a ON t.twitter_account_id = a.id
+                WHERE t.twitter_account_id = ? 
+                AND t.twitter_id IS NOT NULL
+                ORDER BY t.posted_at DESC
+                LIMIT ?
+            '''
+            params = [account_id, limit]
+        
+        tweets_to_delete = conn.execute(query, params).fetchall()
+        
+        if not tweets_to_delete:
+            conn.close()
+            return jsonify({
+                'message': 'No posted tweets found to delete',
+                'account_username': account['username'],
+                'results': results
+            })
+        
+        # Group by threads if include_threads is enabled
+        if include_threads:
+            thread_groups = {}
+            standalone_tweets = []
+            
+            for tweet in tweets_to_delete:
+                if tweet['thread_id']:
+                    thread_id = tweet['thread_id']
+                    if thread_id not in thread_groups:
+                        thread_groups[thread_id] = []
+                    thread_groups[thread_id].append(tweet)
+                else:
+                    standalone_tweets.append(tweet)
+            
+            # For each thread, get ALL tweets in the thread
+            for thread_id in thread_groups.keys():
+                thread_tweets = conn.execute('''
+                    SELECT t.*, a.username 
+                    FROM tweet t
+                    JOIN twitter_account a ON t.twitter_account_id = a.id
+                    WHERE t.thread_id = ? AND t.twitter_id IS NOT NULL
+                    ORDER BY t.thread_position ASC
+                ''', (thread_id,)).fetchall()
+                thread_groups[thread_id] = thread_tweets
+            
+            # Process threads first (delete in reverse order - last tweet first)
+            for thread_id, thread_tweets in thread_groups.items():
+                thread_results = {
+                    'deleted': [],
+                    'failed': [],
+                    'total_tweets': len(thread_tweets)
+                }
+                
+                # Delete in reverse order (newest first)
+                for tweet in reversed(thread_tweets):
+                    # Check rate limit
+                    delay = get_rate_limit_delay(account_id)
+                    if delay > 0:
+                        results['rate_limited'].append({
+                            'tweet_id': tweet['id'],
+                            'twitter_id': tweet['twitter_id'],
+                            'wait_seconds': delay
+                        })
+                        continue
+                    
+                    # Attempt deletion from Twitter
+                    success, message = delete_from_twitter(account_id, tweet['twitter_id'])
+                    
+                    if success:
+                        # Mark as deleted in local DB
+                        conn.execute('''
+                            UPDATE tweet 
+                            SET status = 'deleted_from_twitter',
+                                updated_at = ?
+                            WHERE id = ?
+                        ''', (datetime.now(UTC).isoformat(), tweet['id']))
+                        
+                        thread_results['deleted'].append({
+                            'tweet_id': tweet['id'],
+                            'twitter_id': tweet['twitter_id'],
+                            'content_preview': tweet['content'][:50] + '...' if len(tweet['content']) > 50 else tweet['content']
+                        })
+                        results['deleted_from_twitter'].append({
+                            'tweet_id': tweet['id'],
+                            'twitter_id': tweet['twitter_id'],
+                            'thread_id': thread_id
+                        })
+                    else:
+                        thread_results['failed'].append({
+                            'tweet_id': tweet['id'],
+                            'twitter_id': tweet['twitter_id'],
+                            'error': message
+                        })
+                        
+                        if "not found" in message.lower():
+                            results['already_deleted'].append({
+                                'tweet_id': tweet['id'],
+                                'twitter_id': tweet['twitter_id']
+                            })
+                        else:
+                            results['failed_to_delete'].append({
+                                'tweet_id': tweet['id'],
+                                'twitter_id': tweet['twitter_id'],
+                                'error': message
+                            })
+                
+                results['threads_deleted'][thread_id] = thread_results
+            
+            # Process standalone tweets
+            tweets_to_process = standalone_tweets
+        else:
+            tweets_to_process = tweets_to_delete
+        
+        # Process individual tweets or standalone tweets
+        for tweet in tweets_to_process:
+            # Check rate limit
+            delay = get_rate_limit_delay(account_id)
+            if delay > 0:
+                results['rate_limited'].append({
+                    'tweet_id': tweet['id'],
+                    'twitter_id': tweet['twitter_id'],
+                    'wait_seconds': delay
+                })
+                continue
+            
+            # Attempt deletion from Twitter
+            success, message = delete_from_twitter(account_id, tweet['twitter_id'])
+            
+            if success:
+                # Mark as deleted in local DB
+                conn.execute('''
+                    UPDATE tweet 
+                    SET status = 'deleted_from_twitter',
+                        updated_at = ?
+                    WHERE id = ?
+                ''', (datetime.now(UTC).isoformat(), tweet['id']))
+                
+                results['deleted_from_twitter'].append({
+                    'tweet_id': tweet['id'],
+                    'twitter_id': tweet['twitter_id'],
+                    'content_preview': tweet['content'][:50] + '...' if len(tweet['content']) > 50 else tweet['content']
+                })
+            else:
+                if "not found" in message.lower():
+                    results['already_deleted'].append({
+                        'tweet_id': tweet['id'],
+                        'twitter_id': tweet['twitter_id']
+                    })
+                else:
+                    results['failed_to_delete'].append({
+                        'tweet_id': tweet['id'],
+                        'twitter_id': tweet['twitter_id'],
+                        'error': message
+                    })
+        
+        conn.commit()
+        conn.close()
+        
+        # Summary
+        total_deleted = len(results['deleted_from_twitter'])
+        total_failed = len(results['failed_to_delete'])
+        total_rate_limited = len(results['rate_limited'])
+        total_already_deleted = len(results['already_deleted'])
+        
+        return jsonify({
+            'message': f'Bulk delete completed for @{account["username"]}',
+            'summary': {
+                'total_processed': total_deleted + total_failed + total_rate_limited + total_already_deleted,
+                'successfully_deleted': total_deleted,
+                'failed_to_delete': total_failed,
+                'rate_limited': total_rate_limited,
+                'already_deleted': total_already_deleted,
+                'threads_processed': len(results['threads_deleted'])
+            },
+            'account_id': account_id,
+            'account_username': account['username'],
+            'results': results,
+            'rate_limit_info': {
+                'message': 'X API has rate limits. If many requests are rate limited, wait 15 minutes and try again.',
+                'current_delay': get_rate_limit_delay(account_id)
             }
         })
         

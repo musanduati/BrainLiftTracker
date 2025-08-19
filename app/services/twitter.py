@@ -159,6 +159,119 @@ def refresh_twitter_token(account_id, retry_count=0):
         # Exception during token refresh
         return False, str(e)
 
+def delete_from_twitter(account_id, twitter_id, retry_after_refresh=True):
+    """Delete a tweet from Twitter using the account's credentials with automatic token refresh
+    
+    Args:
+        account_id: The database ID of the Twitter account
+        twitter_id: The Twitter ID of the tweet to delete
+        retry_after_refresh: Whether to retry after refreshing token (prevents infinite loops)
+    
+    Returns:
+        tuple: (success, result_message)
+    """
+    conn = get_db()
+    
+    # Get account credentials
+    account = conn.execute(
+        'SELECT * FROM twitter_account WHERE id = ?', 
+        (account_id,)
+    ).fetchone()
+    
+    if not account:
+        conn.close()
+        return False, "Account not found"
+    
+    # Check if mock mode
+    if is_mock_mode():
+        conn.close()
+        return True, "Mock delete successful"
+    
+    # Check rate limit before attempting to delete
+    can_delete, wait_time = check_rate_limit(account_id)
+    if not can_delete:
+        conn.close()
+        return False, f"Rate limit approaching for account. Wait {wait_time:.0f} seconds."
+    
+    # Check if token needs proactive refresh
+    if account['token_expires_at']:
+        token_expires = datetime.fromisoformat(account['token_expires_at'])
+        if token_expires.tzinfo is None:
+            token_expires = token_expires.replace(tzinfo=UTC)
+        if datetime.now(UTC) >= token_expires - timedelta(minutes=15):
+            conn.close()
+            success, result = refresh_twitter_token(account_id)
+            if success:
+                conn = get_db()
+                account = conn.execute(
+                    'SELECT * FROM twitter_account WHERE id = ?', 
+                    (account_id,)
+                ).fetchone()
+    
+    try:
+        # Decrypt access token
+        access_token = decrypt_token(account['access_token'])
+        access_token_secret = decrypt_token(account['access_token_secret']) if account['access_token_secret'] else None
+        
+        # Check if OAuth 2.0 (no secret) or OAuth 1.0a (with secret)
+        if access_token_secret and access_token_secret.strip():
+            conn.close()
+            return False, "OAuth 1.0a not supported. Please re-authorize with OAuth 2.0."
+        else:
+            # OAuth 2.0 - direct API call
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json'
+            }
+            
+            response = requests.delete(
+                f'https://api.twitter.com/2/tweets/{twitter_id}',
+                headers=headers
+            )
+            
+            if response.status_code == 401 and retry_after_refresh:
+                # Token expired, try to refresh
+                conn.close()
+                success, new_token = refresh_twitter_token(account_id)
+                
+                if success:
+                    return delete_from_twitter(account_id, twitter_id, retry_after_refresh=False)
+                else:
+                    return False, f"Token refresh failed: {new_token}"
+            
+            if response.status_code == 429:
+                # Rate limit hit
+                conn.close()
+                retry_after = response.headers.get('x-rate-limit-reset')
+                if retry_after:
+                    with rate_limit_tracker['lock']:
+                        reset_time = int(retry_after)
+                        rate_limit_tracker['accounts'][account_id]['reset_time'] = reset_time
+                        rate_limit_tracker['accounts'][account_id]['count'] = 200
+                    wait_time = reset_time - time.time()
+                    error_msg = f"Rate limit hit. Reset in {wait_time:.0f} seconds"
+                else:
+                    error_msg = "Rate limit hit. Please wait before deleting again."
+                return False, error_msg
+            
+            if response.status_code == 404:
+                conn.close()
+                return False, "Tweet not found or already deleted"
+            
+            if response.status_code != 200:
+                conn.close()
+                error_msg = f"Twitter API error (status {response.status_code}): {response.text}"
+                return False, error_msg
+            
+            # Success - tweet was deleted
+            conn.close()
+            return True, "Tweet deleted successfully"
+        
+    except Exception as e:
+        conn.close()
+        error_msg = f"Exception during deletion: {str(e)}"
+        return False, error_msg
+
 def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_refresh=True):
     """Post a tweet to Twitter using the account's credentials with automatic token refresh
     

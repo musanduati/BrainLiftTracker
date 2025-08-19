@@ -4003,6 +4003,248 @@
 							"body": "{\n    \"message\": \"Reset 4 failed tweets to pending status\",\n    \"count\": 4,\n    \"affected_threads\": 2,\n    \"thread_stats\": [\n        {\n            \"thread_id\": \"thread-1\",\n            \"total\": 3,\n            \"pending\": 3\n        },\n        {\n            \"thread_id\": \"thread-2\",\n            \"total\": 2,\n            \"pending\": 1\n        }\n    ]\n}"
 						}
 					]
+				},
+				{
+					"name": "Bulk Delete Tweets from X/Twitter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"limit\": 10,\n    \"include_threads\": true,\n    \"confirm\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/tweets/delete-from-twitter",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"tweets",
+								"delete-from-twitter"
+							]
+						},
+						"description": "Delete tweets from X/Twitter using the official API. This PERMANENTLY deletes tweets from Twitter.\n\nParameters:\n- limit: Number of tweets to delete (max 50, default 10)\n- include_threads: Delete complete threads (default true)\n- tweet_ids: Array of specific tweet IDs to delete (optional)\n- confirm: Required safety confirmation (must be true)\n\nRate Limits:\n- Uses Twitter's API rate limits\n- Max 50 tweets per request\n- Automatically handles rate limiting\n\nSafety:\n- Requires explicit confirmation\n- Shows detailed results\n- Updates local database status\n\nThread Handling:\n- Deletes threads in reverse order (newest first)\n- Provides per-thread deletion status"
+					},
+					"response": [
+						{
+							"name": "Bulk Delete Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10,\n    \"include_threads\": true,\n    \"confirm\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/1/tweets/delete-from-twitter",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"1",
+										"tweets",
+										"delete-from-twitter"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Bulk delete completed for @example_user\",\n    \"summary\": {\n        \"total_processed\": 8,\n        \"successfully_deleted\": 6,\n        \"failed_to_delete\": 0,\n        \"rate_limited\": 2,\n        \"already_deleted\": 0,\n        \"threads_processed\": 1\n    },\n    \"account_id\": 1,\n    \"account_username\": \"example_user\",\n    \"results\": {\n        \"deleted_from_twitter\": [\n            {\n                \"tweet_id\": 123,\n                \"twitter_id\": \"1234567890123456789\",\n                \"content_preview\": \"This is a sample tweet that was deleted...\"\n            }\n        ],\n        \"failed_to_delete\": [],\n        \"rate_limited\": [\n            {\n                \"tweet_id\": 124,\n                \"twitter_id\": \"1234567890123456790\",\n                \"wait_seconds\": 850\n            }\n        ],\n        \"already_deleted\": [],\n        \"threads_deleted\": {\n            \"thread-uuid-123\": {\n                \"deleted\": 3,\n                \"failed\": 0,\n                \"total_tweets\": 3\n            }\n        }\n    },\n    \"rate_limit_info\": {\n        \"message\": \"X API has rate limits. If many requests are rate limited, wait 15 minutes and try again.\",\n        \"current_delay\": 0\n    }\n}"
+						},
+						{
+							"name": "Delete Specific Tweets",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"tweet_ids\": [123, 124, 125],\n    \"confirm\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/1/tweets/delete-from-twitter",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"1",
+										"tweets",
+										"delete-from-twitter"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Bulk delete completed for @example_user\",\n    \"summary\": {\n        \"total_processed\": 3,\n        \"successfully_deleted\": 3,\n        \"failed_to_delete\": 0,\n        \"rate_limited\": 0,\n        \"already_deleted\": 0,\n        \"threads_processed\": 0\n    },\n    \"account_id\": 1,\n    \"account_username\": \"example_user\",\n    \"results\": {\n        \"deleted_from_twitter\": [\n            {\n                \"tweet_id\": 123,\n                \"twitter_id\": \"1234567890123456789\",\n                \"content_preview\": \"First tweet deleted...\"\n            },\n            {\n                \"tweet_id\": 124,\n                \"twitter_id\": \"1234567890123456790\",\n                \"content_preview\": \"Second tweet deleted...\"\n            },\n            {\n                \"tweet_id\": 125,\n                \"twitter_id\": \"1234567890123456791\",\n                \"content_preview\": \"Third tweet deleted...\"\n            }\n        ]\n    }\n}"
+						},
+						{
+							"name": "Rate Limited Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 50,\n    \"confirm\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/1/tweets/delete-from-twitter",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"1",
+										"tweets",
+										"delete-from-twitter"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Bulk delete completed for @example_user\",\n    \"summary\": {\n        \"total_processed\": 30,\n        \"successfully_deleted\": 10,\n        \"failed_to_delete\": 0,\n        \"rate_limited\": 20,\n        \"already_deleted\": 0,\n        \"threads_processed\": 2\n    },\n    \"rate_limit_info\": {\n        \"message\": \"X API has rate limits. If many requests are rate limited, wait 15 minutes and try again.\",\n        \"current_delay\": 847\n    }\n}"
+						},
+						{
+							"name": "Confirmation Required",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/1/tweets/delete-from-twitter",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"1",
+										"tweets",
+										"delete-from-twitter"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"error\": \"This will permanently delete tweets from X/Twitter. Set \\\"confirm\\\": true to proceed.\",\n    \"warning\": \"Deleted tweets cannot be recovered\"\n}"
+						}
+					]
 				}
 			]
 		},
