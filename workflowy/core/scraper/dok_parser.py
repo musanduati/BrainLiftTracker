@@ -8,7 +8,7 @@ import re
 from datetime import datetime
 from typing import List, Dict
 import diff_match_patch as dmp_module
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 
 
 def parse_dok_points(dok_content: str, section_name: str) -> List[Dict]:
@@ -42,12 +42,12 @@ def parse_dok_points(dok_content: str, section_name: str) -> List[Dict]:
         
         # Filter out empty main content
         if not main_content:
-            logger.debug(f"🚫 Filtering out empty DOK point")
+            structured_logger.debug_operation("has_meaningful_content", f"🚫 Filtering out empty DOK point")
             return False
             
         # Filter out points that are just whitespace or minimal content
         if len(main_content) < 2:  # Less than 2 characters
-            logger.debug(f"🚫 Filtering out minimal content DOK point: '{main_content}'")
+            structured_logger.debug_operation("has_meaningful_content", f"🚫 Filtering out minimal content DOK point: '{main_content}'")
             return False
             
         # Filter out sub-points that are empty
@@ -55,7 +55,7 @@ def parse_dok_points(dok_content: str, section_name: str) -> List[Dict]:
         filtered_count = len(sub_points) - len(meaningful_sub_points)
         
         if filtered_count > 0:
-            logger.debug(f"🧹 Filtered out {filtered_count} empty sub-points")
+            structured_logger.debug_operation("has_meaningful_content", f"🧹 Filtered out {filtered_count} empty sub-points")
         
         # Update sub_points to only include meaningful ones
         point["sub_points"] = meaningful_sub_points
@@ -215,8 +215,8 @@ def advanced_compare_dok_states(previous_state: List[Dict], current_state: List[
     prev_signatures = {}
     curr_signatures = {}
 
-    logger.info(f"Number of items in previous_state: {len(previous_state)}")
-    logger.info(f"Number of items in current_state: {len(current_state)}")
+    structured_logger.info_operation("advanced_compare_dok_states", f"Number of items in previous_state: {len(previous_state)}")
+    structured_logger.info_operation("advanced_compare_dok_states", f"Number of items in current_state: {len(current_state)}")
     
     # Build signature maps
     for point in previous_state:
@@ -229,33 +229,33 @@ def advanced_compare_dok_states(previous_state: List[Dict], current_state: List[
     
     # Exact matches (unchanged content)
     exact_matches = set(prev_signatures.keys()) & set(curr_signatures.keys())
-    logger.info(f"Exact matches: {exact_matches}")
-    logger.info(f"Number of exact matches: {len(exact_matches)}")
+    structured_logger.info_operation("advanced_compare_dok_states", f"Exact matches: {exact_matches}")
+    structured_logger.info_operation("advanced_compare_dok_states", f"Number of exact matches: {len(exact_matches)}")
     
     # Clearly added content (new signatures)
     clearly_added = []
     for signature in curr_signatures:
         if signature not in prev_signatures:
             clearly_added.append(curr_signatures[signature])
-    logger.info(f"Number of clearly added: {len(clearly_added)}")
-    logger.info(f"Clearly added: {clearly_added}")
+    structured_logger.info_operation("advanced_compare_dok_states", f"Number of clearly added: {len(clearly_added)}")
+    structured_logger.info_operation("advanced_compare_dok_states", f"Clearly added: {clearly_added}")
 
     # Clearly deleted content (missing signatures) 
     clearly_deleted = []
     for signature in prev_signatures:
         if signature not in curr_signatures:
             clearly_deleted.append(prev_signatures[signature])
-    logger.info(f"Number of clearly deleted: {len(clearly_deleted)}")
-    logger.info(f"Clearly deleted: {clearly_deleted}")
+    structured_logger.info_operation("advanced_compare_dok_states", f"Number of clearly deleted: {len(clearly_deleted)}")
+    structured_logger.info_operation("advanced_compare_dok_states", f"Clearly deleted: {clearly_deleted}")
 
     if len(clearly_deleted) * len(clearly_added) > 1000:
-        logger.warning("⚠️ This is a large changeset. Lambda may timeout.")
+        structured_logger.warning_operation("advanced_compare_dok_states", "⚠️ This is a large changeset. Lambda may timeout.")
 
     # Add a reasonable limit to prevent runaway processing
     # if len(clearly_deleted) * len(clearly_added) > 1000:
     #     # TODO: Uncomment this when we have a better way to handle large changesets (rare scenario)
     #     O(n^2) v/s O(n * log n)
-    #     logger.warning("⚠️ Skipping similarity matching for large changesets")
+    #     structured_logger.warning_operation("advanced_compare_dok_states", "⚠️ Skipping similarity matching for large changesets")
         
     #     # Return early with pure adds/deletes, no similarity matching
     #     return {
