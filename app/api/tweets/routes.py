@@ -855,10 +855,9 @@ def bulk_delete_from_twitter(account_id):
                         # Mark as deleted in local DB
                         conn.execute('''
                             UPDATE tweet 
-                            SET status = 'deleted_from_twitter',
-                                updated_at = ?
+                            SET status = 'deleted_from_twitter'
                             WHERE id = ?
-                        ''', (datetime.now(UTC).isoformat(), tweet['id']))
+                        ''', (tweet['id'],))
                         
                         thread_results['deleted'].append({
                             'tweet_id': tweet['id'],
@@ -915,10 +914,9 @@ def bulk_delete_from_twitter(account_id):
                 # Mark as deleted in local DB
                 conn.execute('''
                     UPDATE tweet 
-                    SET status = 'deleted_from_twitter',
-                        updated_at = ?
+                    SET status = 'deleted_from_twitter'
                     WHERE id = ?
-                ''', (datetime.now(UTC).isoformat(), tweet['id']))
+                ''', (tweet['id'],))
                 
                 results['deleted_from_twitter'].append({
                     'tweet_id': tweet['id'],
