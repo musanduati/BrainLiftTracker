@@ -57,6 +57,9 @@ read -p "Enter your API key: " API_KEY
 
 API_URL="http://${LIGHTSAIL_IP}:5555"
 
+# Generate unique bucket name
+S3_BUCKET_NAME="twitter-automation-reports-23-$(date +%Y%m%d)-$(shuf -i 1000-9999 -n 1)"
+
 # Step 1: Create IAM Role for Lambda
 echo_info "Creating IAM role for Lambda..."
 
@@ -96,7 +99,7 @@ CUSTOM_POLICY='{
         "ssm:GetParameters",
         "ssm:GetParametersByPath"
       ],
-      "Resource": "arn:aws:ssm:*:*:parameter/twitter-automation/*"
+      "Resource": "arn:aws:ssm:*:*:parameter/twitter.automation.*"
     },
     {
       "Effect": "Allow",
@@ -104,6 +107,22 @@ CUSTOM_POLICY='{
         "cloudwatch:PutMetricData"
       ],
       "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:PutObjectAcl",
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::twitter-automation-reports-*/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::twitter-automation-reports-*"
     },
     {
       "Effect": "Allow",
@@ -122,36 +141,72 @@ aws iam put-role-policy \
 
 echo_success "IAM role created and policies attached"
 
+# Step 1.5: Create S3 bucket for reports
+echo_info "Creating S3 bucket for automation reports: $S3_BUCKET_NAME"
+
+aws s3 mb s3://$S3_BUCKET_NAME --region $REGION 2>/dev/null || echo_warning "Bucket creation failed - may already exist"
+
+# Configure S3 bucket lifecycle (optional - delete reports after 90 days)
+aws s3api put-bucket-lifecycle-configuration \
+    --region $REGION \
+    --bucket $S3_BUCKET_NAME \
+    --lifecycle-configuration '{
+        "Rules": [{
+            "ID": "DeleteOldReports",
+            "Status": "Enabled",
+            "Expiration": {
+                "Days": 90
+            },
+            "Filter": {
+                "Prefix": "automation-reports/"
+            }
+        }]
+    }' 2>/dev/null || echo_warning "Lifecycle configuration skipped"
+
+echo_success "S3 bucket created: $S3_BUCKET_NAME"
+
 # Step 2: Store configuration in SSM Parameter Store
 echo_info "Storing configuration in SSM Parameter Store..."
 
 aws ssm put-parameter \
-    --name "/twitter-automation/api-url" \
+    --region $REGION \
+    --name "twitter.automation.api.url" \
     --value "$API_URL" \
     --type "String" \
     --overwrite
 
 aws ssm put-parameter \
-    --name "/twitter-automation/api-key" \
+    --region $REGION \
+    --name "twitter.automation.api.key" \
     --value "$API_KEY" \
     --type "SecureString" \
     --overwrite
 
 aws ssm put-parameter \
-    --name "/twitter-automation/max-threads-per-run" \
+    --region $REGION \
+    --name "twitter.automation.max.threads.per.run" \
     --value "10" \
     --type "String" \
     --overwrite
 
 aws ssm put-parameter \
-    --name "/twitter-automation/delay-between-threads" \
+    --region $REGION \
+    --name "twitter.automation.delay.between.threads" \
     --value "5" \
     --type "String" \
     --overwrite
 
 aws ssm put-parameter \
-    --name "/twitter-automation/timeout-seconds" \
+    --region $REGION \
+    --name "twitter.automation.timeout.seconds" \
     --value "300" \
+    --type "String" \
+    --overwrite
+
+aws ssm put-parameter \
+    --region $REGION \
+    --name "twitter.automation.s3.bucket.name" \
+    --value "$S3_BUCKET_NAME" \
     --type "String" \
     --overwrite
 
@@ -170,8 +225,23 @@ cp ../lambda_function.py .
 # Install dependencies
 pip install -r ../requirements.txt -t .
 
-# Create ZIP file
-zip -r ../lambda_function.zip .
+# Create ZIP file using Python (cross-platform compatible)
+python -c "
+import zipfile
+import os
+import shutil
+
+def create_lambda_zip():
+    with zipfile.ZipFile('../lambda_function.zip', 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk('.'):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arc_name = os.path.relpath(file_path, '.')
+                zipf.write(file_path, arc_name)
+
+create_lambda_zip()
+print('Lambda deployment package created successfully')
+"
 
 # Clean up temp directory
 cd ..
@@ -183,7 +253,7 @@ echo_success "Lambda deployment package created"
 echo_info "Creating Lambda function..."
 
 # Get the role ARN
-ROLE_ARN=$(aws iam get-role --role-name $IAM_ROLE_NAME --query 'Role.Arn' --output text)
+ROLE_ARN=$(aws iam get-role --region $REGION --role-name $IAM_ROLE_NAME --query 'Role.Arn' --output text)
 
 # Wait for role to propagate
 echo_info "Waiting for IAM role to propagate..."
@@ -191,6 +261,7 @@ sleep 10
 
 # Create Lambda function (or update if it exists)
 aws lambda create-function \
+    --region $REGION \
     --function-name $LAMBDA_FUNCTION_NAME \
     --runtime python3.9 \
     --role $ROLE_ARN \
@@ -209,10 +280,12 @@ aws lambda create-function \
     # Function exists, update it
     echo_info "Function exists, updating code..."
     aws lambda update-function-code \
+        --region $REGION \
         --function-name $LAMBDA_FUNCTION_NAME \
         --zip-file fileb://lambda_function.zip
     
     aws lambda update-function-configuration \
+        --region $REGION \
         --function-name $LAMBDA_FUNCTION_NAME \
         --timeout 300 \
         --memory-size 128
@@ -224,6 +297,7 @@ aws lambda create-function \
 echo_info "Creating EventBridge rule for hourly execution..."
 
 aws events put-rule \
+    --region $REGION \
     --name $EVENTBRIDGE_RULE_NAME \
     --description "Trigger Twitter thread automation every hour" \
     --schedule-expression "rate(1 hour)" \
@@ -236,12 +310,14 @@ echo_info "Adding EventBridge permission to Lambda..."
 
 # Remove existing permission if it exists (ignore error)
 aws lambda remove-permission \
+    --region $REGION \
     --function-name $LAMBDA_FUNCTION_NAME \
     --statement-id "eventbridge-invoke-permission" \
     2>/dev/null || true
 
 # Add permission
 aws lambda add-permission \
+    --region $REGION \
     --function-name $LAMBDA_FUNCTION_NAME \
     --statement-id "eventbridge-invoke-permission" \
     --action lambda:InvokeFunction \
@@ -253,9 +329,10 @@ echo_success "EventBridge permission added to Lambda"
 # Step 7: Add Lambda as target to EventBridge rule
 echo_info "Adding Lambda as target to EventBridge rule..."
 
-LAMBDA_ARN=$(aws lambda get-function --function-name $LAMBDA_FUNCTION_NAME --query 'Configuration.FunctionArn' --output text)
+LAMBDA_ARN=$(aws lambda get-function --region $REGION --function-name $LAMBDA_FUNCTION_NAME --query 'Configuration.FunctionArn' --output text)
 
 aws events put-targets \
+    --region $REGION \
     --rule $EVENTBRIDGE_RULE_NAME \
     --targets "Id"="1","Arn"="$LAMBDA_ARN"
 
@@ -307,6 +384,7 @@ DASHBOARD_BODY='{
 }'
 
 aws cloudwatch put-dashboard \
+    --region $REGION \
     --dashboard-name "TwitterThreadAutomation" \
     --dashboard-body "$DASHBOARD_BODY"
 
@@ -322,6 +400,7 @@ echo_info "Resources created:"
 echo "  • Lambda Function: $LAMBDA_FUNCTION_NAME"
 echo "  • EventBridge Rule: $EVENTBRIDGE_RULE_NAME"
 echo "  • IAM Role: $IAM_ROLE_NAME"
+echo "  • S3 Bucket: $S3_BUCKET_NAME"
 echo "  • CloudWatch Dashboard: TwitterThreadAutomation"
 echo ""
 echo_info "The automation will run every hour automatically."

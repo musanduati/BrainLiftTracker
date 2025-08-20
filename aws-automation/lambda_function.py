@@ -9,6 +9,7 @@ import json
 import boto3
 import requests
 import logging
+import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 # AWS clients
 ssm = boto3.client('ssm')
 cloudwatch = boto3.client('cloudwatch')
+s3 = boto3.client('s3')
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -45,6 +47,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Call automation endpoint
         automation_result = call_automation_endpoint(config)
+        
+        # Add Lambda request ID for tracking
+        automation_result['lambda_request_id'] = context.aws_request_id if context else None
+        
+        # Upload report to S3
+        s3_url = upload_report_to_s3(automation_result, config)
+        if s3_url:
+            automation_result['report_s3_url'] = s3_url
         
         # Send metrics to CloudWatch
         send_cloudwatch_metrics(automation_result)
@@ -89,11 +99,12 @@ def get_automation_config() -> Dict[str, Any]:
     try:
         # Get parameters from SSM
         parameters = [
-            '/twitter-automation/api-url',
-            '/twitter-automation/api-key',
-            '/twitter-automation/max-threads-per-run',
-            '/twitter-automation/delay-between-threads',
-            '/twitter-automation/timeout-seconds'
+            'twitter.automation.api.url',
+            'twitter.automation.api.key',
+            'twitter.automation.max.threads.per.run',
+            'twitter.automation.delay.between.threads',
+            'twitter.automation.timeout.seconds',
+            'twitter.automation.s3.bucket.name'
         ]
         
         response = ssm.get_parameters(
@@ -104,7 +115,9 @@ def get_automation_config() -> Dict[str, Any]:
         # Build config dict
         config = {}
         for param in response['Parameters']:
-            key = param['Name'].split('/')[-1].replace('-', '_')
+            # Extract key from dot notation (e.g., 'twitter.automation.api.url' -> 'api_url')
+            key_parts = param['Name'].split('.')
+            key = '_'.join(key_parts[2:])  # Skip 'twitter.automation' prefix
             value = param['Value']
             
             # Convert numeric values
@@ -198,6 +211,57 @@ def call_automation_endpoint(config: Dict[str, Any]) -> Dict[str, Any]:
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse API response: {str(e)}")
         raise
+
+def upload_report_to_s3(automation_result: Dict[str, Any], config: Dict[str, Any]) -> Optional[str]:
+    """Upload automation report to S3 bucket"""
+    try:
+        bucket_name = config.get('s3_bucket_name')
+        if not bucket_name:
+            logger.warning("S3 bucket not configured, skipping report upload")
+            return None
+            
+        # Generate unique filename with timestamp
+        timestamp = datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')
+        execution_id = automation_result.get('automation_id', str(uuid.uuid4())[:8])
+        filename = f"automation-reports/{timestamp}_{execution_id}_report.json"
+        
+        # Prepare comprehensive report
+        report = {
+            "metadata": {
+                "timestamp": timestamp,
+                "execution_id": execution_id,
+                "lambda_request_id": automation_result.get('lambda_request_id'),
+                "report_version": "1.0"
+            },
+            "automation_result": automation_result,
+            "configuration": {
+                "max_threads_per_run": config.get('max_threads_per_run'),
+                "delay_between_threads": config.get('delay_between_threads'),
+                "api_url": config.get('api_url', '').replace('api-key', '***'),  # Redact sensitive info
+                "dry_run": config.get('dry_run', False)
+            }
+        }
+        
+        # Upload to S3
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=filename,
+            Body=json.dumps(report, indent=2, default=str),
+            ContentType='application/json',
+            Metadata={
+                'execution-id': execution_id,
+                'timestamp': timestamp,
+                'status': automation_result.get('status', 'unknown')
+            }
+        )
+        
+        s3_url = f"s3://{bucket_name}/{filename}"
+        logger.info(f"Report uploaded to S3: {s3_url}")
+        return s3_url
+        
+    except Exception as e:
+        logger.error(f"Failed to upload report to S3: {str(e)}")
+        return None
 
 def send_cloudwatch_metrics(automation_result: Dict[str, Any]) -> None:
     """
