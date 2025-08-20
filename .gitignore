@@ -145,3 +145,7 @@ markdowns/
 .claude/
 
 package/
+
+CLAUDE.md
+ecs-task-definition-workflowy-production.json
+ecs-task-definition-workflowy-test.json
