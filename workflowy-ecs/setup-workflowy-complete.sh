@@ -35,15 +35,17 @@ show_help() {
     echo "Usage: $0 [OPTIONS]"
     echo
     echo "Options:"
-    echo "  --setup, -s       Run complete setup (create missing resources)"
-    echo "  --verify, -v      Verify existing setup only (default)"
-    echo "  --force-recreate  Force recreate all resources"
-    echo "  --help, -h        Show this help message"
+    echo "  --setup, -s           Run complete setup (create missing resources)"
+    echo "  --verify, -v          Verify existing setup only (default)"
+    echo "  --generate-tasks, -t  Generate task definition files from templates"
+    echo "  --force-recreate      Force recreate all resources"
+    echo "  --help, -h            Show this help message"
     echo
     echo "Examples:"
-    echo "  $0                # Verify existing setup"
-    echo "  $0 --setup       # Create missing resources"
-    echo "  $0 --verify      # Just verify (same as default)"
+    echo "  $0                    # Verify existing setup"
+    echo "  $0 --setup           # Create missing resources"  
+    echo "  $0 --generate-tasks  # Generate task definition files"
+    echo "  $0 --verify          # Just verify (same as default)"
 }
 
 # Initialize variables
@@ -449,13 +451,83 @@ run_complete_setup() {
     create_ecs_resources
     setup_networking
     
+    # Generate task definitions as part of complete setup
+    generate_task_definitions
+    
     echo
     log_success "🎉 Complete setup finished!"
     log_info "Next steps:"
     log_info "1. Update secret values: aws secretsmanager update-secret --secret-id $SECRET_NAME --secret-string '{...}'"
     log_info "2. Build Docker image: ./build_push_workflowy_img.sh"
-    log_info "3. Create task definitions: ./update-task-definitions.sh"
+    log_info "3. Register task definitions: ./register-task-definitions.sh"
     log_info "4. Test deployment: ./run-workflowy-test.sh"
+}
+
+# Add the generate task definitions function
+generate_task_definitions() {
+    log_step "Generating ECS Task Definition Files"
+    
+    # Check if we have the required environment variables
+    if [ -z "$ACCOUNT_ID" ]; then
+        log_error "ACCOUNT_ID not set. Run init_variables first or source .env.aws"
+        return 1
+    fi
+    
+    # Check if SECRET_ARN is set, if not try to get it
+    if [ -z "$SECRET_ARN" ]; then
+        if check_secret; then
+            SECRET_ARN=$(aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region us-east-1 --query 'ARN' --output text)
+            log_info "Retrieved secret ARN: $SECRET_ARN"
+        else
+            log_error "Secret '$SECRET_NAME' not found. Run setup first or create the secret manually."
+            return 1
+        fi
+    fi
+    
+    # Check if template files exist
+    local test_template="ecs-task-definition-workflowy-test.template.json"
+    local prod_template="ecs-task-definition-workflowy-production.template.json"
+    
+    if [ ! -f "$test_template" ]; then
+        log_error "Template file not found: $test_template"
+        log_info "Create template files first. See documentation for template structure."
+        return 1
+    fi
+    
+    if [ ! -f "$prod_template" ]; then
+        log_error "Template file not found: $prod_template"
+        return 1
+    fi
+    
+    # Generate task definition files
+    log_info "Generating task definitions with:"
+    log_info "   Account ID: $ACCOUNT_ID"
+    log_info "   Secret ARN: $SECRET_ARN"
+    
+    # Generate test task definition
+    sed "s/{{ACCOUNT_ID}}/$ACCOUNT_ID/g; s|{{SECRET_ARN}}|$SECRET_ARN|g" \
+        "$test_template" > "ecs-task-definition-workflowy-test.json"
+    
+    # Generate production task definition
+    sed "s/{{ACCOUNT_ID}}/$ACCOUNT_ID/g; s|{{SECRET_ARN}}|$SECRET_ARN|g" \
+        "$prod_template" > "ecs-task-definition-workflowy-production.json"
+    
+    # Verify generated files
+    if [ -f "ecs-task-definition-workflowy-test.json" ] && [ -f "ecs-task-definition-workflowy-production.json" ]; then
+        log_success "Task definition files generated successfully:"
+        log_info "   - ecs-task-definition-workflowy-test.json"
+        log_info "   - ecs-task-definition-workflowy-production.json"
+        echo
+        log_warning "⚠️  These files contain sensitive information (Account ID, ARNs)"
+        log_warning "⚠️  Ensure they are in .gitignore and not committed to version control"
+        echo
+        log_info "Next steps:"
+        log_info "• Register task definitions: aws ecs register-task-definition --cli-input-json file://ecs-task-definition-workflowy-test.json"
+        log_info "• Or use: ./update-task-definitions.sh (if you have that script)"
+    else
+        log_error "Failed to generate task definition files"
+        return 1
+    fi
 }
 
 # Main execution
@@ -467,6 +539,10 @@ main() {
         --verify|-v|"")
             init_variables
             verify_setup
+            ;;
+        --generate-tasks|-t)
+            init_variables
+            generate_task_definitions
             ;;
         --help|-h)
             show_help
