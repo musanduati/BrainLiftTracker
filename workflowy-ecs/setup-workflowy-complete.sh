@@ -48,23 +48,30 @@ show_help() {
     echo "  $0 --verify          # Just verify (same as default)"
 }
 
-# Initialize variables
+# Initialize variables - only for setup/verify operations
 init_variables() {
+    log_step "Initializing Configuration"
+    
     if ! aws sts get-caller-identity > /dev/null 2>&1; then
         log_error "AWS CLI is not configured. Please run 'aws configure' first."
         exit 1
     fi
     
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-    SECRET_ARN="arn:aws:secretsmanager:us-east-1:$ACCOUNT_ID:secret:$SECRET_NAME"
-    
     log_success "AWS credentials validated. Account ID: $ACCOUNT_ID"
     
-    # Load environment variables from existing file if it exists
+    # For setup operations, we may not have .env.aws yet - that's expected
+    # For verify operations, we expect it to exist
     if [ -f .env.aws ]; then
         source .env.aws
         log_info "Environment variables loaded from .env.aws"
+    else
+        log_info ".env.aws will be created during setup process"
     fi
+    
+    # Set basic derived values
+    SECRET_ARN="arn:aws:secretsmanager:us-east-1:$ACCOUNT_ID:secret:$SECRET_NAME"
+    ECR_URI_WORKFLOWY_PROCESSOR="$ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/workflowy-processor"
 }
 
 # Check if resource exists
@@ -100,6 +107,13 @@ verify_setup() {
     log_step "Verifying Workflowy ECS Setup"
     
     local all_good=true
+    local create_env_file=false
+    
+    # If .env.aws doesn't exist but we're verifying, we may need to create it
+    if [ ! -f .env.aws ]; then
+        log_warning ".env.aws not found - will create if infrastructure exists"
+        create_env_file=true
+    fi
     
     # Check IAM Roles
     log_info "👤 IAM Roles:"
@@ -196,11 +210,20 @@ verify_setup() {
         all_good=false
     fi
     
+    # At the end of verification, if infrastructure exists but .env.aws is missing
+    if [ "$all_good" = true ] && [ "$create_env_file" = true ]; then
+        log_info "🔧 Infrastructure exists but .env.aws missing - creating it..."
+        setup_networking  # This will detect existing networking
+        save_environment_config
+        log_success "✅ .env.aws created from existing infrastructure"
+    fi
+    
     # Summary
     echo
     if [ "$all_good" = true ]; then
         log_success "🎉 All resources are properly configured!"
-        log_info "Ready to deploy: ./build_push_workflowy_img.sh && ./run-workflowy-test.sh"
+        log_info "Ready to generate task definitions: ./setup-workflowy-complete.sh --generate-tasks"
+        log_info "Or run full workflow: ./build_push_workflowy_img.sh"
     else
         log_error "❌ Some resources are missing or misconfigured"
         log_info "Run '$0 --setup' to create missing resources"
@@ -435,7 +458,7 @@ setup_networking() {
         echo "export SUBNET=$SUBNET"
         echo "export SECURITY_GROUP=$SECURITY_GROUP"
         echo "export SECRET_ARN=$SECRET_ARN"
-        echo "export ECR_URI=$ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/workflowy-processor"
+        echo "export ECR_URI_WORKFLOWY_PROCESSOR=$ECR_URI_WORKFLOWY_PROCESSOR"
     } > .env.aws
     
     log_success "Networking configured and saved to .env.aws"
@@ -467,21 +490,25 @@ run_complete_setup() {
 generate_task_definitions() {
     log_step "Generating ECS Task Definition Files"
     
-    # Check if we have the required environment variables
-    if [ -z "$ACCOUNT_ID" ]; then
-        log_error "ACCOUNT_ID not set. Run init_variables first or source .env.aws"
+    # For task generation, .env.aws MUST exist
+    if [ ! -f .env.aws ]; then
+        log_error ".env.aws file not found!"
+        log_error "Task definition generation requires existing environment configuration."
+        echo
+        log_info "Please run one of the following first:"
+        log_info "• ./setup-workflowy-complete.sh --setup    (creates full infrastructure + .env.aws)"
+        log_info "• ./setup-workflowy-complete.sh --verify   (if infrastructure exists, creates .env.aws)"
         return 1
     fi
     
-    # Check if SECRET_ARN is set, if not try to get it
-    if [ -z "$SECRET_ARN" ]; then
-        if check_secret; then
-            SECRET_ARN=$(aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region us-east-1 --query 'ARN' --output text)
-            log_info "Retrieved secret ARN: $SECRET_ARN"
-        else
-            log_error "Secret '$SECRET_NAME' not found. Run setup first or create the secret manually."
-            return 1
-        fi
+    # Load and validate required variables
+    source .env.aws
+    
+    if [ -z "$ACCOUNT_ID" ] || [ -z "$SECRET_ARN" ]; then
+        log_error "Invalid .env.aws file - missing required variables"
+        log_error "Expected: ACCOUNT_ID, SECRET_ARN"
+        log_info "Delete .env.aws and run: ./setup-workflowy-complete.sh --setup"
+        return 1
     fi
     
     # Check if template files exist
@@ -522,12 +549,40 @@ generate_task_definitions() {
         log_warning "⚠️  Ensure they are in .gitignore and not committed to version control"
         echo
         log_info "Next steps:"
-        log_info "• Register task definitions: aws ecs register-task-definition --cli-input-json file://ecs-task-definition-workflowy-test.json"
-        log_info "• Or use: ./update-task-definitions.sh (if you have that script)"
+        log_info "• Register task definitions: ./register-task-definitions.sh"
+        log_info "• Or register manually: aws ecs register-task-definition --cli-input-json file://ecs-task-definition-workflowy-test.json"
     else
         log_error "Failed to generate task definition files"
         return 1
     fi
+}
+
+# Add a function to save environment configuration
+save_environment_config() {
+    log_info "💾 Saving configuration to .env.aws..."
+    
+    # Auto-detect SECRET_ARN if needed
+    if [ -z "$SECRET_ARN" ] && check_secret; then
+        SECRET_ARN=$(aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region us-east-1 --query 'ARN' --output text 2>/dev/null || echo "")
+    fi
+    
+    cat > .env.aws << EOF
+# Workflowy ECS Configuration
+# Generated by setup-workflowy-complete.sh on $(date)
+
+export ACCOUNT_ID=$ACCOUNT_ID
+export DEFAULT_VPC=$DEFAULT_VPC
+export SUBNET=$SUBNET  
+export SECURITY_GROUP=$SECURITY_GROUP
+export SECRET_ARN=$SECRET_ARN
+export SECRET_NAME=$SECRET_NAME
+export ECR_URI_WORKFLOWY_PROCESSOR=$ECR_URI_WORKFLOWY_PROCESSOR
+export CLUSTER_NAME=$CLUSTER_NAME
+export LOG_GROUP=$LOG_GROUP
+EOF
+    
+    log_success "Configuration saved to .env.aws"
+    log_info "This file is required for other scripts (build, deploy, etc.)"
 }
 
 # Main execution
