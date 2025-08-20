@@ -5,7 +5,7 @@ Tweet generation utilities for DOK content changes
 import re
 from datetime import datetime
 from typing import List, Dict
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 
 
 def convert_markdown_urls_to_plain(text: str) -> str:
@@ -146,7 +146,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
         for point in changes.get("added", []):
             # Skip empty points
             if not should_create_tweet(point):
-                logger.info(f"⏭️ Skipping empty {section} point {point.get('point_number', '?')}")
+                structured_logger.info_operation("generate_advanced_change_tweets", f"⏭️ Skipping empty {section} point {point.get('point_number', '?')}", section=section, point_number=point.get('point_number', '?'))
                 continue
                 
             combined_content = create_combined_content(point["main_content"], point["sub_points"])
@@ -194,7 +194,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
     for point in changes.get("added", []):
         # Skip empty points
         if not should_create_tweet(point):
-            logger.info(f"⏭️ Skipping empty {section} point {point.get('point_number', '?')}")
+            structured_logger.info_operation("generate_advanced_change_tweets", f"⏭️ Skipping empty {section} point {point.get('point_number', '?')}", section=section, point_number=point.get('point_number', '?'))
             continue
             
         combined_content = create_combined_content(point["main_content"], point["sub_points"])
@@ -230,7 +230,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
         
         # Skip empty points
         if not should_create_tweet(current_point):
-            logger.info(f"⏭️ Skipping empty {section} point {current_point.get('point_number', '?')}")
+            structured_logger.info_operation("generate_advanced_change_tweets", f"⏭️ Skipping empty {section} point {current_point.get('point_number', '?')}", section=section, point_number=current_point.get('point_number', '?'))
             continue
             
         combined_content = create_combined_content(current_point["main_content"], current_point["sub_points"])
@@ -272,7 +272,7 @@ def generate_advanced_change_tweets(changes: Dict, section: str, is_first_run: b
     for point in changes.get("deleted", []):
         # Skip empty points
         if not should_create_tweet(point):
-            logger.info(f"⏭️ Skipping empty {section} point {point.get('point_number', '?')}")
+            structured_logger.info_operation("generate_advanced_change_tweets", f"⏭️ Skipping empty {section} point {point.get('point_number', '?')}", section=section, point_number=point.get('point_number', '?'))
             continue
             
         combined_content = create_combined_content(point["main_content"], point["sub_points"])

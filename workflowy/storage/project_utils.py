@@ -8,7 +8,7 @@ import uuid
 import re
 from typing import Optional, Dict
 from datetime import datetime
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 
 
 def generate_project_id() -> str:
@@ -23,7 +23,7 @@ def generate_project_id() -> str:
     """
     uuid_hex = uuid.uuid4().hex
     project_id = f"project_{uuid_hex}"
-    logger.debug(f"Generated new project ID: {project_id}")
+    structured_logger.debug_operation("generate_project_id", f"Generated new project ID: {project_id}")
     return project_id
 
 
@@ -128,7 +128,7 @@ def create_project_config(
     if project_id is None:
         project_id = generate_project_id()
     elif not is_valid_project_id(project_id):
-        logger.warning(f"Invalid project ID provided: {project_id}, generating new one")
+        structured_logger.warning_operation("create_project_config", f"Invalid project ID provided: {project_id}, generating new one")
         project_id = generate_project_id()
     
     # Generate display name if not provided
@@ -156,26 +156,26 @@ PROJECT_ID_TOTAL_LENGTH = len(PROJECT_ID_PREFIX) + PROJECT_ID_UUID_LENGTH
 
 if __name__ == "__main__":
     # Basic testing
-    from workflowy.config.logger import logger
+    from workflowy.config.logger import structured_logger
     
-    logger.info("Testing Project ID utilities...")
+    structured_logger.info_operation("main", "Testing Project ID utilities...")
     
     # Test generation
     pid1 = generate_project_id()
     pid2 = generate_project_id()
-    logger.info(f"Generated IDs: {pid1}, {pid2}")
+    structured_logger.info_operation("main", f"Generated IDs: {pid1}, {pid2}")
     
     # Test validation
-    logger.info(f"Valid {pid1}: {is_valid_project_id(pid1)}")
-    logger.info(f"Valid 'invalid': {is_valid_project_id('invalid')}")
+    structured_logger.info_operation("main", f"Valid {pid1}: {is_valid_project_id(pid1)}")
+    structured_logger.info_operation("main", f"Valid 'invalid': {is_valid_project_id('invalid')}")
     
     # Test UUID extraction
     uuid_part = extract_uuid_from_project_id(pid1)
-    logger.info(f"UUID from {pid1}: {uuid_part}")
+    structured_logger.info_operation("main", f"UUID from {pid1}: {uuid_part}")
     
     # Test display name
     display = generate_display_name(pid1)
-    logger.info(f"Display name for {pid1}: {display}")
+    structured_logger.info_operation("main", f"Display name for {pid1}: {display}")
     
     # Test project config
     config = create_project_config(
@@ -183,4 +183,4 @@ if __name__ == "__main__":
         account_id="123",
         name="Test Project"
     )
-    logger.info(f"Project config: {config}")
+    structured_logger.info_operation("main", f"Project config: {config}")

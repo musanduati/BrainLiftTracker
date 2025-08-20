@@ -4,7 +4,7 @@ Defines the new table structures that eliminate URL dependency.
 """
 
 from typing import Dict, Any
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 
 
 def get_urls_config_table_schema() -> Dict[str, Any]:
@@ -167,20 +167,20 @@ def validate_project_item(item: Dict[str, Any]) -> bool:
     
     for field in required_fields:
         if field not in item:
-            logger.error(f"Missing required field in project item: {field}")
+            structured_logger.error_operation("validate_project_item", f"Missing required field in project item: {field}")
             return False
     
     # Validate field types
     if not isinstance(item['project_id'], str) or not item['project_id'].startswith('project_'):
-        logger.error(f"Invalid project_id format: {item['project_id']}")
+        structured_logger.error_operation("validate_project_item", f"Invalid project_id format: {item['project_id']}")
         return False
     
     if not isinstance(item['url'], str) or not item['url'].startswith('https://workflowy.com'):
-        logger.error(f"Invalid URL format: {item['url']}")
+        structured_logger.error_operation("validate_project_item", f"Invalid URL format: {item['url']}")
         return False
     
     if not isinstance(item['active'], bool):
-        logger.error(f"Invalid active field type: {type(item['active'])}")
+        structured_logger.error_operation("validate_project_item", f"Invalid active field type: {type(item['active'])}")
         return False
     
     return True
@@ -200,23 +200,23 @@ def validate_state_item(item: Dict[str, Any]) -> bool:
     
     for field in required_fields:
         if field not in item:
-            logger.error(f"Missing required field in state item: {field}")
+            structured_logger.error_operation("validate_state_item", f"Missing required field in state item: {field}")
             return False
     
     # Validate project_id format
     if not isinstance(item['project_id'], str) or not item['project_id'].startswith('project_'):
-        logger.error(f"Invalid project_id format: {item['project_id']}")
+        structured_logger.error_operation("validate_state_item", f"Invalid project_id format: {item['project_id']}")
         return False
     
     # Validate state structure
     if not isinstance(item['state'], dict):
-        logger.error(f"Invalid state field type: {type(item['state'])}")
+        structured_logger.error_operation("validate_state_item", f"Invalid state field type: {type(item['state'])}")
         return False
     
     # State should have dok4 and dok3 keys
     state = item['state']
     if 'dok4' not in state or 'dok3' not in state:
-        logger.error(f"State missing required dok4/dok3 keys: {list(state.keys())}")
+        structured_logger.error_operation("validate_state_item", f"State missing required dok4/dok3 keys: {list(state.keys())}")
         return False
     
     return True
@@ -245,23 +245,23 @@ def get_table_names(environment: str = 'test') -> Dict[str, str]:
 
 if __name__ == "__main__":
     # Example usage and validation
-    logger.info("DynamoDB Schema Definitions")
+    structured_logger.info_operation("main", "DynamoDB Schema Definitions")
     
     # Print schemas
     urls_schema = get_urls_config_table_schema()
     state_schema = get_state_table_schema()
     
-    logger.info(f"URLs Config Table: {urls_schema['TableName']}")
-    logger.info(f"State Table: {state_schema['TableName']}")
+    structured_logger.info_operation("main", f"URLs Config Table: {urls_schema['TableName']}")
+    structured_logger.info_operation("main", f"State Table: {state_schema['TableName']}")
     
     # Print field definitions
     project_fields = get_project_item_schema()
     state_fields = get_state_item_schema()
     
-    logger.info("Project item fields:")
+    structured_logger.info_operation("main", "Project item fields:")
     for field, description in project_fields.items():
-        logger.info(f"  {field}: {description}")
+        structured_logger.info_operation("main", f"  {field}: {description}")
     
-    logger.info("State item fields:")
+    structured_logger.info_operation("main", "State item fields:")
     for field, description in state_fields.items():
-        logger.info(f"  {field}: {description}")
+        structured_logger.info_operation("main", f"  {field}: {description}")
