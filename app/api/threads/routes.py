@@ -458,3 +458,535 @@ def cleanup_threads():
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@threads_bp.route('/api/v1/threads/post-all-pending', methods=['POST'])
+@require_api_key
+def post_all_pending_threads():
+    """Post all pending threads to X with rate limiting"""
+    try:
+        data = request.get_json() or {}
+        account_id = data.get('account_id')
+        max_threads = data.get('max_threads', 10)  # Limit threads to avoid overwhelming
+        delay_between_threads = data.get('delay_between_threads', 5)  # Seconds between threads
+        
+        conn = get_db()
+        
+        # Get all pending threads, optionally filtered by account
+        if account_id:
+            # Verify account exists
+            account = conn.execute(
+                'SELECT * FROM twitter_account WHERE id = ?', 
+                (account_id,)
+            ).fetchone()
+            
+            if not account:
+                conn.close()
+                return jsonify({'error': 'Account not found'}), 404
+                
+            pending_threads_query = '''
+                SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+                       COUNT(*) as tweet_count
+                FROM tweet 
+                WHERE thread_id IS NOT NULL 
+                AND status = 'pending' 
+                AND twitter_account_id = ?
+                GROUP BY thread_id, twitter_account_id
+                ORDER BY created_at ASC
+                LIMIT ?
+            '''
+            pending_threads = conn.execute(pending_threads_query, (account_id, max_threads)).fetchall()
+        else:
+            # Get pending threads for all accounts
+            pending_threads_query = '''
+                SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+                       COUNT(*) as tweet_count
+                FROM tweet 
+                WHERE thread_id IS NOT NULL 
+                AND status = 'pending'
+                GROUP BY thread_id, twitter_account_id
+                ORDER BY created_at ASC
+                LIMIT ?
+            '''
+            pending_threads = conn.execute(pending_threads_query, (max_threads,)).fetchall()
+        
+        if not pending_threads:
+            conn.close()
+            return jsonify({
+                'message': 'No pending threads found',
+                'posted': 0,
+                'failed': 0,
+                'threads': []
+            })
+        
+        results = []
+        total_posted = 0
+        total_failed = 0
+        
+        for thread in pending_threads:
+            thread_id = thread['thread_id']
+            thread_account_id = thread['twitter_account_id']
+            
+            # Check rate limit for this account before proceeding
+            from app.utils.rate_limit import get_rate_limit_status
+            rate_status = get_rate_limit_status(thread_account_id)
+            
+            if rate_status['tweets_posted'] + thread['tweet_count'] > rate_status['limit']:
+                # Would exceed rate limit, skip this thread
+                results.append({
+                    'thread_id': thread_id,
+                    'account_id': thread_account_id,
+                    'status': 'skipped',
+                    'reason': f"Would exceed rate limit ({rate_status['tweets_posted']}/{rate_status['limit']})",
+                    'tweet_count': thread['tweet_count']
+                })
+                continue
+            
+            # Get tweets for this thread
+            tweets = conn.execute(
+                '''SELECT id, twitter_account_id, content, thread_position 
+                   FROM tweet 
+                   WHERE thread_id = ? AND status = 'pending'
+                   ORDER BY thread_position''',
+                (thread_id,)
+            ).fetchall()
+            
+            if not tweets:
+                continue
+            
+            # Post the thread
+            posted_tweets = []
+            failed_tweets = []
+            previous_tweet_id = None
+            
+            for tweet in tweets:
+                success, result = post_to_twitter(
+                    tweet['twitter_account_id'], 
+                    tweet['content'],
+                    reply_to_tweet_id=previous_tweet_id
+                )
+                
+                if success:
+                    # Update tweet status
+                    conn.execute(
+                        '''UPDATE tweet 
+                           SET status = ?, twitter_id = ?, posted_at = ?, reply_to_tweet_id = ?
+                           WHERE id = ?''',
+                        ('posted', result, datetime.now(UTC).isoformat(), previous_tweet_id, tweet['id'])
+                    )
+                    conn.commit()
+                    
+                    posted_tweets.append({
+                        'tweet_id': tweet['id'],
+                        'twitter_id': result,
+                        'position': tweet['thread_position']
+                    })
+                    
+                    previous_tweet_id = result
+                else:
+                    # Mark as failed and stop the thread
+                    conn.execute(
+                        'UPDATE tweet SET status = ? WHERE id = ?',
+                        ('failed', tweet['id'])
+                    )
+                    conn.commit()
+                    
+                    failed_tweets.append({
+                        'tweet_id': tweet['id'],
+                        'position': tweet['thread_position'],
+                        'error': result
+                    })
+                    break
+            
+            thread_result = {
+                'thread_id': thread_id,
+                'account_id': thread_account_id,
+                'status': 'completed' if not failed_tweets else 'partial_failure',
+                'posted_count': len(posted_tweets),
+                'failed_count': len(failed_tweets),
+                'tweets': {
+                    'posted': posted_tweets,
+                    'failed': failed_tweets
+                }
+            }
+            
+            results.append(thread_result)
+            total_posted += len(posted_tweets)
+            total_failed += len(failed_tweets)
+            
+            # Add delay between threads to respect rate limits
+            if delay_between_threads > 0 and thread != pending_threads[-1]:
+                import time
+                time.sleep(delay_between_threads)
+        
+        conn.close()
+        
+        return jsonify({
+            'message': f'Processed {len(pending_threads)} threads',
+            'posted': total_posted,
+            'failed': total_failed,
+            'threads_processed': len(results),
+            'results': results
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@threads_bp.route('/api/v1/threads/delete-by-status', methods=['DELETE'])
+@require_api_key
+def delete_threads_by_status():
+    """Delete all threads by status across all accounts for cleanup"""
+    try:
+        data = request.get_json() or {}
+        status = data.get('status', 'failed')  # Default to 'failed', but can be 'pending', 'posted', etc.
+        
+        # Validate status
+        valid_statuses = ['failed', 'pending', 'posted']
+        if status not in valid_statuses:
+            return jsonify({
+                'error': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'
+            }), 400
+        
+        conn = get_db()
+        
+        # Get threads with the specified status across all accounts
+        threads_query = '''
+            SELECT DISTINCT thread_id, twitter_account_id, COUNT(*) as tweet_count,
+                   MIN(created_at) as created_at
+            FROM tweet 
+            WHERE thread_id IS NOT NULL 
+            AND status = ?
+            GROUP BY thread_id, twitter_account_id
+        '''
+        threads_to_delete = conn.execute(threads_query, (status,)).fetchall()
+        
+        if not threads_to_delete:
+            conn.close()
+            return jsonify({
+                'message': f'No {status} threads found to delete',
+                'status_filter': status,
+                'threads_deleted': 0,
+                'tweets_deleted': 0
+            })
+        
+        # Delete all tweets in matching threads
+        deleted_threads = []
+        total_tweets_deleted = 0
+        
+        for thread in threads_to_delete:
+            thread_id = thread['thread_id']
+            tweet_count = thread['tweet_count']
+            
+            # Delete all tweets in this thread (entire thread gets deleted)
+            conn.execute('DELETE FROM tweet WHERE thread_id = ?', (thread_id,))
+            
+            deleted_threads.append({
+                'thread_id': thread_id,
+                'account_id': thread['twitter_account_id'],
+                'tweets_deleted': tweet_count,
+                'created_at': thread['created_at']
+            })
+            
+            total_tweets_deleted += tweet_count
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': f'Successfully deleted {len(deleted_threads)} {status} threads ({total_tweets_deleted} tweets)',
+            'status_filter': status,
+            'threads_deleted': len(deleted_threads),
+            'tweets_deleted': total_tweets_deleted,
+            'deleted_threads': deleted_threads
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@threads_bp.route('/api/v1/threads/retry-all-failed', methods=['POST'])
+@require_api_key
+def retry_all_failed_threads():
+    """Retry posting all failed threads with rate limiting"""
+    try:
+        data = request.get_json() or {}
+        account_id = data.get('account_id')  # Optional: filter by account
+        max_threads = data.get('max_threads', 10)  # Limit threads to avoid overwhelming
+        delay_between_threads = data.get('delay_between_threads', 5)  # Seconds between threads
+        
+        conn = get_db()
+        
+        # Build query to find threads with failed tweets
+        if account_id:
+            # Verify account exists
+            account = conn.execute(
+                'SELECT * FROM twitter_account WHERE id = ?', 
+                (account_id,)
+            ).fetchone()
+            
+            if not account:
+                conn.close()
+                return jsonify({'error': 'Account not found'}), 404
+            
+            # Get failed threads for specific account
+            failed_threads_query = '''
+                SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+                       COUNT(*) as total_tweets,
+                       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_tweets,
+                       SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_tweets
+                FROM tweet 
+                WHERE thread_id IS NOT NULL 
+                AND twitter_account_id = ?
+                AND thread_id IN (
+                    SELECT DISTINCT thread_id 
+                    FROM tweet 
+                    WHERE status = 'failed' AND thread_id IS NOT NULL
+                )
+                GROUP BY thread_id, twitter_account_id
+                ORDER BY created_at ASC
+                LIMIT ?
+            '''
+            failed_threads = conn.execute(failed_threads_query, (account_id, max_threads)).fetchall()
+        else:
+            # Get failed threads across all accounts
+            failed_threads_query = '''
+                SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+                       COUNT(*) as total_tweets,
+                       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_tweets,
+                       SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_tweets
+                FROM tweet 
+                WHERE thread_id IS NOT NULL 
+                AND thread_id IN (
+                    SELECT DISTINCT thread_id 
+                    FROM tweet 
+                    WHERE status = 'failed' AND thread_id IS NOT NULL
+                )
+                GROUP BY thread_id, twitter_account_id
+                ORDER BY created_at ASC
+                LIMIT ?
+            '''
+            failed_threads = conn.execute(failed_threads_query, (max_threads,)).fetchall()
+        
+        if not failed_threads:
+            conn.close()
+            return jsonify({
+                'message': 'No failed threads found to retry',
+                'retried': 0,
+                'failed': 0,
+                'threads': []
+            })
+        
+        results = []
+        total_retried = 0
+        total_still_failed = 0
+        
+        for thread in failed_threads:
+            thread_id = thread['thread_id']
+            thread_account_id = thread['twitter_account_id']
+            
+            # Check rate limit for this account before proceeding
+            from app.utils.rate_limit import get_rate_limit_status
+            rate_status = get_rate_limit_status(thread_account_id)
+            
+            # Calculate how many tweets we might need to post (failed + pending)
+            tweets_to_post = thread['failed_tweets'] + thread['pending_tweets']
+            
+            if rate_status['tweets_posted'] + tweets_to_post > rate_status['limit']:
+                # Would exceed rate limit, skip this thread
+                results.append({
+                    'thread_id': thread_id,
+                    'account_id': thread_account_id,
+                    'status': 'skipped',
+                    'reason': f"Would exceed rate limit ({rate_status['tweets_posted']}/{rate_status['limit']})",
+                    'tweets_to_retry': tweets_to_post
+                })
+                continue
+            
+            # First, reset failed tweets to pending
+            reset_result = conn.execute(
+                '''UPDATE tweet 
+                   SET status = 'pending', twitter_id = NULL, posted_at = NULL, reply_to_tweet_id = NULL
+                   WHERE thread_id = ? AND status = 'failed' ''',
+                (thread_id,)
+            )
+            reset_count = reset_result.rowcount
+            conn.commit()
+            
+            if reset_count == 0:
+                results.append({
+                    'thread_id': thread_id,
+                    'account_id': thread_account_id,
+                    'status': 'no_failed_tweets',
+                    'message': 'No failed tweets found to retry'
+                })
+                continue
+            
+            # Now get all pending tweets for this thread (including newly reset ones)
+            tweets = conn.execute(
+                '''SELECT id, twitter_account_id, content, thread_position 
+                   FROM tweet 
+                   WHERE thread_id = ? AND status = 'pending'
+                   ORDER BY thread_position''',
+                (thread_id,)
+            ).fetchall()
+            
+            if not tweets:
+                results.append({
+                    'thread_id': thread_id,
+                    'account_id': thread_account_id,
+                    'status': 'no_pending_tweets',
+                    'message': 'No pending tweets to post after reset'
+                })
+                continue
+            
+            # Find the last successfully posted tweet to continue the thread
+            last_posted = conn.execute(
+                '''SELECT twitter_id FROM tweet 
+                   WHERE thread_id = ? AND status = 'posted'
+                   ORDER BY thread_position DESC LIMIT 1''',
+                (thread_id,)
+            ).fetchone()
+            
+            previous_tweet_id = last_posted['twitter_id'] if last_posted else None
+            
+            # Post the remaining tweets
+            posted_tweets = []
+            failed_tweets = []
+            
+            for tweet in tweets:
+                success, result = post_to_twitter(
+                    tweet['twitter_account_id'], 
+                    tweet['content'],
+                    reply_to_tweet_id=previous_tweet_id
+                )
+                
+                if success:
+                    # Update tweet status
+                    conn.execute(
+                        '''UPDATE tweet 
+                           SET status = ?, twitter_id = ?, posted_at = ?, reply_to_tweet_id = ?
+                           WHERE id = ?''',
+                        ('posted', result, datetime.now(UTC).isoformat(), previous_tweet_id, tweet['id'])
+                    )
+                    conn.commit()
+                    
+                    posted_tweets.append({
+                        'tweet_id': tweet['id'],
+                        'twitter_id': result,
+                        'position': tweet['thread_position']
+                    })
+                    
+                    previous_tweet_id = result
+                else:
+                    # Mark as failed and stop the thread
+                    conn.execute(
+                        'UPDATE tweet SET status = ? WHERE id = ?',
+                        ('failed', tweet['id'])
+                    )
+                    conn.commit()
+                    
+                    failed_tweets.append({
+                        'tweet_id': tweet['id'],
+                        'position': tweet['thread_position'],
+                        'error': result
+                    })
+                    break
+            
+            thread_result = {
+                'thread_id': thread_id,
+                'account_id': thread_account_id,
+                'status': 'completed' if not failed_tweets else 'partial_failure',
+                'reset_count': reset_count,
+                'posted_count': len(posted_tweets),
+                'failed_count': len(failed_tweets),
+                'tweets': {
+                    'posted': posted_tweets,
+                    'failed': failed_tweets
+                }
+            }
+            
+            results.append(thread_result)
+            total_retried += len(posted_tweets)
+            total_still_failed += len(failed_tweets)
+            
+            # Add delay between threads to respect rate limits
+            if delay_between_threads > 0 and thread != failed_threads[-1]:
+                import time
+                time.sleep(delay_between_threads)
+        
+        conn.close()
+        
+        return jsonify({
+            'message': f'Processed {len(failed_threads)} failed threads',
+            'retried': total_retried,
+            'still_failed': total_still_failed,
+            'threads_processed': len(results),
+            'results': results
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@threads_bp.route('/api/v1/threads/by-status/<status>', methods=['GET'])
+@require_api_key
+def get_threads_by_status(status):
+    """Get threads filtered by status"""
+    try:
+        # Validate status
+        valid_statuses = ['failed', 'pending', 'posted']
+        if status not in valid_statuses:
+            return jsonify({
+                'error': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'
+            }), 400
+        
+        conn = get_db()
+        
+        # Get threads with the specified status
+        threads_query = '''
+            SELECT 
+                thread_id,
+                twitter_account_id,
+                COUNT(*) as tweet_count,
+                MIN(created_at) as created_at,
+                SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) as posted_count,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count
+            FROM tweet
+            WHERE thread_id IS NOT NULL
+            AND thread_id IN (
+                SELECT DISTINCT thread_id 
+                FROM tweet 
+                WHERE status = ? AND thread_id IS NOT NULL
+            )
+            GROUP BY thread_id, twitter_account_id
+            ORDER BY created_at DESC
+        '''
+        threads = conn.execute(threads_query, (status,)).fetchall()
+        
+        result = []
+        for thread in threads:
+            # Get account username
+            account = conn.execute(
+                'SELECT username FROM twitter_account WHERE id = ?',
+                (thread['twitter_account_id'],)
+            ).fetchone()
+            
+            result.append({
+                'thread_id': thread['thread_id'],
+                'account_id': thread['twitter_account_id'],
+                'account_username': account['username'] if account else 'Unknown',
+                'tweet_count': thread['tweet_count'],
+                'posted_count': thread['posted_count'],
+                'pending_count': thread['pending_count'],
+                'failed_count': thread['failed_count'],
+                'created_at': thread['created_at']
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'status_filter': status,
+            'threads': result,
+            'count': len(result)
+        })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

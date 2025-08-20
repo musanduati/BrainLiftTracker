@@ -512,6 +512,565 @@
 							"body": "{\n    \"thread_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"account_username\": \"@myaccount\",\n    \"tweet_count\": 3,\n    \"tweets\": [\n        {\n            \"id\": 1,\n            \"content\": \"\u00f0\u0178\u00a7\u00b5 1/3 This is the first tweet\",\n            \"status\": \"posted\",\n            \"twitter_id\": \"1234567890123456789\",\n            \"reply_to_tweet_id\": null,\n            \"position\": 0,\n            \"created_at\": \"2025-01-25T10:30:00\",\n            \"posted_at\": \"2025-01-25T10:31:00\"\n        },\n        {\n            \"id\": 2,\n            \"content\": \"2/3 This is the second tweet\",\n            \"status\": \"posted\",\n            \"twitter_id\": \"1234567890123456790\",\n            \"reply_to_tweet_id\": \"1234567890123456789\",\n            \"position\": 1,\n            \"created_at\": \"2025-01-25T10:30:00\",\n            \"posted_at\": \"2025-01-25T10:31:05\"\n        },\n        {\n            \"id\": 3,\n            \"content\": \"3/3 This is the final tweet\",\n            \"status\": \"posted\",\n            \"twitter_id\": \"1234567890123456791\",\n            \"reply_to_tweet_id\": \"1234567890123456790\",\n            \"position\": 2,\n            \"created_at\": \"2025-01-25T10:30:00\",\n            \"posted_at\": \"2025-01-25T10:31:10\"\n        }\n    ]\n}"
 						}
 					]
+				},
+				{
+					"name": "Post All Pending Threads",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"account_id\": {{account_id}},\n    \"max_threads\": 10,\n    \"delay_between_threads\": 5\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/threads/post-all-pending",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"threads",
+								"post-all-pending"
+							]
+						},
+						"description": "Post all pending threads to X/Twitter with rate limiting. Optionally filter by account_id."
+					},
+					"response": [
+						{
+							"name": "All Pending Threads Posted",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"max_threads\": 5,\n    \"delay_between_threads\": 10\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/threads/post-all-pending",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"threads",
+										"post-all-pending"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Processed 3 threads\",\n    \"posted\": 8,\n    \"failed\": 1,\n    \"threads_processed\": 3,\n    \"results\": [\n        {\n            \"thread_id\": \"thread-123\",\n            \"account_id\": 1,\n            \"status\": \"completed\",\n            \"posted_count\": 3,\n            \"failed_count\": 0,\n            \"tweets\": {\n                \"posted\": [\n                    {\"tweet_id\": 1, \"twitter_id\": \"12345\", \"position\": 0},\n                    {\"tweet_id\": 2, \"twitter_id\": \"12346\", \"position\": 1},\n                    {\"tweet_id\": 3, \"twitter_id\": \"12347\", \"position\": 2}\n                ],\n                \"failed\": []\n            }\n        }\n    ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Delete Threads by Status",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"status\": \"failed\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/threads/delete-by-status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"threads",
+								"delete-by-status"
+							]
+						},
+						"description": "Delete all threads by status (failed, pending, or posted) across all accounts for cleanup."
+					},
+					"response": [
+						{
+							"name": "Failed Threads Deleted",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"status\": \"failed\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/threads/delete-by-status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"threads",
+										"delete-by-status"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Successfully deleted 2 failed threads (5 tweets)\",\n    \"status_filter\": \"failed\",\n    \"threads_deleted\": 2,\n    \"tweets_deleted\": 5,\n    \"deleted_threads\": [\n        {\n            \"thread_id\": \"failed-thread-1\",\n            \"account_id\": 1,\n            \"tweets_deleted\": 3,\n            \"created_at\": \"2025-01-25T09:00:00\"\n        },\n        {\n            \"thread_id\": \"failed-thread-2\",\n            \"account_id\": 2,\n            \"tweets_deleted\": 2,\n            \"created_at\": \"2025-01-25T08:30:00\"\n        }\n    ]\n}"
+						},
+						{
+							"name": "Pending Threads Deleted",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"status\": \"pending\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/threads/delete-by-status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"threads",
+										"delete-by-status"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Successfully deleted 3 pending threads (8 tweets)\",\n    \"status_filter\": \"pending\",\n    \"threads_deleted\": 3,\n    \"tweets_deleted\": 8,\n    \"deleted_threads\": [\n        {\n            \"thread_id\": \"pending-thread-1\",\n            \"account_id\": 1,\n            \"tweets_deleted\": 3,\n            \"created_at\": \"2025-01-25T11:00:00\"\n        },\n        {\n            \"thread_id\": \"pending-thread-2\",\n            \"account_id\": 2,\n            \"tweets_deleted\": 2,\n            \"created_at\": \"2025-01-25T11:15:00\"\n        },\n        {\n            \"thread_id\": \"pending-thread-3\",\n            \"account_id\": 1,\n            \"tweets_deleted\": 3,\n            \"created_at\": \"2025-01-25T11:30:00\"\n        }\n    ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Retry All Failed Threads",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"account_id\": {{account_id}},\n    \"max_threads\": 10,\n    \"delay_between_threads\": 5\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/threads/retry-all-failed",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"threads",
+								"retry-all-failed"
+							]
+						},
+						"description": "Retry posting all failed threads with rate limiting. Resets failed tweets to pending and resumes posting from where they left off."
+					},
+					"response": [
+						{
+							"name": "Failed Threads Retried",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"max_threads\": 5,\n    \"delay_between_threads\": 8\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/threads/retry-all-failed",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"threads",
+										"retry-all-failed"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Processed 2 failed threads\",\n    \"retried\": 4,\n    \"still_failed\": 1,\n    \"threads_processed\": 2,\n    \"results\": [\n        {\n            \"thread_id\": \"retry-thread-1\",\n            \"account_id\": 1,\n            \"status\": \"completed\",\n            \"reset_count\": 2,\n            \"posted_count\": 2,\n            \"failed_count\": 0,\n            \"tweets\": {\n                \"posted\": [\n                    {\"tweet_id\": 4, \"twitter_id\": \"98765\", \"position\": 3},\n                    {\"tweet_id\": 5, \"twitter_id\": \"98766\", \"position\": 4}\n                ],\n                \"failed\": []\n            }\n        },\n        {\n            \"thread_id\": \"retry-thread-2\",\n            \"account_id\": 2,\n            \"status\": \"partial_failure\",\n            \"reset_count\": 1,\n            \"posted_count\": 2,\n            \"failed_count\": 1,\n            \"tweets\": {\n                \"posted\": [\n                    {\"tweet_id\": 6, \"twitter_id\": \"98767\", \"position\": 0},\n                    {\"tweet_id\": 7, \"twitter_id\": \"98768\", \"position\": 1}\n                ],\n                \"failed\": [\n                    {\"tweet_id\": 8, \"position\": 2, \"error\": \"Rate limit exceeded\"}\n                ]\n            }\n        }\n    ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Retry Failed Thread",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/thread/retry/{{thread_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"thread",
+								"retry",
+								"{{thread_id}}"
+							]
+						},
+						"description": "Retry posting a failed thread from where it left off"
+					},
+					"response": [
+						{
+							"name": "Thread Retry Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/thread/retry/550e8400-e29b-41d4-a716-446655440000",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"thread",
+										"retry",
+										"550e8400-e29b-41d4-a716-446655440000"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Thread retry completed\",\n    \"thread_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"posted\": 2,\n    \"failed\": 0,\n    \"tweets\": [\n        {\n            \"tweet_id\": 2,\n            \"twitter_id\": \"1234567890123456790\",\n            \"position\": 1,\n            \"status\": \"posted\"\n        },\n        {\n            \"tweet_id\": 3,\n            \"twitter_id\": \"1234567890123456791\",\n            \"position\": 2,\n            \"status\": \"posted\"\n        }\n    ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Reset Failed Threads",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"thread_ids\": [\"{{thread_id}}\"],\n    \"account_id\": {{account_id}},\n    \"days_old\": 7\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/threads/reset-failed",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"threads",
+								"reset-failed"
+							]
+						},
+						"description": "Reset failed thread tweets back to pending status"
+					},
+					"response": [
+						{
+							"name": "Threads Reset Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"thread_ids\": [\"thread-1\", \"thread-2\"]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/threads/reset-failed",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"threads",
+										"reset-failed"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Reset 4 failed tweets to pending status\",\n    \"count\": 4,\n    \"affected_threads\": 2,\n    \"thread_stats\": [\n        {\n            \"thread_id\": \"thread-1\",\n            \"total\": 3,\n            \"pending\": 3\n        },\n        {\n            \"thread_id\": \"thread-2\",\n            \"total\": 2,\n            \"pending\": 1\n        }\n    ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Threads by Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/threads/by-status/pending",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"threads",
+								"by-status",
+								"pending"
+							]
+						},
+						"description": "Get threads filtered by status. Valid statuses: failed, pending, posted"
+					},
+					"response": [
+						{
+							"name": "Pending Threads",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/threads/by-status/pending",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"threads",
+										"by-status",
+										"pending"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"status_filter\": \"pending\",\n    \"count\": 2,\n    \"threads\": [\n        {\n            \"thread_id\": \"thread-123\",\n            \"account_id\": 1,\n            \"account_username\": \"ZeroShotFlow\",\n            \"tweet_count\": 3,\n            \"posted_count\": 0,\n            \"pending_count\": 3,\n            \"failed_count\": 0,\n            \"created_at\": \"2025-01-25T10:00:00\"\n        },\n        {\n            \"thread_id\": \"thread-456\",\n            \"account_id\": 2,\n            \"account_username\": \"klair_three\",\n            \"tweet_count\": 2,\n            \"posted_count\": 0,\n            \"pending_count\": 2,\n            \"failed_count\": 0,\n            \"created_at\": \"2025-01-25T09:30:00\"\n        }\n    ]\n}"
+						},
+						{
+							"name": "Failed Threads",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/threads/by-status/failed",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"threads",
+										"by-status",
+										"failed"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"status_filter\": \"failed\",\n    \"count\": 1,\n    \"threads\": [\n        {\n            \"thread_id\": \"thread-789\",\n            \"account_id\": 1,\n            \"account_username\": \"ZeroShotFlow\",\n            \"tweet_count\": 3,\n            \"posted_count\": 2,\n            \"pending_count\": 0,\n            \"failed_count\": 1,\n            \"created_at\": \"2025-01-25T08:45:00\"\n        }\n    ]\n}"
+						}
+					]
 				}
 			]
 		},
@@ -3851,156 +4410,6 @@
 							],
 							"cookie": [],
 							"body": "{\n    \"error\": \"This operation will delete tweets permanently. Set \\\"confirm\\\": true to proceed.\"\n}"
-						}
-					]
-				},
-				{
-					"name": "Retry Failed Thread",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/thread/retry/{{thread_id}}",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"thread",
-								"retry",
-								"{{thread_id}}"
-							]
-						},
-						"description": "Retry posting a failed thread from where it left off"
-					},
-					"response": [
-						{
-							"name": "Thread Retry Success",
-							"originalRequest": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "X-API-Key",
-										"value": "{{api_key}}",
-										"type": "text"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/thread/retry/550e8400-e29b-41d4-a716-446655440000",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"thread",
-										"retry",
-										"550e8400-e29b-41d4-a716-446655440000"
-									]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": "{\n    \"message\": \"Thread retry completed\",\n    \"thread_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"posted\": 2,\n    \"failed\": 0,\n    \"tweets\": [\n        {\n            \"tweet_id\": 2,\n            \"twitter_id\": \"1234567890123456790\",\n            \"position\": 1,\n            \"status\": \"posted\"\n        },\n        {\n            \"tweet_id\": 3,\n            \"twitter_id\": \"1234567890123456791\",\n            \"position\": 2,\n            \"status\": \"posted\"\n        }\n    ]\n}"
-						}
-					]
-				},
-				{
-					"name": "Reset Failed Threads",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}",
-								"type": "text"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json",
-								"type": "text"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"thread_ids\": [\"{{thread_id}}\"],\n    \"account_id\": {{account_id}},\n    \"days_old\": 7\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/threads/reset-failed",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"threads",
-								"reset-failed"
-							]
-						},
-						"description": "Reset failed thread tweets back to pending status"
-					},
-					"response": [
-						{
-							"name": "Threads Reset Success",
-							"originalRequest": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "X-API-Key",
-										"value": "{{api_key}}",
-										"type": "text"
-									},
-									{
-										"key": "Content-Type",
-										"value": "application/json",
-										"type": "text"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n    \"thread_ids\": [\"thread-1\", \"thread-2\"]\n}",
-									"options": {
-										"raw": {
-											"language": "json"
-										}
-									}
-								},
-								"url": {
-									"raw": "{{base_url}}/threads/reset-failed",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"threads",
-										"reset-failed"
-									]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": "{\n    \"message\": \"Reset 4 failed tweets to pending status\",\n    \"count\": 4,\n    \"affected_threads\": 2,\n    \"thread_stats\": [\n        {\n            \"thread_id\": \"thread-1\",\n            \"total\": 3,\n            \"pending\": 3\n        },\n        {\n            \"thread_id\": \"thread-2\",\n            \"total\": 2,\n            \"pending\": 1\n        }\n    ]\n}"
 						}
 					]
 				},
