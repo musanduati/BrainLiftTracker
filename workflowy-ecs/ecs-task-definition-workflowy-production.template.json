@@ -1,5 +1,5 @@
 {
-  "family": "workflowy-processor-test",
+  "family": "workflowy-processor-production",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "4096",
@@ -52,7 +52,7 @@
         "options": {
           "awslogs-group": "/ecs/workflowy-processor",
           "awslogs-region": "us-east-1",
-          "awslogs-stream-prefix": "ecs-test"
+          "awslogs-stream-prefix": "ecs-production"
         }
       }
     }
