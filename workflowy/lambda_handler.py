@@ -30,10 +30,10 @@ def lambda_handler(event, context):
     
     # Check if this is a bulk URL processing request
     if is_bulk_url_request_v2(event):
-        structured_logger.info_operation("bulk_url_processing", "🔗 Processing bulk URL upload request (V2)")
+        structured_logger.info_operation("lambda_handler", "🔗 Processing bulk URL upload request (V2)")
         return handle_bulk_url_processing_v2(event, environment)
     else:
-        structured_logger.info_operation("lambda_start", "🚀 Starting project-based processing + Tweet posting in Lambda", environment=environment)
+        structured_logger.info_operation("lambda_handler", "🚀 Starting project-based processing + Tweet posting in Lambda", environment=environment)
         
         # Run the async processing (updated for project-based approach)
         results = asyncio.run(process_and_post_v2(environment))
@@ -60,9 +60,9 @@ def lambda_handler(event, context):
             }
         }
         
-        structured_logger.info_operation("processing_complete", f"✅ Processing complete: {scraping_successful} successful, {scraping_failed} failed", 
+        structured_logger.info_operation("lambda_handler", f"✅ Processing complete: {scraping_successful} successful, {scraping_failed} failed", 
                                        successful=scraping_successful, failed=scraping_failed)
-        structured_logger.info_operation("posting_complete", f"✅ Posting complete: {posting_successful} successful, {posting_failed} failed",
+        structured_logger.info_operation("lambda_handler", f"✅ Posting complete: {posting_successful} successful, {posting_failed} failed",
                                        successful=posting_successful, failed=posting_failed)
         
         return {
