@@ -112,27 +112,14 @@ class HumanReadableFormatter(logging.Formatter):
     """Human-readable formatter for local development"""
     
     def format(self, record):
-        # Format: [TIMESTAMP] LEVEL - MODULE - MESSAGE [CONTEXT]
         timestamp = datetime.now().strftime('%H:%M:%S')
         
-        context_parts = []
-        if LogContext.get_request_id():
-            context_parts.append(f"req:{LogContext.get_request_id()[:8]}")
-        if LogContext.get_project_id():
-            context_parts.append(f"proj:{LogContext.get_project_id()[:8]}")
-        if LogContext.get_project_name():
-            context_parts.append(f"name:{LogContext.get_project_name()}")
-        if LogContext.get_operation():
-            context_parts.append(f"op:{LogContext.get_operation()}")
-        
-        context_str = f" [{', '.join(context_parts)}]" if context_parts else ""
-        
-        base_message = f"[{timestamp}] {record.levelname} - {record.name} - {record.getMessage()}{context_str}"
+        base_message = f"[{timestamp}] {record.levelname} - {LogContext.get_operation()} - {record.getMessage()}"
         
         # Add custom fields for development
-        if hasattr(record, 'custom_fields') and record.custom_fields:
-            fields_str = ', '.join(f"{k}={v}" for k, v in record.custom_fields.items())
-            base_message += f" | {fields_str}"
+        # if hasattr(record, 'custom_fields') and record.custom_fields:
+        #     fields_str = ', '.join(f"{k}={v}" for k, v in record.custom_fields.items())
+        #     base_message += f" | {fields_str}"
         
         # Add exception info if present
         if record.exc_info:
@@ -151,6 +138,10 @@ class StructuredLogger:
     
     def _log_operation(self, level: int, operation: str, message: str, error: Optional[Exception] = None, **kwargs):
         """Internal method to log structured operations"""
+
+        if operation:
+            LogContext.set_operation(operation)
+
         # Create custom fields from kwargs
         custom_fields = {}
         if operation:
