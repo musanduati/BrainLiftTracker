@@ -48,53 +48,51 @@ class LogContext:
     
     @classmethod
     def get_operation(cls) -> Optional[str]:
-        """Get current operation"""
+        """Get current operation type"""
         return getattr(cls._local, 'operation', None)
     
     @classmethod
-    def clear_context(cls):
-        """Clear all context variables"""
-        cls._local.__dict__.clear()
-    
-    @classmethod
     def set_project_context(cls, project_id: str, project_name: str):
-        """Convenience method to set both project ID and name"""
+        """Set both project ID and name"""
         cls.set_project_id(project_id)
         cls.set_project_name(project_name)
+    
+    @classmethod
+    def clear_project_context(cls):
+        """Clear project context"""
+        cls._local.project_id = None
+        cls._local.project_name = None
 
 
 class JSONFormatter(logging.Formatter):
-    """JSON formatter for Lambda CloudWatch logs"""
+    """JSON formatter for CloudWatch structured logging"""
     
     def format(self, record):
-        # Base log entry
         log_entry = {
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'level': record.levelname,
             'message': record.getMessage(),
-            'module': record.name
         }
         
-        # Add context if available
-        if LogContext.get_request_id():
-            log_entry['request_id'] = LogContext.get_request_id()
+        # Add correlation context
+        request_id = LogContext.get_request_id()
+        if request_id:
+            log_entry['request_id'] = request_id
+            
+        project_id = LogContext.get_project_id()
+        if project_id:
+            log_entry['project_id'] = project_id
+            
+        project_name = LogContext.get_project_name()
+        if project_name:
+            log_entry['project_name'] = project_name
+            
+        operation = LogContext.get_operation()
+        if operation:
+            log_entry['operation'] = operation
         
-        if LogContext.get_project_id():
-            log_entry['project_id'] = LogContext.get_project_id()
-        
-        if LogContext.get_project_name():
-            log_entry['project_name'] = LogContext.get_project_name()
-        
-        if LogContext.get_operation():
-            log_entry['operation'] = LogContext.get_operation()
-        
-        # Add Lambda context if available
-        if os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
-            log_entry['function_name'] = os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
-            log_entry['environment'] = os.environ.get('ENVIRONMENT', 'unknown')
-        
-        # Add any custom fields from the log record
-        if hasattr(record, 'custom_fields'):
+        # Add custom fields
+        if hasattr(record, 'custom_fields') and record.custom_fields:
             log_entry.update(record.custom_fields)
         
         # Add error information if present
@@ -115,11 +113,6 @@ class HumanReadableFormatter(logging.Formatter):
         timestamp = datetime.now().strftime('%H:%M:%S')
         
         base_message = f"[{timestamp}] {record.levelname} - {LogContext.get_operation()} - {record.getMessage()}"
-        
-        # Add custom fields for development
-        # if hasattr(record, 'custom_fields') and record.custom_fields:
-        #     fields_str = ', '.join(f"{k}={v}" for k, v in record.custom_fields.items())
-        #     base_message += f" | {fields_str}"
         
         # Add exception info if present
         if record.exc_info:
@@ -180,9 +173,14 @@ class StructuredLogger:
         self._log_operation(logging.DEBUG, operation, message, **kwargs)
 
 
-def is_lambda_environment() -> bool:
-    """Check if running in AWS Lambda environment"""
-    return bool(os.environ.get('AWS_LAMBDA_FUNCTION_NAME'))
+def is_aws_managed_environment() -> bool:
+    """Check if running in AWS managed environment (Lambda or ECS) that needs structured logging"""
+    return bool(
+        os.environ.get('AWS_LAMBDA_FUNCTION_NAME') or  # Lambda
+        os.environ.get('AWS_EXECUTION_ENV') == 'AWS_ECS_FARGATE' or  # ECS Fargate
+        os.environ.get('ECS_CONTAINER_METADATA_URI_V4') or  # ECS (any launch type)
+        os.environ.get('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI')  # ECS task role
+    )
 
 
 def setup_logger(name: str = "workflowy") -> tuple[logging.Logger, StructuredLogger]:
@@ -200,11 +198,22 @@ def setup_logger(name: str = "workflowy") -> tuple[logging.Logger, StructuredLog
     handler = logging.StreamHandler()
     
     # Configure based on environment
-    if is_lambda_environment():
-        # Lambda environment: JSON formatting, INFO level
+    if is_aws_managed_environment():
+        # AWS managed environment: JSON formatting, INFO level
         formatter = JSONFormatter()
         level = logging.INFO
-        print(f"✅ Configured JSON logging for Lambda environment: {os.environ.get('AWS_LAMBDA_FUNCTION_NAME')}")
+        
+        # Determine environment type for logging
+        if os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
+            env_type = f"Lambda ({os.environ.get('AWS_LAMBDA_FUNCTION_NAME')})"
+        elif os.environ.get('AWS_EXECUTION_ENV') == 'AWS_ECS_FARGATE':
+            env_type = "ECS Fargate"
+        elif os.environ.get('ECS_CONTAINER_METADATA_URI_V4'):
+            env_type = "ECS"
+        else:
+            env_type = "AWS Managed Environment"
+            
+        print(f"✅ Configured JSON logging for {env_type}")
     else:
         # Local environment: Human-readable formatting, DEBUG level  
         formatter = HumanReadableFormatter()
@@ -233,7 +242,7 @@ def reconfigure_logger_for_environment() -> tuple[logging.Logger, StructuredLogg
 logger, structured_logger = setup_logger()
 
 
-# Legacy compatibility - keep the old function name
+# Legacy compatibility - keep the old function names
 def setup_lambda_logger(name: str = "workflowy") -> logging.Logger:
     """Legacy function for backward compatibility"""
     basic_logger, _ = setup_logger(name)
