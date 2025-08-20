@@ -145,3 +145,7 @@ markdowns/
 .claude/
 
 package/
+
+# AWS automation documentation and testing
+aws-automation/README.md
+aws-automation/test_lambda.py

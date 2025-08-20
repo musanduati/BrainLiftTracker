@@ -990,3 +990,389 @@ def get_threads_by_status(status):
     
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@threads_bp.route('/api/v1/threads/automation/run', methods=['POST'])
+@require_api_key
+def run_thread_automation():
+    """Automated thread posting service - combines pending posting and failed retry"""
+    try:
+        from datetime import datetime, timezone
+        try:
+            from datetime import UTC
+        except ImportError:
+            UTC = timezone.utc
+        
+        automation_start = datetime.now(UTC)
+        data = request.get_json() or {}
+        
+        # Configuration parameters
+        config = {
+            'max_threads_per_run': data.get('max_threads_per_run', 10),
+            'delay_between_threads': data.get('delay_between_threads', 5),
+            'post_pending': data.get('post_pending', True),
+            'retry_failed': data.get('retry_failed', True),
+            'dry_run': data.get('dry_run', False)
+        }
+        
+        automation_report = {
+            'automation_id': f"auto_{int(automation_start.timestamp())}",
+            'started_at': automation_start.isoformat(),
+            'config': config,
+            'results': {
+                'pending_operation': None,
+                'failed_retry_operation': None
+            },
+            'summary': {
+                'total_threads_processed': 0,
+                'total_tweets_posted': 0,
+                'total_failures': 0,
+                'operations_completed': 0,
+                'rate_limit_skips': 0
+            }
+        }
+        
+        conn = get_db()
+        
+        # Check system status first
+        total_pending = conn.execute(
+            '''SELECT COUNT(DISTINCT thread_id) as count 
+               FROM tweet 
+               WHERE thread_id IS NOT NULL AND status = 'pending' '''
+        ).fetchone()['count']
+        
+        total_failed_threads = conn.execute(
+            '''SELECT COUNT(DISTINCT thread_id) as count 
+               FROM tweet 
+               WHERE thread_id IS NOT NULL 
+               AND thread_id IN (
+                   SELECT DISTINCT thread_id 
+                   FROM tweet 
+                   WHERE status = 'failed' AND thread_id IS NOT NULL
+               )'''
+        ).fetchone()['count']
+        
+        automation_report['system_status'] = {
+            'pending_threads_available': total_pending,
+            'failed_threads_available': total_failed_threads
+        }
+        
+        conn.close()
+        
+        # Operation 1: Post Pending Threads
+        if config['post_pending'] and total_pending > 0:
+            if config['dry_run']:
+                automation_report['results']['pending_operation'] = {
+                    'status': 'dry_run',
+                    'message': f'DRY RUN: Would post {min(total_pending, config["max_threads_per_run"])} pending threads'
+                }
+            else:
+                # Call our existing post-all-pending endpoint internally
+                pending_result = post_all_pending_threads_internal(
+                    max_threads=config['max_threads_per_run'],
+                    delay_between_threads=config['delay_between_threads']
+                )
+                automation_report['results']['pending_operation'] = pending_result
+                
+                if pending_result.get('posted', 0) > 0:
+                    automation_report['summary']['operations_completed'] += 1
+                    automation_report['summary']['total_threads_processed'] += pending_result.get('threads_processed', 0)
+                    automation_report['summary']['total_tweets_posted'] += pending_result.get('posted', 0)
+                    automation_report['summary']['total_failures'] += pending_result.get('failed', 0)
+        
+        # Operation 2: Retry Failed Threads  
+        if config['retry_failed'] and total_failed_threads > 0:
+            if config['dry_run']:
+                automation_report['results']['failed_retry_operation'] = {
+                    'status': 'dry_run', 
+                    'message': f'DRY RUN: Would retry {min(total_failed_threads, config["max_threads_per_run"])} failed threads'
+                }
+            else:
+                # Call our existing retry-all-failed endpoint internally
+                retry_result = retry_all_failed_threads_internal(
+                    max_threads=config['max_threads_per_run'],
+                    delay_between_threads=config['delay_between_threads']
+                )
+                automation_report['results']['failed_retry_operation'] = retry_result
+                
+                if retry_result.get('retried', 0) > 0:
+                    automation_report['summary']['operations_completed'] += 1
+                    automation_report['summary']['total_threads_processed'] += retry_result.get('threads_processed', 0)
+                    automation_report['summary']['total_tweets_posted'] += retry_result.get('retried', 0)
+                    automation_report['summary']['total_failures'] += retry_result.get('still_failed', 0)
+        
+        # Calculate execution time
+        automation_end = datetime.now(UTC)
+        automation_report['completed_at'] = automation_end.isoformat()
+        automation_report['execution_time_seconds'] = (automation_end - automation_start).total_seconds()
+        
+        # Determine overall status
+        if automation_report['summary']['operations_completed'] > 0:
+            automation_report['status'] = 'success'
+            automation_report['message'] = f'Automation completed: {automation_report["summary"]["total_tweets_posted"]} tweets posted across {automation_report["summary"]["total_threads_processed"]} threads'
+        elif config['dry_run']:
+            automation_report['status'] = 'dry_run_complete'
+            automation_report['message'] = 'Dry run completed successfully'
+        else:
+            automation_report['status'] = 'no_work'
+            automation_report['message'] = 'No pending or failed threads found to process'
+        
+        return jsonify(automation_report)
+    
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'automation_id': f"auto_error_{int(datetime.now().timestamp())}",
+            'timestamp': datetime.now(UTC).isoformat()
+        }), 500
+
+def post_all_pending_threads_internal(max_threads=10, delay_between_threads=5):
+    """Internal function to post pending threads (used by automation)"""
+    try:
+        conn = get_db()
+        
+        # Get pending threads
+        pending_threads_query = '''
+            SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+                   COUNT(*) as tweet_count
+            FROM tweet 
+            WHERE thread_id IS NOT NULL 
+            AND status = 'pending'
+            GROUP BY thread_id, twitter_account_id
+            ORDER BY created_at ASC
+            LIMIT ?
+        '''
+        pending_threads = conn.execute(pending_threads_query, (max_threads,)).fetchall()
+        
+        if not pending_threads:
+            conn.close()
+            return {'message': 'No pending threads found', 'posted': 0, 'failed': 0, 'threads_processed': 0}
+        
+        results = []
+        total_posted = 0
+        total_failed = 0
+        
+        for thread in pending_threads:
+            thread_id = thread['thread_id']
+            thread_account_id = thread['twitter_account_id']
+            
+            # Check rate limit
+            from app.utils.rate_limit import get_rate_limit_status
+            rate_status = get_rate_limit_status(thread_account_id)
+            
+            if rate_status['tweets_posted'] + thread['tweet_count'] > rate_status['limit']:
+                results.append({
+                    'thread_id': thread_id,
+                    'account_id': thread_account_id,
+                    'status': 'skipped_rate_limit',
+                    'reason': f"Would exceed rate limit ({rate_status['tweets_posted']}/{rate_status['limit']})"
+                })
+                continue
+            
+            # Get tweets for this thread
+            tweets = conn.execute(
+                '''SELECT id, twitter_account_id, content, thread_position 
+                   FROM tweet 
+                   WHERE thread_id = ? AND status = 'pending'
+                   ORDER BY thread_position''',
+                (thread_id,)
+            ).fetchall()
+            
+            if not tweets:
+                continue
+            
+            # Post the thread
+            posted_tweets = []
+            failed_tweets = []
+            previous_tweet_id = None
+            
+            for tweet in tweets:
+                success, result = post_to_twitter(
+                    tweet['twitter_account_id'], 
+                    tweet['content'],
+                    reply_to_tweet_id=previous_tweet_id
+                )
+                
+                if success:
+                    conn.execute(
+                        '''UPDATE tweet 
+                           SET status = ?, twitter_id = ?, posted_at = ?, reply_to_tweet_id = ?
+                           WHERE id = ?''',
+                        ('posted', result, datetime.now(UTC).isoformat(), previous_tweet_id, tweet['id'])
+                    )
+                    conn.commit()
+                    posted_tweets.append({'tweet_id': tweet['id'], 'twitter_id': result, 'position': tweet['thread_position']})
+                    previous_tweet_id = result
+                else:
+                    conn.execute('UPDATE tweet SET status = ? WHERE id = ?', ('failed', tweet['id']))
+                    conn.commit()
+                    failed_tweets.append({'tweet_id': tweet['id'], 'position': tweet['thread_position'], 'error': result})
+                    break
+            
+            results.append({
+                'thread_id': thread_id,
+                'account_id': thread_account_id,
+                'status': 'completed' if not failed_tweets else 'partial_failure',
+                'posted_count': len(posted_tweets),
+                'failed_count': len(failed_tweets)
+            })
+            
+            total_posted += len(posted_tweets)
+            total_failed += len(failed_tweets)
+            
+            # Add delay between threads
+            if delay_between_threads > 0 and thread != pending_threads[-1]:
+                import time
+                time.sleep(delay_between_threads)
+        
+        conn.close()
+        
+        return {
+            'message': f'Processed {len(pending_threads)} threads',
+            'posted': total_posted,
+            'failed': total_failed,
+            'threads_processed': len(results),
+            'results': results
+        }
+    
+    except Exception as e:
+        return {'error': str(e), 'posted': 0, 'failed': 0, 'threads_processed': 0}
+
+def retry_all_failed_threads_internal(max_threads=10, delay_between_threads=5):
+    """Internal function to retry failed threads (used by automation)"""
+    try:
+        conn = get_db()
+        
+        # Get failed threads
+        failed_threads_query = '''
+            SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+                   COUNT(*) as total_tweets,
+                   SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_tweets,
+                   SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_tweets
+            FROM tweet 
+            WHERE thread_id IS NOT NULL 
+            AND thread_id IN (
+                SELECT DISTINCT thread_id 
+                FROM tweet 
+                WHERE status = 'failed' AND thread_id IS NOT NULL
+            )
+            GROUP BY thread_id, twitter_account_id
+            ORDER BY created_at ASC
+            LIMIT ?
+        '''
+        failed_threads = conn.execute(failed_threads_query, (max_threads,)).fetchall()
+        
+        if not failed_threads:
+            conn.close()
+            return {'message': 'No failed threads found', 'retried': 0, 'still_failed': 0, 'threads_processed': 0}
+        
+        results = []
+        total_retried = 0
+        total_still_failed = 0
+        
+        for thread in failed_threads:
+            thread_id = thread['thread_id']
+            thread_account_id = thread['twitter_account_id']
+            
+            # Check rate limit
+            from app.utils.rate_limit import get_rate_limit_status
+            rate_status = get_rate_limit_status(thread_account_id)
+            tweets_to_post = thread['failed_tweets'] + thread['pending_tweets']
+            
+            if rate_status['tweets_posted'] + tweets_to_post > rate_status['limit']:
+                results.append({
+                    'thread_id': thread_id,
+                    'account_id': thread_account_id,
+                    'status': 'skipped_rate_limit',
+                    'reason': f"Would exceed rate limit ({rate_status['tweets_posted']}/{rate_status['limit']})"
+                })
+                continue
+            
+            # Reset failed tweets to pending
+            reset_result = conn.execute(
+                '''UPDATE tweet 
+                   SET status = 'pending', twitter_id = NULL, posted_at = NULL, reply_to_tweet_id = NULL
+                   WHERE thread_id = ? AND status = 'failed' ''',
+                (thread_id,)
+            )
+            reset_count = reset_result.rowcount
+            conn.commit()
+            
+            if reset_count == 0:
+                continue
+            
+            # Get all pending tweets for this thread
+            tweets = conn.execute(
+                '''SELECT id, twitter_account_id, content, thread_position 
+                   FROM tweet 
+                   WHERE thread_id = ? AND status = 'pending'
+                   ORDER BY thread_position''',
+                (thread_id,)
+            ).fetchall()
+            
+            # Find the last successfully posted tweet
+            last_posted = conn.execute(
+                '''SELECT twitter_id FROM tweet 
+                   WHERE thread_id = ? AND status = 'posted'
+                   ORDER BY thread_position DESC LIMIT 1''',
+                (thread_id,)
+            ).fetchone()
+            
+            previous_tweet_id = last_posted['twitter_id'] if last_posted else None
+            
+            # Post the remaining tweets
+            posted_tweets = []
+            failed_tweets = []
+            
+            for tweet in tweets:
+                success, result = post_to_twitter(
+                    tweet['twitter_account_id'], 
+                    tweet['content'],
+                    reply_to_tweet_id=previous_tweet_id
+                )
+                
+                if success:
+                    conn.execute(
+                        '''UPDATE tweet 
+                           SET status = ?, twitter_id = ?, posted_at = ?, reply_to_tweet_id = ?
+                           WHERE id = ?''',
+                        ('posted', result, datetime.now(UTC).isoformat(), previous_tweet_id, tweet['id'])
+                    )
+                    conn.commit()
+                    posted_tweets.append({'tweet_id': tweet['id'], 'twitter_id': result, 'position': tweet['thread_position']})
+                    previous_tweet_id = result
+                else:
+                    conn.execute('UPDATE tweet SET status = ? WHERE id = ?', ('failed', tweet['id']))
+                    conn.commit()
+                    failed_tweets.append({'tweet_id': tweet['id'], 'position': tweet['thread_position'], 'error': result})
+                    break
+            
+            results.append({
+                'thread_id': thread_id,
+                'account_id': thread_account_id,
+                'status': 'completed' if not failed_tweets else 'partial_failure',
+                'reset_count': reset_count,
+                'posted_count': len(posted_tweets),
+                'failed_count': len(failed_tweets)
+            })
+            
+            total_retried += len(posted_tweets)
+            total_still_failed += len(failed_tweets)
+            
+            # Add delay between threads
+            if delay_between_threads > 0 and thread != failed_threads[-1]:
+                import time
+                time.sleep(delay_between_threads)
+        
+        conn.close()
+        
+        return {
+            'message': f'Processed {len(failed_threads)} failed threads',
+            'retried': total_retried,
+            'still_failed': total_still_failed,
+            'threads_processed': len(results),
+            'results': results
+        }
+    
+    except Exception as e:
+        return {'error': str(e), 'retried': 0, 'still_failed': 0, 'threads_processed': 0}
