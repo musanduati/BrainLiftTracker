@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from workflowy.storage.aws_storage import AWSStorageV2
 from workflowy.storage.project_utils import is_valid_project_id
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 
 
 class BulkURLProcessorV2:
@@ -39,7 +39,7 @@ class BulkURLProcessorV2:
             
             # Basic validation: must be a Workflowy shared URL
             if not url.startswith('https://workflowy.com/s/'):
-                logger.error(f"❌ Invalid URL format: {url}")
+                structured_logger.error_operation("validate_workflowy_url", f"❌ Invalid URL format: {url}")
                 return False
             
             # Pattern to match: https://workflowy.com/s/{something}/{something}
@@ -47,13 +47,13 @@ class BulkURLProcessorV2:
             import re
             pattern = r'https://workflowy\.com/s/[^/]+/[^/#?]+'
             if not re.match(pattern, url):
-                logger.error(f"❌ Invalid Workflowy URL structure: {url}")
+                structured_logger.error_operation("validate_workflowy_url", f"❌ Invalid Workflowy URL structure: {url}")
                 return False
             
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error validating URL {url}: {e}")
+            structured_logger.error_operation("validate_workflowy_url", f"❌ Error validating URL {url}: {e}")
             return False
     
     def create_project_from_url(self, url: str, account_id: str, name: Optional[str] = None) -> Optional[str]:
@@ -70,7 +70,7 @@ class BulkURLProcessorV2:
         """
         # Validate URL format
         if not self.validate_workflowy_url(url):
-            logger.error(f"❌ Invalid URL format: {url}")
+            structured_logger.error_operation("create_project_from_url", f"❌ Invalid URL format: {url}")
             return None
         
         # Generate display name if not provided
@@ -88,11 +88,11 @@ class BulkURLProcessorV2:
         
         try:
             project_id = self.storage.create_project(url, account_id, name)
-            logger.info(f"✅ Created project: {project_id} -> {name} (Account: {account_id})")
+            structured_logger.info_operation("create_project_from_url", f"✅ Created project: {project_id} -> {name} (Account: {account_id})")
             return project_id
             
         except Exception as e:
-            logger.error(f"❌ Error creating project from URL {url}: {e}")
+            structured_logger.error_operation("create_project_from_url", f"❌ Error creating project from URL {url}: {e}")
             return None
     
     def update_project_url(self, project_id: str, new_url: str) -> bool:
@@ -108,12 +108,12 @@ class BulkURLProcessorV2:
         """
         # Validate new URL
         if not self.validate_workflowy_url(new_url):
-            logger.error(f"❌ Invalid new URL format: {new_url}")
+            structured_logger.error_operation("update_project_url", f"❌ Invalid new URL format: {new_url}")
             return False
         
         # Validate project_id
         if not is_valid_project_id(project_id):
-            logger.error(f"❌ Invalid project_id format: {project_id}")
+            structured_logger.error_operation("update_project_url", f"❌ Invalid project_id format: {project_id}")
             return False
         
         return self.storage.update_project_url(project_id, new_url)
@@ -129,7 +129,7 @@ class BulkURLProcessorV2:
         Returns:
             dict: Processing results with successful and failed entries
         """
-        logger.info(f"📝 Processing {len(url_entries)} Workflowy URLs for project creation")
+        structured_logger.info_operation("process_bulk_urls", f"📝 Processing {len(url_entries)} Workflowy URLs for project creation")
         
         successful_projects = []
         failed_projects = []
@@ -138,7 +138,7 @@ class BulkURLProcessorV2:
             # Validate entry format
             if not isinstance(entry, dict) or 'brainlift' not in entry:
                 error_msg = f"Invalid entry format at index {i-1}: {entry}"
-                logger.error(f"❌ {error_msg}")
+                structured_logger.error_operation("process_bulk_urls", f"❌ {error_msg}")
                 failed_projects.append({
                     'entry': entry,
                     'error': error_msg,
@@ -150,9 +150,9 @@ class BulkURLProcessorV2:
             account_id = entry.get('account_id', 'TBA')  # Default to 'TBA' if not provided
             name = entry.get('name')  # Optional name field
             
-            logger.info(f"🔄 Processing URL {i}/{len(url_entries)}: {url}")
-            logger.info(f"   Account ID: {account_id}")
-            logger.info(f"   Name: {name}")
+            structured_logger.info_operation("process_bulk_urls", f"🔄 Processing URL {i}/{len(url_entries)}: {url}")
+            structured_logger.info_operation("process_bulk_urls", f"   Account ID: {account_id}")
+            structured_logger.info_operation("process_bulk_urls", f"   Name: {name}")
             
             # Create project (this generates a unique project_id internally)
             project_id = self.create_project_from_url(url, account_id, name)
@@ -165,10 +165,10 @@ class BulkURLProcessorV2:
                     'account_id': account_id,
                     'index': i-1
                 })
-                logger.info(f"✅ Created project {project_id} for URL {i}")
+                structured_logger.info_operation("process_bulk_urls", f"✅ Created project {project_id} for URL {i}")
             else:
                 error_msg = f"Failed to create project for URL: {url}"
-                logger.error(f"❌ {error_msg}")
+                structured_logger.error_operation("process_bulk_urls", f"❌ {error_msg}")
                 failed_projects.append({
                     'url': url,
                     'account_id': account_id,
@@ -189,9 +189,9 @@ class BulkURLProcessorV2:
             'processed_at': datetime.now().isoformat()
         }
         
-        logger.info(f"📊 Bulk URL processing complete:")
-        logger.info(f"   ✅ Successful: {len(successful_projects)}")
-        logger.info(f"   ❌ Failed: {len(failed_projects)}")
+        structured_logger.info_operation("process_bulk_urls", f"📊 Bulk URL processing complete:")
+        structured_logger.info_operation("process_bulk_urls", f"   ✅ Successful: {len(successful_projects)}")
+        structured_logger.info_operation("process_bulk_urls", f"   ❌ Failed: {len(failed_projects)}")
         
         return results
     
@@ -211,14 +211,14 @@ class BulkURLProcessorV2:
             
             for project in projects:
                 if project.get('url') == url:
-                    logger.info(f"Found project {project['project_id']} for URL: {url}")
+                    structured_logger.info_operation("get_project_by_url", f"Found project {project['project_id']} for URL: {url}")
                     return project
             
-            logger.info(f"No project found for URL: {url}")
+            structured_logger.info_operation("get_project_by_url", f"No project found for URL: {url}")
             return None
             
         except Exception as e:
-            logger.error(f"❌ Error searching for project by URL {url}: {e}")
+            structured_logger.error_operation("get_project_by_url", f"❌ Error searching for project by URL {url}: {e}")
             return None
     
     def get_project_statistics(self) -> Dict:
@@ -279,11 +279,11 @@ class BulkURLProcessorV2:
                 except:
                     pass  # Skip invalid dates
             
-            logger.info(f"📊 Project statistics: {stats['total_projects']} total, {stats['active_projects']} active")
+            structured_logger.info_operation("get_project_statistics", f"📊 Project statistics: {stats['total_projects']} total, {stats['active_projects']} active")
             return stats
             
         except Exception as e:
-            logger.error(f"❌ Error getting project statistics: {e}")
+            structured_logger.error_operation("get_project_statistics", f"❌ Error getting project statistics: {e}")
             return {}
     
     def validate_bulk_url_format(self, url_entries: List[Dict]) -> Dict:
@@ -349,7 +349,7 @@ class BulkURLProcessorV2:
                 if isinstance(entry, dict) and 'brainlift' in entry:
                     validation['invalid_urls'].append(entry['brainlift'])
         
-        logger.info(f"📋 Validation complete: {validation['valid_entries']} valid, {validation['invalid_entries']} invalid")
+        structured_logger.info_operation("validate_bulk_url_format", f"📋 Validation complete: {validation['valid_entries']} valid, {validation['invalid_entries']} invalid")
         return validation
 
 
@@ -385,7 +385,7 @@ def is_bulk_url_request_v2(event: Dict) -> bool:
         return False
         
     except (json.JSONDecodeError, KeyError, TypeError) as e:
-        logger.debug(f"Not a bulk URL request: {e}")
+        structured_logger.debug_operation("is_bulk_url_request_v2", f"Not a bulk URL request: {e}")
         return False
 
 
@@ -411,8 +411,8 @@ def handle_bulk_url_processing_v2(event: Dict, environment: str = 'test') -> Dic
         validation = processor.validate_bulk_url_format(body)
         
         if validation['invalid_entries'] > 0:
-            logger.warning(f"⚠️ Found {validation['invalid_entries']} invalid entries")
-            logger.warning(f"Validation errors: {validation['validation_errors']}")
+            structured_logger.warning_operation("handle_bulk_url_processing_v2", f"⚠️ Found {validation['invalid_entries']} invalid entries")
+            structured_logger.warning_operation("handle_bulk_url_processing_v2", f"Validation errors: {validation['validation_errors']}")
         
         # Process URLs (even if some are invalid, process the valid ones)
         if validation['valid_entries'] > 0:
@@ -437,7 +437,7 @@ def handle_bulk_url_processing_v2(event: Dict, environment: str = 'test') -> Dic
         
     except Exception as e:
         error_msg = f"Error processing bulk URLs: {str(e)}"
-        logger.error(f"❌ {error_msg}")
+        structured_logger.error_operation("handle_bulk_url_processing_v2", f"❌ {error_msg}")
         return {
             'statusCode': 500,
             'body': json.dumps({
@@ -522,7 +522,7 @@ def create_project_management_api():
 
 if __name__ == "__main__":
     # Test the new bulk URL processor
-    logger.info("Testing Bulk URL Processor V2 (Project-based)")
+    structured_logger.info_operation("main", "Testing Bulk URL Processor V2 (Project-based)")
     
     # Initialize processor
     processor = BulkURLProcessorV2(environment='test')
@@ -538,12 +538,12 @@ if __name__ == "__main__":
     
     # Test validation
     validation = processor.validate_bulk_url_format(test_urls)
-    logger.info(f"Validation result: {validation}")
+    structured_logger.info_operation("main", f"Validation result: {validation}")
     
     # Test processing (in real scenario)
     results = processor.process_bulk_urls(test_urls)
-    logger.info(f"Processing results: {results}")
+    structured_logger.info_operation("main", f"Processing results: {results}")
     
     # Test statistics
     stats = processor.get_project_statistics()
-    logger.info(f"Project statistics: {stats}")
+    structured_logger.info_operation("main", f"Project statistics: {stats}")

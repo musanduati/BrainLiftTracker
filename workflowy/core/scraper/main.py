@@ -9,7 +9,7 @@ import aiohttp
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 from workflowy.storage.aws_storage import AWSStorageV2
 from workflowy.storage.project_utils import normalize_project_id
 from workflowy.core.llm_service import extract_node_id_using_llm, extract_all_dok_node_ids_using_llm, get_lm_service
@@ -39,7 +39,7 @@ async def extract_single_dok_section_llm(item_data_list: list[dict[str, str]], s
     """
     Extract a single DOK section using LLM-based identification.
     """
-    logger.info(f"🔍 Extracting {section_prefix} section...")
+    structured_logger.info_operation("extract_single_dok_section_llm", f"🔍 Extracting {section_prefix} section...", section=section_prefix)
     
     # Get top-level nodes first
     top_nodes = await extract_top_level_nodes(item_data_list)
@@ -48,7 +48,7 @@ async def extract_single_dok_section_llm(item_data_list: list[dict[str, str]], s
     nodes_for_llm = []
     if len(top_nodes) == 1:
         root_id = top_nodes[0]['id']
-        logger.info(f"Found single root node: {top_nodes[0]['name']}, looking for children...")
+        structured_logger.info_operation("extract_single_dok_section_llm", f"Found single root node: {top_nodes[0]['name']}, looking for children...", root_name=top_nodes[0]['name'], root_id=root_id)
         
         # Get children of the root node
         for item in item_data_list:
@@ -59,21 +59,21 @@ async def extract_single_dok_section_llm(item_data_list: list[dict[str, str]], s
                         'name': node_name,
                         'id': item['id']
                     })
-                    logger.debug(f"Found child node: {node_name} (ID: {item['id']})")
+                    structured_logger.debug_operation("extract_single_dok_section_llm", f"Found child node: {node_name} (ID: {item['id']})", node_name=node_name, node_id=item['id'])
     else:
         # Multiple top-level nodes, use them directly
         nodes_for_llm = top_nodes
     
-    logger.info(f"Found main nodes: {nodes_for_llm}")
+    structured_logger.info_operation("extract_single_dok_section_llm", f"Found main nodes: {nodes_for_llm}", nodes_count=len(nodes_for_llm), nodes=nodes_for_llm)
     
     # Use LLM to find the correct node ID
     node_id = await extract_node_id_using_llm(section_prefix, nodes_for_llm)
     
     if not node_id:
-        logger.warning(f"⚠️ Could not find {section_prefix} section")
+        structured_logger.warning_operation("extract_single_dok_section_llm", f"⚠️ Could not find {section_prefix} section", section=section_prefix)
         return ""
     
-    logger.info(f"✅ Found {section_prefix} with node_id: {node_id}")
+    structured_logger.info_operation("extract_single_dok_section_llm", f"✅ Found {section_prefix} with node_id: {node_id}")
     
     # Extract content for this node
     return _extract_node_content(item_data_list, node_id, section_prefix)
@@ -84,7 +84,7 @@ async def extract_all_dok_sections_llm(item_data_list: list[dict[str, str]], sec
     Extract ALL DOK sections of the same type and combine their content.
     This handles cases where there are multiple nodes of the same DOK type.
     """
-    logger.info(f"🔍 Extracting ALL {section_prefix} sections...")
+    structured_logger.info_operation("extract_all_dok_sections_llm", f"🔍 Extracting ALL {section_prefix} sections...", section=section_prefix)
     
     # Get top-level nodes first (same logic as single extraction)
     top_nodes = await extract_top_level_nodes(item_data_list)
@@ -93,7 +93,7 @@ async def extract_all_dok_sections_llm(item_data_list: list[dict[str, str]], sec
     nodes_for_llm = []
     if len(top_nodes) == 1:
         root_id = top_nodes[0]['id']
-        logger.info(f"Found single root node: {top_nodes[0]['name']}, looking for children...")
+        structured_logger.info_operation("extract_all_dok_sections_llm", f"Found single root node: {top_nodes[0]['name']}, looking for children...", root_name=top_nodes[0]['name'], root_id=root_id)
         
         # Get children of the root node
         for item in item_data_list:
@@ -104,21 +104,21 @@ async def extract_all_dok_sections_llm(item_data_list: list[dict[str, str]], sec
                         'name': node_name,
                         'id': item['id']
                     })
-                    logger.debug(f"Found child node: {node_name} (ID: {item['id']})")
+                    structured_logger.debug_operation("extract_all_dok_sections_llm", f"Found child node: {node_name} (ID: {item['id']})", node_name=node_name, node_id=item['id'])
     else:
         # Multiple top-level nodes, use them directly
         nodes_for_llm = top_nodes
     
-    logger.info(f"Available nodes for {section_prefix}: {[node['name'] for node in nodes_for_llm]}")
+    structured_logger.info_operation("extract_all_dok_sections_llm", f"Available nodes for {section_prefix}: {[node['name'] for node in nodes_for_llm]}", nodes_count=len(nodes_for_llm), nodes=[node['name'] for node in nodes_for_llm])
     
     # Use LLM to find ALL matching node IDs
     node_ids = await extract_all_dok_node_ids_using_llm(section_prefix, nodes_for_llm)
     
     if not node_ids:
-        logger.warning(f"⚠️ Could not find any {section_prefix} sections")
+        structured_logger.warning_operation("extract_all_dok_sections_llm", f"⚠️ Could not find any {section_prefix} sections", section=section_prefix)
         return ""
     
-    logger.info(f"✅ Found {len(node_ids)} {section_prefix} nodes: {node_ids}")
+    structured_logger.info_operation("extract_all_dok_sections_llm", f"✅ Found {len(node_ids)} {section_prefix} nodes: {node_ids}", node_ids=node_ids)
     
     # Extract and combine content from ALL matching nodes
     combined_content = ""
@@ -132,7 +132,7 @@ async def extract_all_dok_sections_llm(item_data_list: list[dict[str, str]], sec
                 node_name = node['name']
                 break
         
-        logger.info(f"📝 Processing {section_prefix} node {i}/{len(node_ids)}: {node_name}")
+        structured_logger.info_operation("extract_all_dok_sections_llm", f"📝 Processing {section_prefix} node {i}/{len(node_ids)}: {node_name}", section_prefix=section_prefix, node_index=i, total_nodes=len(node_ids), node_name=node_name)
         
         # Extract content for this node
         node_content = _extract_node_content(item_data_list, node_id, section_prefix)
@@ -144,15 +144,15 @@ async def extract_all_dok_sections_llm(item_data_list: list[dict[str, str]], sec
             
             combined_content += node_content
             processed_nodes.append(node_name)
-            logger.debug(f"✅ Added content from node: {node_name} ({len(node_content)} chars)")
+            structured_logger.debug_operation("extract_all_dok_sections_llm", f"✅ Added content from node: {node_name} ({len(node_content)} chars)", node_name=node_name, node_id=node_id, node_content_length=len(node_content))
         else:
-            logger.warning(f"⚠️ No content found in node: {node_name} (ID: {node_id})")
+            structured_logger.warning_operation("extract_all_dok_sections_llm", f"⚠️ No content found in node: {node_name} (ID: {node_id})", node_name=node_name, node_id=node_id)
     
     if combined_content:
-        logger.info(f"✅ Successfully combined {section_prefix} content from {len(processed_nodes)} nodes: {processed_nodes}")
-        logger.debug(f"Total combined content length: {len(combined_content)} characters")
+        structured_logger.info_operation("extract_all_dok_sections_llm", f"✅ Successfully combined {section_prefix} content from {len(processed_nodes)} nodes: {processed_nodes}", section_prefix=section_prefix, processed_nodes=processed_nodes)
+        structured_logger.debug_operation("extract_all_dok_sections_llm", f"Total combined content length: {len(combined_content)} characters", combined_content_length=len(combined_content))
     else:
-        logger.warning(f"⚠️ No content found in any of the {len(node_ids)} {section_prefix} nodes")
+        structured_logger.warning_operation("extract_all_dok_sections_llm", f"⚠️ No content found in any of the {len(node_ids)} {section_prefix} nodes", section_prefix=section_prefix, node_ids=node_ids)
     
     return combined_content
 
@@ -172,7 +172,7 @@ class WorkflowyTesterV2:
         self.cookie_jar = aiohttp.CookieJar()
         self.auth_headers = None
         self.lm_service = get_lm_service()
-        logger.info(f"🚀 Initialized WorkflowyTesterV2 for {environment}")
+        structured_logger.info_operation("workflowy_tester_init", f"🚀 Initialized WorkflowyTesterV2 for {environment}", environment=environment)
     
     async def get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session with cookie jar."""
@@ -196,41 +196,41 @@ class WorkflowyTesterV2:
             session = await self.get_session()
             items = await get_tree_data(session, session_id, share_id, exclude_node_names)
             
-            logger.info(f"Retrieved {len(items)} items from Workflowy")
+            structured_logger.info_operation("scrape_workflowy_raw_data", f"Retrieved {len(items)} items from Workflowy", items_count=len(items))
             return items
             
         except Exception as e:
-            logger.error(f"Error scraping Workflowy: {e}")
+            structured_logger.error_operation("scrape_workflowy_raw_data", f"Error scraping Workflowy: {e}", error=e)
             raise
     
     async def process_single_project(self, project_id: str, exclude_node_names: list[str] | None = None):
         """
         Process a single project using project_id for identification.
         """
-        logger.info(f"🔄 Processing project: {project_id}")
+        structured_logger.info_operation("process_single_project", f"🔄 Processing project: {project_id}", project_id=project_id)
         
         # Get project configuration
         project_config = self.storage.get_project_by_id(project_id)
         if not project_config:
-            logger.error(f"❌ Project not found: {project_id}")
+            structured_logger.error_operation("process_single_project", f"❌ Project not found: {project_id}", project_id=project_id)
             return None
         
         if not project_config.get('active', True):
-            logger.info(f"⏸️ Project {project_id} is inactive, skipping")
+            structured_logger.info_operation("process_single_project", f"⏸️ Project {project_id} is inactive, skipping", project_id=project_id)
             return None
         
         url = project_config.get('url')
         if not url:
-            logger.error(f"❌ No URL found for project: {project_id}")
+            structured_logger.error_operation("process_single_project", f"❌ No URL found for project: {project_id}", project_id=project_id, project_name=project_name)
             return None
         
         project_name = project_config.get('name', project_id)
-        logger.info(f"📋 Project: {project_name} ({project_id})")
-        logger.info(f"🔗 URL: {url}")
+        structured_logger.info_operation("process_single_project", f"📋 Project: {project_name} ({project_id})", project_id=project_id, project_name=project_name)
+        structured_logger.info_operation("process_single_project", f"🔗 URL: {url}", url=url)
         
         # Check if this is the first run for this project
         is_first_run = self.storage.is_first_run(project_id)
-        logger.info(f"🏁 First run: {is_first_run}")
+        structured_logger.info_operation("process_single_project", f"🏁 First run: {is_first_run}", is_first_run=is_first_run)
         
         # Load previous state if exists
         previous_state = None if is_first_run else self.storage.load_previous_state(project_id)
@@ -253,7 +253,7 @@ class WorkflowyTesterV2:
             
             # Process DOK4 section
             if dok4_content:
-                logger.info("📝 Processing DOK4 section...")
+                structured_logger.info_operation("process_single_project", "📝 Processing DOK4 section...")
                 dok4_points = parse_dok_points(dok4_content, "DOK4")
                 current_state['dok4'] = create_dok_state_from_points(dok4_points)  # Use lowercase key
                 
@@ -266,17 +266,17 @@ class WorkflowyTesterV2:
                     changes = advanced_compare_dok_states(prev_dok4_state, current_state['dok4'])
                     dok4_tweets = generate_advanced_change_tweets(changes, "DOK4", is_first_run=False)
                     all_tweets.extend(dok4_tweets)
-                    logger.info(f"✅ Generated {len(dok4_tweets)} tweets for DOK4")
+                    structured_logger.info_operation("process_single_project", f"✅ Generated {len(dok4_tweets)} tweets for DOK4", dok4_tweets_count=len(dok4_tweets))
                 elif skip_migration_tweets:
-                    logger.info("🚫 Migration deployment - skipping DOK4 tweet generation")
+                    structured_logger.info_operation("process_single_project", "🚫 Migration deployment - skipping DOK4 tweet generation")
                 else:
-                    logger.info("🏁 First run - establishing DOK4 baseline, no tweets generated")
+                    structured_logger.info_operation("process_single_project", "🏁 First run - establishing DOK4 baseline, no tweets generated")
             else:
-                logger.info("⚠️ No DOK4 content found")
+                structured_logger.info_operation("process_single_project", "⚠️ No DOK4 content found")
             
             # Process DOK3 section
             if dok3_content:
-                logger.info("📝 Processing DOK3 section...")
+                structured_logger.info_operation("process_single_project", "📝 Processing DOK3 section...")
                 dok3_points = parse_dok_points(dok3_content, "DOK3")
                 current_state['dok3'] = create_dok_state_from_points(dok3_points)  # Use lowercase key
                 
@@ -289,13 +289,13 @@ class WorkflowyTesterV2:
                     changes = advanced_compare_dok_states(prev_dok3_state, current_state['dok3'])
                     dok3_tweets = generate_advanced_change_tweets(changes, "DOK3", is_first_run=False)
                     all_tweets.extend(dok3_tweets)
-                    logger.info(f"✅ Generated {len(dok3_tweets)} tweets for DOK3")
+                    structured_logger.info_operation("process_single_project", f"✅ Generated {len(dok3_tweets)} tweets for DOK3", dok3_tweets_count=len(dok3_tweets))
                 elif skip_migration_tweets:
-                    logger.info("🚫 Migration deployment - skipping DOK3 tweet generation")
+                    structured_logger.info_operation("process_single_project", "🚫 Migration deployment - skipping DOK3 tweet generation")
                 else:
-                    logger.info("🏁 First run - establishing DOK3 baseline, no tweets generated")
+                    structured_logger.info_operation("process_single_project", "🏁 First run - establishing DOK3 baseline, no tweets generated")
             else:
-                logger.info("⚠️ No DOK3 content found")
+                structured_logger.info_operation("process_single_project", "⚠️ No DOK3 content found")
             
             # Save results
             timestamp = get_timestamp()
@@ -303,17 +303,17 @@ class WorkflowyTesterV2:
             # Save scraped content
             combined_content = f"# {project_name}\n\n{dok4_content}\n\n{dok3_content}"
             s3_scraped_path = self.storage.save_scraped_content(project_id, combined_content, timestamp)
-            logger.info(f"💾 Saved scraped content to: {s3_scraped_path}")
+            structured_logger.info_operation("process_single_project", f"💾 Saved scraped content to: {s3_scraped_path}", s3_scraped_path=s3_scraped_path)
             
             # Save tweets if any
             s3_tweets_path = None  # Initialize variable
             if all_tweets:
                 s3_tweets_path = self.storage.save_change_tweets(project_id, all_tweets, timestamp)
-                logger.info(f"💾 Saved {len(all_tweets)} tweets to: {s3_tweets_path}")
+                structured_logger.info_operation("process_single_project", f"💾 Saved {len(all_tweets)} tweets to: {s3_tweets_path}", s3_tweets_path=s3_tweets_path)
             
             # Save current state for next comparison
             self.storage.save_current_state(project_id, current_state)
-            logger.info(f"💾 Updated state for project: {project_id}")
+            structured_logger.info_operation("process_single_project", f"💾 Updated state for project: {project_id}", project_id=project_id)
             
             # Cleanup old content
             self.storage.cleanup_old_scraped_content(project_id)
@@ -332,7 +332,7 @@ class WorkflowyTesterV2:
             }
             
         except Exception as e:
-            logger.error(f"❌ Error processing project {project_id}: {e}")
+            structured_logger.error_operation("process_single_project", f"❌ Error processing project {project_id}: {e}", error=e, project_id=project_id)
             return {
                 'project_id': project_id,
                 'status': 'error',
@@ -343,13 +343,13 @@ class WorkflowyTesterV2:
         """
         Process all active projects in the system.
         """
-        logger.info("🚀 Starting processing of all active projects...")
+        structured_logger.info_operation("process_all_projects", "🚀 Starting processing of all active projects...")
         
         # Get all active projects
         projects = self.storage.get_all_projects()
         active_projects = [p for p in projects if p.get('active', False)]
         
-        logger.info(f"📊 Found {len(active_projects)} active projects to process")
+        structured_logger.info_operation("process_all_projects", f"📊 Found {len(active_projects)} active projects to process", active_projects_count=len(active_projects))
         
         results = []
         for project in active_projects:
@@ -359,14 +359,14 @@ class WorkflowyTesterV2:
                 if result:
                     results.append(result)
             except Exception as e:
-                logger.error(f"❌ Failed to process project {project_id}: {e}")
+                structured_logger.error_operation("process_all_projects", f"❌ Failed to process project {project_id}: {e}", error=e, project_id=project_id)
                 results.append({
                     'project_id': project_id,
                     'status': 'error',
                     'error': str(e)
                 })
         
-        logger.info(f"✅ Processed {len(results)} projects")
+        structured_logger.info_operation("process_all_projects", f"✅ Processed {len(results)} projects", processed_projects_count=len(results))
         return results
     
     async def __aenter__(self):
@@ -478,15 +478,15 @@ class WorkflowyTesterV2:
 # For testing
 async def test_project_processing():
     """Test processing a single project."""
-    logger.info("Testing project processing...")
+    structured_logger.info_operation("test_project_processing", "Testing project processing...")
     
     async with WorkflowyTesterV2(environment='test') as tester:
         # Test with a specific project ID
         result = await tester.process_single_project('project_5d3fd51306ab488890559c58037812b7')
         if result:
-            logger.info(f"✅ Test successful: {result}")
+            structured_logger.info_operation("test_project_processing", f"✅ Test successful: {result}", result=result)
         else:
-            logger.error("❌ Test failed")
+            structured_logger.error_operation("test_project_processing", "❌ Test failed")
 
 
 if __name__ == "__main__":

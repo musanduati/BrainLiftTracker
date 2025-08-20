@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 from workflowy.storage.project_utils import normalize_project_id
 from workflowy.storage.schemas import validate_project_item, validate_state_item, get_table_names
 
@@ -47,7 +47,7 @@ class AWSStorageV2:
             self.legacy_mapping_table = self.dynamodb.Table(self.legacy_mapping_table_name)
             self.legacy_state_table = self.dynamodb.Table(self.legacy_state_table_name)
         except Exception as e:
-            logger.warning(f"Legacy tables not available: {e}")
+            structured_logger.warning_operation("AWSStorageV2-init", f"Legacy tables not available: {e}")
             self.legacy_urls_table = None
             self.legacy_mapping_table = None
             self.legacy_state_table = None
@@ -72,7 +72,7 @@ class AWSStorageV2:
         
         project_config = create_project_config(url, account_id, name)
         project_id = project_config['project_id']
-        logger.info(f"Project Config: {project_config}")
+        structured_logger.info_operation("create_project", f"Project Config: {project_config}")
         
         # Validate before saving
         if not validate_project_item(project_config):
@@ -80,11 +80,11 @@ class AWSStorageV2:
         
         try:
             self.urls_config_table.put_item(Item=project_config)
-            logger.info(f"✅ Created project: {project_id} -> {name} (Account: {account_id})")
+            structured_logger.info_operation("create_project", f"✅ Created project: {project_id} -> {name} (Account: {account_id})")
             return project_id
             
         except Exception as e:
-            logger.error(f"❌ Error creating project: {e}")
+            structured_logger.error_operation("create_project", f"❌ Error creating project: {e}")
             raise
 
     def get_project_by_id(self, project_id: str) -> Optional[Dict]:
@@ -99,7 +99,7 @@ class AWSStorageV2:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"Invalid project_id format: {project_id}")
+            structured_logger.error_operation("get_project_by_id", f"Invalid project_id format: {project_id}")
             return None
         
         try:
@@ -109,7 +109,7 @@ class AWSStorageV2:
             return response.get('Item')
             
         except Exception as e:
-            logger.error(f"Error getting project {project_id}: {e}")
+            structured_logger.error_operation("get_project_by_id", f"Error getting project {project_id}: {e}")
             return None
 
     def get_all_projects(self) -> List[Dict]:
@@ -126,15 +126,15 @@ class AWSStorageV2:
             )
             
             projects = response.get('Items', [])
-            logger.info(f"📋 Found {len(projects)} active projects")
+            structured_logger.info_operation("get_all_projects", f"📋 Found {len(projects)} active projects")
             
             for project in projects:
-                logger.debug(f"  • {project['name']} ({project['project_id']}): {project['url']}")
+                structured_logger.debug_operation("get_all_projects", f"  • {project['name']} ({project['project_id']}): {project['url']}")
             
             return projects
             
         except Exception as e:
-            logger.error(f"Error loading projects: {e}")
+            structured_logger.error_operation("get_all_projects", f"Error loading projects: {e}")
             return []
 
     def get_account_id_for_project(self, project_id: str) -> Optional[str]:
@@ -163,7 +163,7 @@ class AWSStorageV2:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"Invalid project_id format: {project_id}")
+            structured_logger.error_operation("update_project_url", f"Invalid project_id format: {project_id}")
             return False
         
         try:
@@ -176,11 +176,11 @@ class AWSStorageV2:
                     ':updated_at': datetime.now().isoformat()
                 }
             )
-            logger.info(f"✅ Updated URL for project {project_id}: {new_url}")
+            structured_logger.info_operation("update_project_url", f"✅ Updated URL for project {project_id}: {new_url}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error updating project URL: {e}")
+            structured_logger.error_operation("update_project_url", f"❌ Error updating project URL: {e}")
             return False
 
     def deactivate_project(self, project_id: str) -> bool:
@@ -195,7 +195,7 @@ class AWSStorageV2:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"Invalid project_id format: {project_id}")
+            structured_logger.error_operation("deactivate_project", f"Invalid project_id format: {project_id}")
             return False
         
         try:
@@ -207,11 +207,11 @@ class AWSStorageV2:
                     ':updated_at': datetime.now().isoformat()
                 }
             )
-            logger.info(f"✅ Deactivated project {project_id}")
+            structured_logger.info_operation("deactivate_project", f"✅ Deactivated project {project_id}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error deactivating project: {e}")
+            structured_logger.error_operation("deactivate_project", f"❌ Error deactivating project: {e}")
             return False
 
     # ============================================================================
@@ -236,8 +236,8 @@ class AWSStorageV2:
         
         key = f"{project_id}/scraped_content/{project_id}_scraped_workflowy_{timestamp}.txt"
 
-        logger.info(f"Saving scraped content to S3 Bucket: {self.bucket_name}")
-        logger.debug(f"Key: {key}")
+        structured_logger.info_operation("save_scraped_content", f"Saving scraped content to S3 Bucket: {self.bucket_name}")
+        structured_logger.debug_operation("save_scraped_content", f"Key: {key}")
         
         self.s3.put_object(
             Bucket=self.bucket_name,
@@ -276,7 +276,7 @@ class AWSStorageV2:
             ContentType='application/json'
         )
         
-        logger.info(f"📄 Saved {len(tweets)} tweets to S3: {key}")
+        structured_logger.info_operation("save_change_tweets", f"📄 Saved {len(tweets)} tweets to S3: {key}")
         return f"s3://{self.bucket_name}/{key}"
 
     def load_latest_tweets_from_s3(self, project_id: str) -> List[Dict]:
@@ -291,7 +291,7 @@ class AWSStorageV2:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"Invalid project_id format: {project_id}")
+            structured_logger.error_operation("load_latest_tweets_from_s3", f"Invalid project_id format: {project_id}")
             return []
         
         try:
@@ -303,7 +303,7 @@ class AWSStorageV2:
             )
             
             if 'Contents' not in response:
-                logger.info(f"📄 No tweet files found in S3 for project {project_id}")
+                structured_logger.info_operation("load_latest_tweets_from_s3", f"📄 No tweet files found in S3 for project {project_id}")
                 return []
             
             # Sort by last modified and get latest
@@ -316,11 +316,11 @@ class AWSStorageV2:
             )
             
             tweets_data = json.loads(obj['Body'].read())
-            logger.info(f"📄 Loaded {len(tweets_data)} tweets from S3: {latest_object['Key']}")
+            structured_logger.info_operation("load_latest_tweets_from_s3", f"📄 Loaded {len(tweets_data)} tweets from S3: {latest_object['Key']}")
             return tweets_data
             
         except Exception as e:
-            logger.error(f"❌ Error loading tweets from S3 for project {project_id}: {e}")
+            structured_logger.error_operation("load_latest_tweets_from_s3", f"❌ Error loading tweets from S3 for project {project_id}: {e}")
             return []
 
     # ============================================================================
@@ -339,7 +339,7 @@ class AWSStorageV2:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"Invalid project_id format: {project_id}")
+            structured_logger.error_operation("load_previous_state", f"Invalid project_id format: {project_id}")
             return {"dok4": [], "dok3": []}
         
         try:
@@ -351,7 +351,7 @@ class AWSStorageV2:
             
             # Ensure the state has the expected structure
             if not isinstance(state, dict):
-                logger.warning(f"Warning: Invalid state format for {project_id}, resetting to default")
+                structured_logger.warning_operation("load_previous_state", f"Warning: Invalid state format for {project_id}, resetting to default")
                 return {"dok4": [], "dok3": []}
             
             # Ensure both keys exist
@@ -360,11 +360,11 @@ class AWSStorageV2:
             if "dok3" not in state:
                 state["dok3"] = []
                 
-            logger.debug(f"Loaded state for project {project_id}: {len(state.get('dok4', []))} DOK4, {len(state.get('dok3', []))} DOK3")
+            structured_logger.debug_operation("load_previous_state", f"Loaded state for project {project_id}: {len(state.get('dok4', []))} DOK4, {len(state.get('dok3', []))} DOK3")
             return state
             
         except Exception as e:
-            logger.error(f"Error loading state for project {project_id}: {e}")
+            structured_logger.error_operation("load_previous_state", f"Error loading state for project {project_id}: {e}")
             return {"dok4": [], "dok3": []}
     
     def save_current_state(self, project_id: str, state: Dict):
@@ -377,7 +377,7 @@ class AWSStorageV2:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"Invalid project_id format: {project_id}")
+            structured_logger.error_operation("save_current_state", f"Invalid project_id format: {project_id}")
             return
         
         state_item = {
@@ -389,14 +389,14 @@ class AWSStorageV2:
         
         # Validate before saving
         if not validate_state_item(state_item):
-            logger.error(f"Invalid state item for project {project_id}")
+            structured_logger.error_operation("save_current_state", f"Invalid state item for project {project_id}")
             return
         
         try:
             self.state_table.put_item(Item=state_item)
-            logger.debug(f"Saved state for project {project_id}")
+            structured_logger.debug_operation("save_current_state", f"Saved state for project {project_id}")
         except Exception as e:
-            logger.error(f"Error saving state for project {project_id}: {e}")
+            structured_logger.error_operation("save_current_state", f"Error saving state for project {project_id}: {e}")
     
     def is_first_run(self, project_id: str) -> bool:
         """
@@ -410,7 +410,7 @@ class AWSStorageV2:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"Invalid project_id format: {project_id}")
+            structured_logger.error_operation("is_first_run", f"Invalid project_id format: {project_id}")
             return True
         
         try:
@@ -435,7 +435,7 @@ class AWSStorageV2:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"Invalid project_id format: {project_id}")
+            structured_logger.error_operation("cleanup_old_scraped_content", f"Invalid project_id format: {project_id}")
             return
         
         try:
@@ -451,7 +451,7 @@ class AWSStorageV2:
             )
             
             if 'Contents' not in response:
-                logger.info(f"📄 No existing scraped content files found for project {project_id}")
+                structured_logger.info_operation("cleanup_old_scraped_content", f"📄 No existing scraped content files found for project {project_id}")
                 return
             
             # Filter to only scraped content files
@@ -467,10 +467,10 @@ class AWSStorageV2:
             ]
             
             if not files_to_delete:
-                logger.info(f"📄 No scraped content files older than {days_to_keep} days found for project {project_id}")
+                structured_logger.info_operation("cleanup_old_scraped_content", f"📄 No scraped content files older than {days_to_keep} days found for project {project_id}")
                 return
             
-            logger.info(f"🗑️  Cleaning up {len(files_to_delete)} scraped content files older than {days_to_keep} days for project {project_id}")
+            structured_logger.info_operation("cleanup_old_scraped_content", f"🗑️  Cleaning up {len(files_to_delete)} scraped content files older than {days_to_keep} days for project {project_id}")
             
             # Delete old files
             delete_keys = [{'Key': obj['Key']} for obj in files_to_delete]
@@ -486,12 +486,12 @@ class AWSStorageV2:
             
             # Check for any deletion errors
             if 'Errors' in response and response['Errors']:
-                logger.error(f"❌ Some files could not be deleted: {response['Errors']}")
+                structured_logger.error_operation("cleanup_old_scraped_content", f"❌ Some files could not be deleted: {response['Errors']}")
             else:
-                logger.info(f"✅ Successfully cleaned up {len(files_to_delete)} old files for project {project_id}")
+                structured_logger.info_operation("cleanup_old_scraped_content", f"✅ Successfully cleaned up {len(files_to_delete)} old files for project {project_id}")
                 
         except Exception as e:
-            logger.error(f"❌ Error cleaning up old scraped content for project {project_id}: {e}")
+            structured_logger.error_operation("cleanup_old_scraped_content", f"❌ Error cleaning up old scraped content for project {project_id}: {e}")
 
     def get_project_storage_info(self, project_id: str) -> Dict:
         """
@@ -505,7 +505,7 @@ class AWSStorageV2:
         """
         project_id = normalize_project_id(project_id)
         if not project_id:
-            logger.error(f"Invalid project_id format: {project_id}")
+            structured_logger.error_operation("get_project_storage_info", f"Invalid project_id format: {project_id}")
             return {}
         
         try:
@@ -541,11 +541,11 @@ class AWSStorageV2:
             
             info['total_files'] = info['scraped_content_files'] + info['change_tweet_files']
             
-            logger.info(f"📊 Storage info for project {project_id}: {info['total_files']} files, {info['total_size_mb']:.2f} MB")
+            structured_logger.info_operation("get_project_storage_info", f"📊 Storage info for project {project_id}: {info['total_files']} files, {info['total_size_mb']:.2f} MB")
             return info
             
         except Exception as e:
-            logger.error(f"❌ Error getting storage info for project {project_id}: {e}")
+            structured_logger.error_operation("get_project_storage_info", f"❌ Error getting storage info for project {project_id}: {e}")
             return {}
 
     # ============================================================================
@@ -571,7 +571,7 @@ class AWSStorageV2:
             if has_legacy_data:
                 migration_needed.append(project)
         
-        logger.info(f"📋 Found {len(migration_needed)} projects needing data migration")
+        structured_logger.info_operation("get_projects_for_migration", f"📋 Found {len(migration_needed)} projects needing data migration")
         return migration_needed
 
     def _check_legacy_data_exists(self, project_id: str) -> bool:
@@ -591,7 +591,7 @@ class AWSStorageV2:
 
 if __name__ == "__main__":
     # Test the new storage system
-    logger.info("Testing AWS Storage V2 (Project-based)")
+    structured_logger.info_operation("main", "Testing AWS Storage V2 (Project-based)")
     
     # Initialize storage
     storage = AWSStorageV2(environment='test')
@@ -603,12 +603,12 @@ if __name__ == "__main__":
         name="Test Project"
     )
     
-    logger.info(f"Created test project: {project_id}")
+    structured_logger.info_operation("main", f"Created test project: {project_id}")
     
     # Test project retrieval
     project = storage.get_project_by_id(project_id)
-    logger.info(f"Retrieved project: {project}")
+    structured_logger.info_operation("main", f"Retrieved project: {project}")
     
     # Test getting all projects
     all_projects = storage.get_all_projects()
-    logger.info(f"All projects: {len(all_projects)}")
+    structured_logger.info_operation("main", f"All projects: {len(all_projects)}")

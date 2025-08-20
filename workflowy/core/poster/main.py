@@ -5,7 +5,7 @@ Main TweetPosterV2 class - orchestrates all tweet posting operations
 import asyncio
 import aiohttp
 from typing import List, Dict, Optional
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 from workflowy.storage.project_utils import normalize_project_id
 
 # Import from poster submodules
@@ -51,7 +51,7 @@ class TweetPosterV2:
         self.api_key = self.twitter_api.api_key
         self.headers = self.twitter_api.headers
         
-        logger.info(f"🔄 TweetPoster V2 initialized (Mode: {posting_mode}, Environment: {environment})")
+        structured_logger.info_operation("tweet-poster-init", f"🔄 TweetPoster V2 initialized (Mode: {posting_mode}, Environment: {environment})")
     
     # Delegate storage methods for backward compatibility
     def get_account_id_for_project(self, project_id: str) -> Optional[str]:
@@ -119,7 +119,7 @@ class TweetPosterV2:
             self.posting_mode = posting_mode
             self.project_processor.posting_mode = posting_mode
         
-        logger.info(f"🚀 Starting TweetPoster V2 (Mode: {self.posting_mode})")
+        structured_logger.info_operation("run", f"🚀 Starting TweetPoster V2 (Mode: {self.posting_mode})")
         
         # Get projects to process
         if target_project_ids:
@@ -129,15 +129,15 @@ class TweetPosterV2:
                 if project:
                     projects.append(project)
                 else:
-                    logger.warning(f"⚠️ Project not found: {project_id}")
+                    structured_logger.warning_operation("run", f"⚠️ Project not found: {project_id}")
         else:
             projects = self.storage_interface.get_all_projects()
         
         if not projects:
-            logger.warning("⚠️ No projects found to process")
+            structured_logger.warning_operation("run", "⚠️ No projects found to process")
             return
         
-        logger.info(f"📋 Processing {len(projects)} project(s)")
+        structured_logger.info_operation("run", f"📋 Processing {len(projects)} project(s)")
         
         # Create aiohttp session
         timeout = aiohttp.ClientTimeout(total=30)
@@ -151,7 +151,7 @@ class TweetPosterV2:
                 project_id = project['project_id']
                 project_name = project['name']
                 
-                logger.info(f"🔄 PROCESSING PROJECT {i}/{len(projects)}: {project_name} ({project_id})")
+                structured_logger.info_operation("run", f"🔄 PROCESSING PROJECT {i}/{len(projects)}: {project_name} ({project_id})")
                 
                 try:
                     result = await self.process_project(session, project_id)
@@ -163,11 +163,11 @@ class TweetPosterV2:
                     total_failed += failed
                     
                     if posted > 0:
-                        logger.info(f"✅ Project {project_name}: {posted} tweets posted")
+                        structured_logger.info_operation("run", f"✅ Project {project_name}: {posted} tweets posted")
                     elif failed > 0:
-                        logger.warning(f"⚠️ Project {project_name}: {failed} tweets failed")
+                        structured_logger.warning_operation("run", f"⚠️ Project {project_name}: {failed} tweets failed")
                     else:
-                        logger.info(f"ℹ️ Project {project_name}: No tweets to post")
+                        structured_logger.info_operation("run", f"ℹ️ Project {project_name}: No tweets to post")
                         
                 except Exception as e:
                     error_result = {
@@ -177,15 +177,15 @@ class TweetPosterV2:
                         'error': str(e)
                     }
                     results.append(error_result)
-                    logger.error(f"❌ Error processing project {project_name}: {e}")
+                    structured_logger.error_operation("run", f"❌ Error processing project {project_name}: {e}")
         
         # Summary
-        logger.info(f"{'='*60}")
-        logger.info(f"🏁 TWEET POSTING COMPLETE")
-        logger.info(f"📊 Projects processed: {len(projects)}")
-        logger.info(f"✅ Total tweets posted: {total_posted}")
-        logger.info(f"❌ Total tweets failed: {total_failed}")
-        logger.info(f"{'='*60}")
+        structured_logger.info_operation("run", f"{'='*60}")
+        structured_logger.info_operation("run", f"🏁 TWEET POSTING COMPLETE")
+        structured_logger.info_operation("run", f"📊 Projects processed: {len(projects)}")
+        structured_logger.info_operation("run", f"✅ Total tweets posted: {total_posted}")
+        structured_logger.info_operation("run", f"❌ Total tweets failed: {total_failed}")
+        structured_logger.info_operation("run", f"{'='*60}")
         
         # Detailed results
         for result in results:
@@ -196,12 +196,12 @@ class TweetPosterV2:
             if status == 'success':
                 posted = result.get('posted_tweets', 0)
                 if posted > 0:
-                    logger.info(f"  ✅ {project_name} ({project_id}): {posted} tweets posted")
+                    structured_logger.info_operation("run", f"  ✅ {project_name} ({project_id}): {posted} tweets posted")
                 else:
-                    logger.info(f"  ℹ️ {project_name} ({project_id}): No tweets to post")
+                    structured_logger.info_operation("run", f"  ℹ️ {project_name} ({project_id}): No tweets to post")
             else:
                 error = result.get('error', 'Unknown error')
-                logger.info(f"  ❌ {project_name} ({project_id}): {error}")
+                structured_logger.info_operation("run", f"  ❌ {project_name} ({project_id}): {error}")
 
 
 # Standalone functions for backward compatibility
@@ -209,8 +209,8 @@ def preview_what_will_be_posted_v2(target_project_ids: Optional[List[str]] = Non
     """
     Preview what tweets will be posted without actually posting them.
     """
-    logger.info("📋 PREVIEW MODE - No tweets will actually be posted")
-    logger.info("="*60)
+    structured_logger.info_operation("preview_what_will_be_posted_v2", "📋 PREVIEW MODE - No tweets will actually be posted")
+    structured_logger.info_operation("preview_what_will_be_posted_v2", "="*60)
     
     poster = TweetPosterV2(posting_mode)
     
@@ -225,7 +225,7 @@ def preview_what_will_be_posted_v2(target_project_ids: Optional[List[str]] = Non
         projects = poster.storage_interface.get_all_projects()
     
     if not projects:
-        logger.info("No projects found")
+        structured_logger.info_operation("preview_what_will_be_posted_v2", "No projects found")
         return
     
     total_pending = 0
@@ -245,28 +245,28 @@ def preview_what_will_be_posted_v2(target_project_ids: Optional[List[str]] = Non
         if not pending_tweets:
             continue
         
-        logger.info(f"\n🏷️ Project: {project_name} ({project_id})")
-        logger.info(f"   Account ID: {account_id}")
-        logger.info(f"   Pending Tweets: {len(pending_tweets)}")
+        structured_logger.info_operation("preview_what_will_be_posted_v2", f"\n🏷️ Project: {project_name} ({project_id})")
+        structured_logger.info_operation("preview_what_will_be_posted_v2", f"   Account ID: {account_id}")
+        structured_logger.info_operation("preview_what_will_be_posted_v2", f"   Pending Tweets: {len(pending_tweets)}")
         
         # Group by thread
         threads = poster.group_tweets_by_thread(pending_tweets)
         
         for thread_id, thread_tweets in threads.items():
             if poster.is_thread(thread_tweets):
-                logger.info(f"\n   🧵 Thread: {thread_id} ({len(thread_tweets)} tweets)")
+                structured_logger.info_operation("preview_what_will_be_posted_v2", f"\n   🧵 Thread: {thread_id} ({len(thread_tweets)} tweets)")
                 for i, tweet in enumerate(thread_tweets, 1):
                     text = tweet.get('content_formatted', tweet.get('text', ''))
-                    logger.info(f"      Tweet {i}: {text[:100]}...")
+                    structured_logger.info_operation("preview_what_will_be_posted_v2", f"      Tweet {i}: {text[:100]}...")
             else:
                 tweet = thread_tweets[0]
                 text = tweet.get('content_formatted', tweet.get('text', ''))
-                logger.info(f"   📝 Single: {text[:100]}...")
+                structured_logger.info_operation("preview_what_will_be_posted_v2", f"   📝 Single: {text[:100]}...")
         
         total_pending += len(pending_tweets)
     
-    logger.info(f"\n{'='*60}")
-    logger.info(f"📊 Total pending tweets across all projects: {total_pending}")
+    structured_logger.info_operation("preview_what_will_be_posted_v2", f"\n{'='*60}")
+    structured_logger.info_operation("preview_what_will_be_posted_v2", f"📊 Total pending tweets across all projects: {total_pending}")
 
 
 async def main():

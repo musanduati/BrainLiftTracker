@@ -7,7 +7,7 @@ import aiohttp
 from typing import Dict, List
 from itertools import groupby
 from workflowy.storage.project_utils import normalize_project_id
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 
 
 class ProjectProcessor:
@@ -42,22 +42,22 @@ class ProjectProcessor:
         project_id = normalize_project_id(project_id)
         if not project_id:
             error_msg = f"Invalid project_id format: {project_id}"
-            logger.error(f"❌ {error_msg}")
+            structured_logger.error_operation("process_project", f"❌ {error_msg}")
             return {
                 'project_id': project_id,
                 'status': 'error',
                 'error': error_msg
             }
         
-        logger.info(f"{'='*50}")
-        logger.info(f"PROCESSING PROJECT: {project_id}")
-        logger.info(f"{'='*50}")
+        structured_logger.info_operation("process_project", f"{'='*50}")
+        structured_logger.info_operation("process_project", f"PROCESSING PROJECT: {project_id}")
+        structured_logger.info_operation("process_project", f"{'='*50}")
         
         # Get project details
         project = self.storage.get_project_by_id(project_id)
         if not project:
             error_msg = f"Project not found: {project_id}"
-            logger.error(f"❌ {error_msg}")
+            structured_logger.error_operation("process_project", f"❌ {error_msg}")
             return {
                 'project_id': project_id,
                 'status': 'error',
@@ -67,14 +67,14 @@ class ProjectProcessor:
         project_name = project['name']
         account_id = project['account_id']
         
-        logger.info(f"🏷️ Project Name: {project_name}")
-        logger.info(f"🎯 Account ID: {account_id}")
+        structured_logger.info_operation("process_project", f"🏷️ Project Name: {project_name}")
+        structured_logger.info_operation("process_project", f"🎯 Account ID: {account_id}")
         
         # Load tweet data
         all_tweets = self.storage.get_project_tweet_data(project_id)
         
         if not all_tweets:
-            logger.warning(f"⚠️ No tweet data found for project: {project_id}")
+            structured_logger.warning_operation("process_project", f"⚠️ No tweet data found for project: {project_id}")
             return {
                 'project_id': project_id,
                 'project_name': project_name,
@@ -86,13 +86,13 @@ class ProjectProcessor:
                 'failed_tweets': 0
             }
         
-        logger.info(f"📄 Loaded {len(all_tweets)} tweets for project {project_id}")
+        structured_logger.info_operation("process_project", f"📄 Loaded {len(all_tweets)} tweets for project {project_id}")
         
         # Filter only pending tweets
         pending_tweets = [tweet for tweet in all_tweets if tweet.get("status") == "pending"]
         
         if not pending_tweets:
-            logger.info(f"ℹ️ No pending tweets to post for project {project_id}")
+            structured_logger.info_operation("process_project", f"ℹ️ No pending tweets to post for project {project_id}")
             return {
                 'project_id': project_id,
                 'project_name': project_name,
@@ -104,7 +104,7 @@ class ProjectProcessor:
                 'failed_tweets': 0
             }
         
-        logger.info(f"📊 Found {len(pending_tweets)} pending tweets to post")
+        structured_logger.info_operation("process_project", f"📊 Found {len(pending_tweets)} pending tweets to post")
         
         # Group tweets by thread
         pending_tweets.sort(key=lambda x: x.get("thread_id", ""))
@@ -121,10 +121,10 @@ class ProjectProcessor:
                 success = await self.thread_manager.process_single_thread_for_project(session, thread_tweets, account_id)
                 if success:
                     posted_count += len(thread_tweets)
-                    logger.info(f"✅ Posted thread with {len(thread_tweets)} tweets")
+                    structured_logger.info_operation("process_project", f"✅ Posted thread with {len(thread_tweets)} tweets")
                 else:
                     failed_count += len(thread_tweets)
-                    logger.error(f"❌ Failed to post thread with {len(thread_tweets)} tweets")
+                    structured_logger.error_operation("process_project", f"❌ Failed to post thread with {len(thread_tweets)} tweets")
                 
                 # Delay between threads
                 if thread_tweets != threads_to_process[-1]:
@@ -132,7 +132,7 @@ class ProjectProcessor:
                     
             except Exception as e:
                 failed_count += len(thread_tweets)
-                logger.error(f"❌ Error posting thread: {e}")
+                structured_logger.error_operation("process_project", f"❌ Error posting thread: {e}")
         
         # Save updated tweets back to S3
         if posted_count > 0 or failed_count > 0:
@@ -170,7 +170,7 @@ class ProjectProcessor:
                 results.append(result)
                     
             except Exception as e:
-                logger.error(f"❌ Error processing project {project_id}: {e}")
+                structured_logger.error_operation("process_multiple_projects", f"❌ Error processing project {project_id}: {e}")
                 results.append({
                     'project_id': project_id,
                     'status': 'error',

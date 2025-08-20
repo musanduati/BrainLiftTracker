@@ -5,7 +5,7 @@ Thread management logic for tweet posting
 import aiohttp
 from typing import List, Dict
 from datetime import datetime
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 
 
 class ThreadManager:
@@ -68,12 +68,12 @@ class ThreadManager:
                 text = tweet_data.get('text', '') or tweet_data.get('content_formatted', '')
             
             if not text:
-                logger.warning("⚠️ Empty tweet text, skipping")
+                structured_logger.warning_operation("process_single_tweet", "⚠️ Empty tweet text, skipping")
                 tweet_data["status"] = "skipped"
                 tweet_data["error"] = "Empty text"
                 return False
             
-            logger.info(f"📝 Creating tweet: {text[:50]}...")
+            structured_logger.info_operation("process_single_tweet", f"📝 Creating tweet: {text[:50]}...")
             
             # Create tweet
             tweet_id = await self.twitter_api.create_tweet(session, text, account_id)
@@ -91,15 +91,15 @@ class ThreadManager:
             if success:
                 tweet_data["status"] = "posted"
                 tweet_data["posted_at"] = datetime.now().isoformat()
-                logger.info(f"   ✅ Tweet posted successfully")
+                structured_logger.info_operation("process_single_tweet", f"   ✅ Tweet posted successfully")
             else:
                 tweet_data["status"] = "created_not_posted"
-                logger.warning(f"   ⚠️ Tweet created but posting failed")
+                structured_logger.warning_operation("process_single_tweet", f"   ⚠️ Tweet created but posting failed")
             
             return success
             
         except Exception as e:
-            logger.error(f"❌ Error processing single tweet: {e}")
+            structured_logger.error_operation("process_single_tweet", f"❌ Error processing single tweet: {e}")
             tweet_data["status"] = "failed"
             tweet_data["error"] = str(e)
             return False
@@ -119,12 +119,12 @@ class ThreadManager:
             bool: True if successful, False otherwise
         """
         if not thread_tweets:
-            logger.warning("⚠️ Empty thread, skipping")
+            structured_logger.warning_operation("process_single_thread_for_project", "⚠️ Empty thread, skipping")
             return False
         
         try:
             if self.is_thread(thread_tweets):
-                logger.info(f"🧵 Processing thread with {len(thread_tweets)} tweets")
+                structured_logger.info_operation("process_single_thread_for_project", f"🧵 Processing thread with {len(thread_tweets)} tweets")
                 
                 # Create thread
                 thread_id = await self.twitter_api.create_thread(session, thread_tweets, account_id)
@@ -151,9 +151,9 @@ class ThreadManager:
                         tweet["status"] = "created_not_posted"
                 
                 if success:
-                    logger.info(f"   ✅ Thread with {len(thread_tweets)} tweets posted successfully")
+                    structured_logger.info_operation("process_single_thread_for_project", f"   ✅ Thread with {len(thread_tweets)} tweets posted successfully")
                 else:
-                    logger.warning(f"   ⚠️ Thread created but posting failed")
+                    structured_logger.warning_operation("process_single_thread_for_project", f"   ⚠️ Thread created but posting failed")
                 
                 return success
             else:
@@ -161,7 +161,7 @@ class ThreadManager:
                 return await self.process_single_tweet(session, thread_tweets[0], account_id)
                 
         except Exception as e:
-            logger.error(f"❌ Error processing thread: {e}")
+            structured_logger.error_operation("process_single_thread_for_project", f"❌ Error processing thread: {e}")
             for tweet in thread_tweets:
                 tweet["status"] = "failed"
                 tweet["error"] = str(e)

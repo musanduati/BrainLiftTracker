@@ -6,7 +6,7 @@ import re
 import json
 import aiohttp
 from typing import Optional, Dict, Any, List, Tuple
-from workflowy.config.logger import logger
+from workflowy.config.logger import structured_logger
 from workflowy.core.scraper.models import InitializationData
 from workflowy.core.llm_service import extract_node_id_using_llm
 
@@ -41,13 +41,13 @@ async def extract_share_id(session: aiohttp.ClientSession, url: str) -> Tuple[st
             data = json.loads(json_str)
             session_id = str(cookie.value)
             share_id = data.get("share_id")
-            logger.debug(f"Extracted session_id: {session_id[:20]}..., share_id: {share_id} from URL: {url}")
+            structured_logger.debug_operation("extract_share_id", f"Extracted session_id: {session_id[:20]}..., share_id: {share_id} from URL: {url}")
             return session_id, share_id
         else:
             raise Exception("No match found for PROJECT_TREE_DATA_URL_PARAMS.")
             
     except Exception as e:
-        logger.error(f"Error extracting session and share_id from URL {url}: {e}")
+        structured_logger.error_operation("extract_share_id", f"Error extracting session and share_id from URL {url}: {e}", error=e)
         raise
 
 
@@ -100,7 +100,7 @@ async def get_tree_data(
     if share_id:
         url += f"?share_id={share_id}"
     
-    logger.info(f"Getting tree data from {url}")
+    structured_logger.info_operation("get_tree_data", f"Getting tree data from {url}")
 
     response = await make_request(
         session, "GET", url, 
@@ -158,7 +158,7 @@ async def extract_top_level_nodes(item_data_list: List[Dict[str, str]]) -> List[
     # Import here to avoid circular dependency
     from workflowy.core.scraper.content_processing import _clean_html_content
     
-    logger.info("Extracting top-level nodes for LLM identification...")
+    structured_logger.info_operation("extract_top_level_nodes", "Extracting top-level nodes for LLM identification...")
     top_nodes = []
     
     # Find root or nodes without parent
@@ -172,9 +172,9 @@ async def extract_top_level_nodes(item_data_list: List[Dict[str, str]]) -> List[
                     'id': item['id']
                 }
                 top_nodes.append(node_info)
-                logger.debug(f"Found top-level node: {node_name} (ID: {item['id']})")
+                structured_logger.debug_operation("extract_top_level_nodes", f"Found top-level node: {node_name} (ID: {item['id']})")
     
-    logger.info(f"Found {len(top_nodes)} top-level nodes")
+    structured_logger.info_operation("extract_top_level_nodes", f"Found {len(top_nodes)} top-level nodes")
     return top_nodes
 
 
@@ -209,6 +209,6 @@ async def filter_nodes_llm(nodes: List[Dict], exclude_names: List[str]) -> List[
         if node_id:
             exclude_ids.add(node_id)
             collect_children(node_id)
-            logger.debug("Excluding node '%s' with ID: %s", exclude_name, node_id)
+            structured_logger.debug_operation("filter_nodes_llm", f"Excluding node '{exclude_name}' with ID: {node_id}")
 
     return [node for node in nodes if node["id"] not in exclude_ids]
