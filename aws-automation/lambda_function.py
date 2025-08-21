@@ -308,6 +308,15 @@ def send_cloudwatch_metrics(automation_result: Dict[str, Any]) -> None:
             }
         ])
         
+        # Additional metrics for single tweets (if available)
+        pending_op = automation_result.get('results', {}).get('pending_operation', {})
+        if 'single_tweets_processed' in pending_op:
+            metrics.append({
+                'MetricName': 'SingleTweetsProcessed',
+                'Value': pending_op.get('single_tweets_processed', 0),
+                'Unit': 'Count'
+            })
+        
         # Status-based metrics
         status = automation_result.get('status', 'unknown')
         metrics.append({
