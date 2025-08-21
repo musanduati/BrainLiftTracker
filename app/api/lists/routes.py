@@ -713,15 +713,38 @@ def sync_twitter_lists():
                     
                     # Sync memberships if requested
                     if include_memberships:
-                        # Get current members from Twitter
-                        members_response = requests.get(
-                            f'https://api.twitter.com/2/lists/{list_id}/members?max_results=100&user.fields=username',
-                            headers=headers
-                        )
+                        # Get current members from Twitter (with pagination)
+                        twitter_members = []
+                        pagination_token = None
                         
-                        if members_response.status_code == 200:
-                            twitter_members = members_response.json().get('data', [])
+                        while True:
+                            url = f'https://api.twitter.com/2/lists/{list_id}/members?max_results=100&user.fields=username'
+                            if pagination_token:
+                                url += f'&pagination_token={pagination_token}'
+                            
+                            members_response = requests.get(url, headers=headers)
+                            
+                            if members_response.status_code == 200:
+                                data = members_response.json()
+                                twitter_members.extend(data.get('data', []))
+                                
+                                # Check if there are more pages
+                                meta = data.get('meta', {})
+                                pagination_token = meta.get('next_token')
+                                if not pagination_token:
+                                    break
+                            else:
+                                break
+                        
+                        if twitter_members:
                             twitter_usernames = {member['username'].lower() for member in twitter_members}
+                            
+                            # Debug: Log Twitter member count for this list
+                            if list_id == '1953095562393211244':  # Academics list
+                                sync_results['errors'].append({
+                                    'debug': f'Academics list has {len(twitter_members)} members from Twitter API',
+                                    'first_few_members': [m['username'] for m in twitter_members[:5]]
+                                })
                             
                             # Get current local members
                             local_members = conn.execute('''
@@ -735,6 +758,8 @@ def sync_twitter_lists():
                             
                             # Find members to add (in Twitter but not local)
                             to_add = twitter_usernames - local_usernames
+                            missing_accounts = []
+                            
                             for username in to_add:
                                 # Find account by username
                                 account_to_add = conn.execute(
@@ -751,6 +776,17 @@ def sync_twitter_lists():
                                         sync_results['new_memberships'] += 1
                                     except:
                                         pass  # Ignore duplicates
+                                else:
+                                    missing_accounts.append(username)
+                            
+                            # Log missing accounts for debugging
+                            if missing_accounts:
+                                sync_results['errors'].append({
+                                    'list_id': list_id,
+                                    'list_name': name,
+                                    'missing_accounts': missing_accounts[:10],  # First 10 for brevity
+                                    'total_missing': len(missing_accounts)
+                                })
                             
                             # Find members to remove (in local but not Twitter)
                             to_remove = local_usernames - twitter_usernames
