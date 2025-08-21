@@ -26,8 +26,9 @@ def create_thread():
         if not account_id or not tweets:
             return jsonify({'error': 'account_id and tweets array are required'}), 400
         
-        if len(tweets) < 2:
-            return jsonify({'error': 'A thread must contain at least 2 tweets'}), 400
+        # Allow single tweets (threads with 1 tweet) - they'll be posted without thread_id
+        if len(tweets) < 1:
+            return jsonify({'error': 'At least 1 tweet is required'}), 400
         
         conn = get_db()
         
@@ -44,13 +45,17 @@ def create_thread():
         # Parse DOK metadata from first tweet
         dok_type, change_type = parse_dok_metadata(tweets[0]) if tweets else (None, None)
         
-        # Create all tweets in the thread as pending
+        # For single tweets, don't use thread_id (they're standalone tweets)
+        is_single_tweet = len(tweets) == 1
+        actual_thread_id = None if is_single_tweet else thread_id
+        
+        # Create all tweets as pending
         created_tweets = []
         for i, tweet_text in enumerate(tweets):
             cursor = conn.execute(
                 '''INSERT INTO tweet (twitter_account_id, content, thread_id, thread_position, status, dok_type, change_type) 
                    VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                (account_id, tweet_text, thread_id, i, 'pending', dok_type, change_type)
+                (account_id, tweet_text, actual_thread_id, i, 'pending', dok_type, change_type)
             )
             tweet_id = cursor.lastrowid
             created_tweets.append({
@@ -63,9 +68,10 @@ def create_thread():
         conn.close()
         
         result = {
-            'message': f'Thread created with {len(tweets)} tweets',
-            'thread_id': thread_id,
-            'tweets': created_tweets
+            'message': f'{"Single tweet created" if is_single_tweet else f"Thread created with {len(tweets)} tweets"}',
+            'thread_id': actual_thread_id,
+            'tweets': created_tweets,
+            'is_single_tweet': is_single_tweet
         }
         
         # Include DOK metadata in response if found
@@ -1044,11 +1050,19 @@ def run_thread_automation():
         conn = get_db()
         
         # Check system status first
-        total_pending = conn.execute(
+        total_pending_threads = conn.execute(
             '''SELECT COUNT(DISTINCT thread_id) as count 
                FROM tweet 
                WHERE thread_id IS NOT NULL AND status = 'pending' '''
         ).fetchone()['count']
+        
+        total_pending_singles = conn.execute(
+            '''SELECT COUNT(*) as count 
+               FROM tweet 
+               WHERE thread_id IS NULL AND status = 'pending' '''
+        ).fetchone()['count']
+        
+        total_pending = total_pending_threads + total_pending_singles
         
         total_failed_threads = conn.execute(
             '''SELECT COUNT(DISTINCT thread_id) as count 
@@ -1062,25 +1076,42 @@ def run_thread_automation():
         ).fetchone()['count']
         
         automation_report['system_status'] = {
-            'pending_threads_available': total_pending,
+            'pending_threads_available': total_pending_threads,
+            'pending_single_tweets_available': total_pending_singles,
+            'total_pending_available': total_pending,
             'failed_threads_available': total_failed_threads
         }
         
         conn.close()
         
-        # Operation 1: Post Pending Threads
+        # Operation 1: Post Pending Threads and Single Tweets
         if config['post_pending'] and total_pending > 0:
             if config['dry_run']:
                 automation_report['results']['pending_operation'] = {
                     'status': 'dry_run',
-                    'message': f'DRY RUN: Would post {min(total_pending, config["max_threads_per_run"])} pending threads'
+                    'message': f'DRY RUN: Would post {min(total_pending, config["max_threads_per_run"])} pending threads and single tweets'
                 }
             else:
-                # Call our existing post-all-pending endpoint internally
-                pending_result = post_all_pending_threads_internal(
+                # Post both threads and single tweets
+                threads_result = post_all_pending_threads_internal(
                     max_threads=config['max_threads_per_run'],
                     delay_between_threads=config['delay_between_threads']
                 )
+                singles_result = post_all_pending_single_tweets_internal(
+                    max_tweets=config['max_threads_per_run'],
+                    delay_between_tweets=config['delay_between_threads']
+                )
+                
+                # Combine results
+                pending_result = {
+                    'threads': threads_result,
+                    'single_tweets': singles_result,
+                    'posted': threads_result.get('posted', 0) + singles_result.get('posted', 0),
+                    'failed': threads_result.get('failed', 0) + singles_result.get('failed', 0),
+                    'threads_processed': threads_result.get('threads_processed', 0),
+                    'single_tweets_processed': singles_result.get('tweets_processed', 0)
+                }
+                
                 automation_report['results']['pending_operation'] = pending_result
                 
                 if pending_result.get('posted', 0) > 0:
@@ -1397,3 +1428,100 @@ def retry_all_failed_threads_internal(max_threads=10, delay_between_threads=5):
     
     except Exception as e:
         return {'error': str(e), 'retried': 0, 'still_failed': 0, 'threads_processed': 0}
+
+def post_all_pending_single_tweets_internal(max_tweets=10, delay_between_tweets=5):
+    """Internal function to post pending single tweets (used by automation)"""
+    try:
+        conn = get_db()
+        
+        # Get pending single tweets (thread_id IS NULL)
+        pending_singles_query = '''
+            SELECT t.id, t.twitter_account_id, t.content, t.created_at
+            FROM tweet t
+            JOIN twitter_account a ON t.twitter_account_id = a.id
+            WHERE t.thread_id IS NULL 
+            AND t.status = 'pending'
+            AND a.status != 'deleted'
+            ORDER BY t.created_at ASC
+            LIMIT ?
+        '''
+        pending_singles = conn.execute(pending_singles_query, (max_tweets,)).fetchall()
+        
+        if not pending_singles:
+            conn.close()
+            return {'message': 'No pending single tweets found', 'posted': 0, 'failed': 0, 'tweets_processed': 0}
+        
+        results = []
+        total_posted = 0
+        total_failed = 0
+        
+        for tweet in pending_singles:
+            tweet_id = tweet['id']
+            tweet_account_id = tweet['twitter_account_id']
+            
+            # Check rate limit
+            from app.utils.rate_limit import get_rate_limit_status
+            rate_status = get_rate_limit_status(tweet_account_id)
+            
+            if rate_status['tweets_posted'] + 1 > rate_status['limit']:
+                results.append({
+                    'tweet_id': tweet_id,
+                    'account_id': tweet_account_id,
+                    'status': 'skipped_rate_limit',
+                    'reason': f"Would exceed rate limit ({rate_status['tweets_posted']}/{rate_status['limit']})"
+                })
+                continue
+            
+            # Post the single tweet
+            success, result = post_to_twitter(tweet_account_id, tweet['content'])
+            
+            if success:
+                conn.execute(
+                    '''UPDATE tweet 
+                       SET status = ?, twitter_id = ?, posted_at = ?
+                       WHERE id = ?''',
+                    ('posted', result, datetime.now(UTC).isoformat(), tweet_id)
+                )
+                conn.commit()
+                results.append({
+                    'tweet_id': tweet_id,
+                    'account_id': tweet_account_id,
+                    'status': 'posted',
+                    'twitter_id': result
+                })
+                total_posted += 1
+            else:
+                conn.execute('UPDATE tweet SET status = ? WHERE id = ?', ('failed', tweet_id))
+                conn.commit()
+                results.append({
+                    'tweet_id': tweet_id,
+                    'account_id': tweet_account_id,
+                    'status': 'failed',
+                    'error': result
+                })
+                total_failed += 1
+            
+            # Add delay between tweets
+            if delay_between_tweets > 0 and tweet != pending_singles[-1]:
+                import time
+                time.sleep(delay_between_tweets)
+        
+        conn.close()
+        
+        return {
+            'message': f'Processed {len(pending_singles)} single tweets',
+            'posted': total_posted,
+            'failed': total_failed,
+            'tweets_processed': len(results),
+            'results': results
+        }
+    
+    except Exception as e:
+        return {
+            'error': str(e),
+            'message': 'Internal function failed',
+            'posted': 0,
+            'failed': 0,
+            'tweets_processed': 0,
+            'results': []
+        }
