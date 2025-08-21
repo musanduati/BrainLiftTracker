@@ -484,13 +484,15 @@ def post_all_pending_threads():
                 return jsonify({'error': 'Account not found'}), 404
                 
             pending_threads_query = '''
-                SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+                SELECT DISTINCT t.thread_id, t.twitter_account_id, MIN(t.created_at) as created_at,
                        COUNT(*) as tweet_count
-                FROM tweet 
-                WHERE thread_id IS NOT NULL 
-                AND status = 'pending' 
-                AND twitter_account_id = ?
-                GROUP BY thread_id, twitter_account_id
+                FROM tweet t
+                JOIN twitter_account a ON t.twitter_account_id = a.id
+                WHERE t.thread_id IS NOT NULL 
+                AND t.status = 'pending' 
+                AND t.twitter_account_id = ?
+                AND a.status != 'deleted'
+                GROUP BY t.thread_id, t.twitter_account_id
                 ORDER BY created_at ASC
                 LIMIT ?
             '''
@@ -498,12 +500,14 @@ def post_all_pending_threads():
         else:
             # Get pending threads for all accounts
             pending_threads_query = '''
-                SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+                SELECT DISTINCT t.thread_id, t.twitter_account_id, MIN(t.created_at) as created_at,
                        COUNT(*) as tweet_count
-                FROM tweet 
-                WHERE thread_id IS NOT NULL 
-                AND status = 'pending'
-                GROUP BY thread_id, twitter_account_id
+                FROM tweet t
+                JOIN twitter_account a ON t.twitter_account_id = a.id
+                WHERE t.thread_id IS NOT NULL 
+                AND t.status = 'pending'
+                AND a.status != 'deleted'
+                GROUP BY t.thread_id, t.twitter_account_id
                 ORDER BY created_at ASC
                 LIMIT ?
             '''
@@ -728,19 +732,21 @@ def retry_all_failed_threads():
             
             # Get failed threads for specific account
             failed_threads_query = '''
-                SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+                SELECT DISTINCT t.thread_id, t.twitter_account_id, MIN(t.created_at) as created_at,
                        COUNT(*) as total_tweets,
-                       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_tweets,
-                       SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_tweets
-                FROM tweet 
-                WHERE thread_id IS NOT NULL 
-                AND twitter_account_id = ?
-                AND thread_id IN (
+                       SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_tweets,
+                       SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_tweets
+                FROM tweet t
+                JOIN twitter_account a ON t.twitter_account_id = a.id
+                WHERE t.thread_id IS NOT NULL 
+                AND t.twitter_account_id = ?
+                AND a.status != 'deleted'
+                AND t.thread_id IN (
                     SELECT DISTINCT thread_id 
                     FROM tweet 
                     WHERE status = 'failed' AND thread_id IS NOT NULL
                 )
-                GROUP BY thread_id, twitter_account_id
+                GROUP BY t.thread_id, t.twitter_account_id
                 ORDER BY created_at ASC
                 LIMIT ?
             '''
@@ -748,18 +754,20 @@ def retry_all_failed_threads():
         else:
             # Get failed threads across all accounts
             failed_threads_query = '''
-                SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+                SELECT DISTINCT t.thread_id, t.twitter_account_id, MIN(t.created_at) as created_at,
                        COUNT(*) as total_tweets,
-                       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_tweets,
-                       SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_tweets
-                FROM tweet 
-                WHERE thread_id IS NOT NULL 
-                AND thread_id IN (
+                       SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_tweets,
+                       SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_tweets
+                FROM tweet t
+                JOIN twitter_account a ON t.twitter_account_id = a.id
+                WHERE t.thread_id IS NOT NULL 
+                AND a.status != 'deleted'
+                AND t.thread_id IN (
                     SELECT DISTINCT thread_id 
                     FROM tweet 
                     WHERE status = 'failed' AND thread_id IS NOT NULL
                 )
-                GROUP BY thread_id, twitter_account_id
+                GROUP BY t.thread_id, t.twitter_account_id
                 ORDER BY created_at ASC
                 LIMIT ?
             '''
@@ -1133,12 +1141,14 @@ def post_all_pending_threads_internal(max_threads=10, delay_between_threads=5):
         
         # Get pending threads
         pending_threads_query = '''
-            SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+            SELECT DISTINCT t.thread_id, t.twitter_account_id, MIN(t.created_at) as created_at,
                    COUNT(*) as tweet_count
-            FROM tweet 
-            WHERE thread_id IS NOT NULL 
-            AND status = 'pending'
-            GROUP BY thread_id, twitter_account_id
+            FROM tweet t
+            JOIN twitter_account a ON t.twitter_account_id = a.id
+            WHERE t.thread_id IS NOT NULL 
+            AND t.status = 'pending'
+            AND a.status != 'deleted'
+            GROUP BY t.thread_id, t.twitter_account_id
             ORDER BY created_at ASC
             LIMIT ?
         '''
@@ -1245,18 +1255,20 @@ def retry_all_failed_threads_internal(max_threads=10, delay_between_threads=5):
         
         # Get failed threads
         failed_threads_query = '''
-            SELECT DISTINCT thread_id, twitter_account_id, MIN(created_at) as created_at,
+            SELECT DISTINCT t.thread_id, t.twitter_account_id, MIN(t.created_at) as created_at,
                    COUNT(*) as total_tweets,
-                   SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_tweets,
-                   SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_tweets
-            FROM tweet 
-            WHERE thread_id IS NOT NULL 
-            AND thread_id IN (
+                   SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_tweets,
+                   SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_tweets
+            FROM tweet t
+            JOIN twitter_account a ON t.twitter_account_id = a.id
+            WHERE t.thread_id IS NOT NULL 
+            AND a.status != 'deleted'
+            AND t.thread_id IN (
                 SELECT DISTINCT thread_id 
                 FROM tweet 
                 WHERE status = 'failed' AND thread_id IS NOT NULL
             )
-            GROUP BY thread_id, twitter_account_id
+            GROUP BY t.thread_id, t.twitter_account_id
             ORDER BY created_at ASC
             LIMIT ?
         '''

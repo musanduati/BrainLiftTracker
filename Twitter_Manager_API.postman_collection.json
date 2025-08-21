@@ -3671,9 +3671,43 @@
 								"{{account_id}}"
 							]
 						},
-						"description": "Delete a specific account and all its associated tweets"
+						"description": "Permanently delete an account and all associated data. After migration, this will cascade delete all tweets, threads, and owned lists. Use soft-delete for safer option."
 					},
 					"response": [
+						{
+							"name": "Success - Account Deleted with Stats",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/123",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"123"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"message\": \"Account @testuser deleted successfully\",\n  \"account_id\": 123,\n  \"deleted_data\": {\n    \"tweets\": 45,\n    \"threads\": 8,\n    \"owned_lists\": 3,\n    \"list_memberships\": 12,\n    \"followers\": 156\n  }\n}"
+						},
 						{
 							"name": "Account Deleted",
 							"originalRequest": {
@@ -3707,6 +3741,115 @@
 							],
 							"cookie": [],
 							"body": "{\n    \"message\": \"Account @ZeroShotFlow deleted successfully\",\n    \"deleted_tweets\": 5\n}"
+						}
+					]
+				},
+				{
+					"name": "Soft Delete Account",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/soft-delete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"soft-delete"
+							]
+						},
+						"description": "Soft delete an account by marking it as deleted without removing data. Cancels pending/failed tweets and excludes from automation."
+					},
+					"response": [
+						{
+							"name": "Success - Account Soft Deleted",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/123/soft-delete",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"123",
+										"soft-delete"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"message\": \"Account @testuser soft-deleted successfully\",\n  \"account_id\": 123,\n  \"previous_status\": \"active\",\n  \"affected_data\": {\n    \"total_tweets\": 45,\n    \"total_threads\": 8,\n    \"cancelled_tweets\": 12\n  },\n  \"note\": \"Account data preserved but excluded from automation\"\n}"
+						},
+						{
+							"name": "Error - Account Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/999/soft-delete",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"999",
+										"soft-delete"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\"error\": \"Account not found\"}"
 						}
 					]
 				},
@@ -5550,8 +5693,13 @@
 						],
 						"url": {
 							"raw": "{{base_url}}/analytics/dok-summary",
-							"host": ["{{base_url}}"],
-							"path": ["analytics", "dok-summary"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"analytics",
+								"dok-summary"
+							]
 						},
 						"description": "Get overall DOK statistics across all accounts"
 					},
@@ -5570,8 +5718,14 @@
 						],
 						"url": {
 							"raw": "{{base_url}}/analytics/dok-summary/{{account_id}}?start_date={{start_date}}&end_date={{end_date}}",
-							"host": ["{{base_url}}"],
-							"path": ["analytics", "dok-summary", "{{account_id}}"],
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"analytics",
+								"dok-summary",
+								"{{account_id}}"
+							],
 							"query": [
 								{
 									"key": "start_date",
@@ -5579,7 +5733,7 @@
 									"description": "Optional start date filter (ISO format)"
 								},
 								{
-									"key": "end_date", 
+									"key": "end_date",
 									"value": "{{end_date}}",
 									"description": "Optional end date filter (ISO format)"
 								}
@@ -5602,8 +5756,14 @@
 						],
 						"url": {
 							"raw": "{{base_url}}/analytics/progress-bar/{{account_id}}",
-							"host": ["{{base_url}}"],
-							"path": ["analytics", "progress-bar", "{{account_id}}"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"analytics",
+								"progress-bar",
+								"{{account_id}}"
+							]
 						},
 						"description": "Get progress bar data optimized for frontend display with DOK3 vs DOK4 breakdown"
 					},
@@ -5622,8 +5782,14 @@
 						],
 						"url": {
 							"raw": "{{base_url}}/analytics/dok-timeline/{{account_id}}",
-							"host": ["{{base_url}}"],
-							"path": ["analytics", "dok-timeline", "{{account_id}}"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"analytics",
+								"dok-timeline",
+								"{{account_id}}"
+							]
 						},
 						"description": "Get DOK changes over time for timeline visualization"
 					},
@@ -5642,8 +5808,13 @@
 						],
 						"url": {
 							"raw": "{{base_url}}/analytics/dok-leaderboard",
-							"host": ["{{base_url}}"],
-							"path": ["analytics", "dok-leaderboard"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"analytics",
+								"dok-leaderboard"
+							]
 						},
 						"description": "Get leaderboard of accounts by DOK change activity"
 					},
@@ -5662,8 +5833,13 @@
 						],
 						"url": {
 							"raw": "{{base_url}}/analytics/dok-search?dok_type={{dok_type}}&change_type={{change_type}}&account_id={{account_id}}&limit={{limit}}",
-							"host": ["{{base_url}}"],
-							"path": ["analytics", "dok-search"],
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"analytics",
+								"dok-search"
+							],
 							"query": [
 								{
 									"key": "dok_type",
