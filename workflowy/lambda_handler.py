@@ -62,7 +62,7 @@ def lambda_handler(event, context):
         
         structured_logger.info_operation("lambda_handler", f"✅ Processing complete: {scraping_successful} successful, {scraping_failed} failed", 
                                        successful=scraping_successful, failed=scraping_failed)
-        structured_logger.info_operation("lambda_handler", f"✅ Posting complete: {posting_successful} successful, {posting_failed} failed",
+        structured_logger.info_operation("lambda_handler", f"✅ Tweet creation complete: {posting_successful} successful, {posting_failed} failed",
                                        successful=posting_successful, failed=posting_failed)
         
         return {
@@ -110,8 +110,8 @@ async def process_and_post_v2(environment: str = 'test'):
     LogContext.set_project_id(None)
     LogContext.set_project_name(None)
     
-    # Step 3: Post tweets for projects that had new content
-    structured_logger.info_operation("process_and_post_v2", "🐦 STEP 3: Posting tweets...")
+    # Step 3: Create Tweets/Threads for projects that had new content
+    structured_logger.info_operation("process_and_post_v2", "🐦 STEP 3: Creating Tweets/Threads...")
     posting_results = []
     
     # Get list of projects that had content processed
@@ -136,7 +136,7 @@ async def process_and_post_v2(environment: str = 'test'):
         for project_id in projects_with_content:
             try:
                 LogContext.set_project_id(project_id)
-                structured_logger.info_operation("process_and_post_v2", f"🔄 POSTING tweets for project {project_id}...", project_id=project_id)
+                structured_logger.info_operation("process_and_post_v2", f"🔄 Creating tweets/threads for project {project_id}...", project_id=project_id)
 
                 # Use the project-based posting method
                 project_results = await process_single_project_posting_v2(poster, project_id)
@@ -232,11 +232,11 @@ async def process_single_project_posting_v2(poster: TweetPosterV2, project_id: s
                 success = await poster.process_single_thread_for_project(session, thread_tweets, account_id)
                 if success:
                     posted_count += len(thread_tweets)
-                    structured_logger.info_operation("process_single_project_posting_v2", f"✅ Posted thread with {len(thread_tweets)} tweets",
+                    structured_logger.info_operation("process_single_project_posting_v2", f"✅ Created thread with {len(thread_tweets)} tweets",
                                                    project_id=project_id, tweet_count=len(thread_tweets))
                 else:
                     failed_count += len(thread_tweets)
-                    structured_logger.error_operation("process_single_project_posting_v2", Exception("Failed to post thread"), f"❌ Failed to post thread with {len(thread_tweets)} tweets",
+                    structured_logger.error_operation("process_single_project_posting_v2", Exception("Failed to create thread"), f"❌ Failed to create thread with {len(thread_tweets)} tweets",
                                                     project_id=project_id, tweet_count=len(thread_tweets))
                 
                 # Delay between threads
@@ -245,7 +245,7 @@ async def process_single_project_posting_v2(poster: TweetPosterV2, project_id: s
                     
             except Exception as e:
                 failed_count += len(thread_tweets)
-                structured_logger.error_operation("process_single_project_posting_v2", e, "❌ Error posting thread",
+                structured_logger.error_operation("process_single_project_posting_v2", e, "❌ Error creating thread",
                                                 project_id=project_id, tweet_count=len(thread_tweets))
         
         # Save updated tweets back to S3
