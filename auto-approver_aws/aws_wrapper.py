@@ -73,10 +73,11 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
             ]
             print("🧪 RUNNING IN TEST MODE - Processing 1 test account")
         else:
-            # Production mode: use both production files
+            # Production mode: Use all Production files
             csv_files = [
-                '/app/auto-approver/academics_accounts.csv',
-                '/app/auto-approver/superbuilders_accounts.csv'
+                '/app/auto-approver/accounts_academics.csv',
+                '/app/auto-approver/accounts_superbuilders.csv',
+                '/app/auto-approver/accounts_finops.csv'
             ]
             print("🚀 RUNNING IN PRODUCTION MODE - Processing all accounts")
         
