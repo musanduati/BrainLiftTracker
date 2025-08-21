@@ -1,0 +1,12 @@
+username,password,email,max_approvals,delay_seconds
+brainlift_opera,Kl41rM0n1t0r!,brainlift.monitor+operate.freedom@trilogy.com,50,3
+brainlift_setup,Kl41rM0n1t0r!,brainlift.monitor+setup.maintenance@trilogy.com,50,3
+brainlift_deliv,Kl41rM0n1t0r!,brainlift.monitor+delivery.newschool@trilogy.com,50,3
+brainlift_susta,Kl41rM0n1t0r!,brainlift.monitor+sustain.schools@trilogy.com,50,3
+brainlift_eleva,Kl41rM0n1t0r!,brainlift.monitor+elevate.schools@trilogy.com,50,3
+brainlift_stand,Kl41rM0n1t0r!,brainlift.monitor+standards.global@trilogy.com,50,3
+brainlift_plops,Kl41rM0n1t0r!,brainlift.monitor+platform.ops@trilogy.com,50,3
+brainlift_edfpa,Kl41rM0n1t0r!,brainlift.monitor+edu.fpa@trilogy.com,50,3
+brainlift_pmtam,Kl41rM0n1t0r!,brainlift.monitor+pmo.tech.mkting@trilogy.com,50,3
+brainlift_swfin,Kl41rM0n1t0r!,brainlift.monitor+sw.fin@trilogy.com,50,3
+brainlift_edmkt,Kl41rM0n1t0r!,brainlift.monitor+edu.mkting@trilogy.com,50,3

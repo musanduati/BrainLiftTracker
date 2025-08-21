@@ -60,6 +60,10 @@ def get_accounts():
     
     accounts = conn.execute(query, params).fetchall()
     
+    # Filter out test accounts
+    test_account_names = ['BrainLift WF-X Integration', 'klair_three']
+    accounts = [acc for acc in accounts if acc['username'] not in test_account_names]
+    
     result = []
     for account in accounts:
         # Check token health
@@ -300,9 +304,9 @@ def delete_account(account_id):
     conn = get_db()
     
     try:
-        # Check if account exists
+        # Check if account exists and get detailed info
         account = conn.execute(
-            'SELECT username FROM twitter_account WHERE id = ?',
+            'SELECT username, status FROM twitter_account WHERE id = ?',
             (account_id,)
         ).fetchone()
         
@@ -310,14 +314,113 @@ def delete_account(account_id):
             conn.close()
             return jsonify({'error': 'Account not found'}), 404
         
-        # Delete account (cascade will handle related records)
-        conn.execute('DELETE FROM twitter_account WHERE id = ?', (account_id,))
+        # Get statistics before deletion for response
+        stats = conn.execute('''
+            SELECT 
+                (SELECT COUNT(*) FROM tweet WHERE twitter_account_id = ?) as total_tweets,
+                (SELECT COUNT(DISTINCT thread_id) FROM tweet WHERE twitter_account_id = ? AND thread_id IS NOT NULL) as total_threads,
+                (SELECT COUNT(*) FROM twitter_list WHERE owner_account_id = ?) as owned_lists,
+                (SELECT COUNT(*) FROM list_membership WHERE account_id = ?) as list_memberships,
+                (SELECT COUNT(*) FROM follower WHERE account_id = ?) as followers
+        ''', (account_id, account_id, account_id, account_id, account_id)).fetchone()
+        
+        # Start transaction for consistent deletion
+        conn.execute('BEGIN TRANSACTION')
+        
+        try:
+            # Delete account (CASCADE constraints will handle related data automatically)
+            # After migration, this will delete:
+            # - All tweets (including threads)
+            # - All owned lists
+            # - List memberships (already has CASCADE)
+            # - Followers (already has CASCADE)
+            result = conn.execute('DELETE FROM twitter_account WHERE id = ?', (account_id,))
+            
+            if result.rowcount == 0:
+                conn.rollback()
+                conn.close()
+                return jsonify({'error': 'Account could not be deleted'}), 500
+                
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'message': f'Account @{account["username"]} deleted successfully',
+                'account_id': account_id,
+                'deleted_data': {
+                    'tweets': stats['total_tweets'],
+                    'threads': stats['total_threads'], 
+                    'owned_lists': stats['owned_lists'],
+                    'list_memberships': stats['list_memberships'],
+                    'followers': stats['followers']
+                }
+            })
+            
+        except Exception as e:
+            conn.rollback()
+            raise e
+        
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+@accounts_bp.route('/api/v1/accounts/<int:account_id>/soft-delete', methods=['POST'])
+@require_api_key
+def soft_delete_account(account_id):
+    """Soft delete a Twitter account by marking it as deleted"""
+    conn = get_db()
+    
+    try:
+        # Check if account exists
+        account = conn.execute(
+            'SELECT username, status FROM twitter_account WHERE id = ?',
+            (account_id,)
+        ).fetchone()
+        
+        if not account:
+            conn.close()
+            return jsonify({'error': 'Account not found'}), 404
+            
+        if account['status'] == 'deleted':
+            conn.close()
+            return jsonify({'error': 'Account is already deleted'}), 400
+        
+        # Get statistics before soft deletion
+        stats = conn.execute('''
+            SELECT 
+                (SELECT COUNT(*) FROM tweet WHERE twitter_account_id = ?) as total_tweets,
+                (SELECT COUNT(DISTINCT thread_id) FROM tweet WHERE twitter_account_id = ? AND thread_id IS NOT NULL) as total_threads,
+                (SELECT COUNT(*) FROM tweet WHERE twitter_account_id = ? AND status = 'pending') as pending_tweets,
+                (SELECT COUNT(*) FROM tweet WHERE twitter_account_id = ? AND status = 'failed') as failed_tweets
+        ''', (account_id, account_id, account_id, account_id)).fetchone()
+        
+        # Mark account as deleted
+        conn.execute(
+            'UPDATE twitter_account SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            ('deleted', account_id)
+        )
+        
+        # Optional: Mark all pending/failed tweets as cancelled
+        cancelled_tweets = conn.execute(
+            '''UPDATE tweet 
+               SET status = 'cancelled' 
+               WHERE twitter_account_id = ? AND status IN ('pending', 'failed')''',
+            (account_id,)
+        ).rowcount
+        
         conn.commit()
         conn.close()
         
         return jsonify({
-            'message': f'Account @{account["username"]} deleted successfully',
-            'account_id': account_id
+            'message': f'Account @{account["username"]} soft-deleted successfully',
+            'account_id': account_id,
+            'previous_status': account['status'],
+            'affected_data': {
+                'total_tweets': stats['total_tweets'],
+                'total_threads': stats['total_threads'],
+                'cancelled_tweets': cancelled_tweets
+            },
+            'note': 'Account data preserved but excluded from automation'
         })
         
     except Exception as e:
@@ -1061,6 +1164,10 @@ def get_accounts_by_lists():
         ORDER BY tl.name
     ''').fetchall()
     
+    # Filter out test lists
+    test_list_names = ['Test List SB']
+    lists_with_members = [lst for lst in lists_with_members if lst['name'] not in test_list_names]
+    
     # Build lists with their members
     lists = []
     for list_row in lists_with_members:
@@ -1082,6 +1189,10 @@ def get_accounts_by_lists():
             WHERE lm.list_id = ?
             GROUP BY ta.id, ta.username, ta.display_name, ta.profile_picture, ta.account_type, ta.created_at
         ''', (list_row['id'],)).fetchall()
+        
+        # Filter out test accounts
+        test_account_names = ['BrainLift WF-X Integration', 'klair_three']
+        members = [member for member in members if member['username'] not in test_account_names]
         
         # Format members
         formatted_members = []
@@ -1131,6 +1242,10 @@ def get_accounts_by_lists():
         )
         GROUP BY ta.id, ta.username, ta.display_name, ta.profile_picture, ta.account_type, ta.created_at
     ''').fetchall()
+    
+    # Filter out test accounts from unassigned
+    test_account_names = ['BrainLift WF-X Integration', 'klair_three']  
+    unassigned_accounts = [acc for acc in unassigned_accounts if acc['username'] not in test_account_names]
     
     # Format unassigned accounts with camelCase
     formatted_unassigned = []

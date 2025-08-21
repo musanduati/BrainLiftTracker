@@ -225,9 +225,12 @@ export const Accounts: React.FC = () => {
       setLists(listsData);
       setAccountsByList(accountsByListData);
       
-      // Filter accounts to show those with either tweets or threads
+      // Filter accounts to show those with either tweets or threads AND are not deleted
       const accountsWithContent = accountsData
         .filter(account => {
+          // Filter out deleted accounts
+          if (!account.authorized) return false;
+          
           const hasTweets = tweetsData.some((tweet: any) => tweet.username === account.username);
           const hasThreads = threadsData.some((thread: any) => thread.account_username === account.username);
           return hasTweets || hasThreads;

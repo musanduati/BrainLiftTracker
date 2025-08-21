@@ -135,6 +135,10 @@ def get_lists():
         
         lists = cursor.fetchall()
         
+        # Filter out test lists
+        test_list_names = ['Test List SB']
+        lists = [lst for lst in lists if lst['name'] not in test_list_names]
+        
         # Get member counts
         result = []
         for lst in lists:
@@ -628,8 +632,186 @@ def sync_twitter_lists():
             'errors': []
         }
         
-        # For now, just return a simple success response
-        # Full Twitter API sync implementation would go here
+        # Sync lists for each account
+        for account_id in account_ids:
+            try:
+                # Get account details
+                account = conn.execute(
+                    'SELECT id, username, access_token FROM twitter_account WHERE id = ? AND account_type = "list_owner"',
+                    (account_id,)
+                ).fetchone()
+                
+                if not account or not account['access_token']:
+                    sync_results['errors'].append({
+                        'account_id': account_id,
+                        'error': 'Account not found or no access token'
+                    })
+                    continue
+                
+                # Decrypt access token
+                access_token = decrypt_token(account['access_token'])
+                headers = {'Authorization': f'Bearer {access_token}'}
+                
+                # Get Twitter user ID
+                user_response = requests.get(
+                    f'https://api.twitter.com/2/users/by/username/{account["username"]}',
+                    headers=headers
+                )
+                
+                if user_response.status_code != 200:
+                    sync_results['errors'].append({
+                        'account_id': account_id,
+                        'error': 'Failed to get Twitter user ID'
+                    })
+                    continue
+                
+                twitter_user_id = user_response.json()['data']['id']
+                
+                # Get lists owned by this account
+                lists_response = requests.get(
+                    f'https://api.twitter.com/2/users/{twitter_user_id}/owned_lists?max_results=100',
+                    headers=headers
+                )
+                
+                if lists_response.status_code != 200:
+                    sync_results['errors'].append({
+                        'account_id': account_id,
+                        'error': f'Failed to fetch lists: {lists_response.status_code}'
+                    })
+                    continue
+                
+                twitter_lists = lists_response.json().get('data', [])
+                sync_results['synced_lists'] += len(twitter_lists)
+                
+                # Sync each list
+                for twitter_list in twitter_lists:
+                    list_id = twitter_list['id']
+                    name = twitter_list['name']
+                    description = twitter_list.get('description', '')
+                    is_private = twitter_list.get('private', False)
+                    mode = 'private' if is_private else 'public'
+                    
+                    # Check if list exists locally
+                    existing_list = conn.execute(
+                        'SELECT id FROM twitter_list WHERE list_id = ?',
+                        (list_id,)
+                    ).fetchone()
+                    
+                    if existing_list:
+                        # Update existing list
+                        conn.execute('''
+                            UPDATE twitter_list 
+                            SET name = ?, description = ?, mode = ?, last_synced_at = CURRENT_TIMESTAMP
+                            WHERE list_id = ?
+                        ''', (name, description, mode, list_id))
+                        local_list_id = existing_list['id']
+                        sync_results['updated_lists'] += 1
+                    else:
+                        # Create new list
+                        cursor = conn.execute('''
+                            INSERT INTO twitter_list (list_id, name, description, mode, owner_account_id, source, is_managed, last_synced_at)
+                            VALUES (?, ?, ?, ?, ?, 'synced', 1, CURRENT_TIMESTAMP)
+                        ''', (list_id, name, description, mode, account_id))
+                        local_list_id = cursor.lastrowid
+                        sync_results['new_lists'] += 1
+                    
+                    # Sync memberships if requested
+                    if include_memberships:
+                        # Get current members from Twitter (with pagination)
+                        twitter_members = []
+                        pagination_token = None
+                        
+                        while True:
+                            url = f'https://api.twitter.com/2/lists/{list_id}/members?max_results=100&user.fields=username'
+                            if pagination_token:
+                                url += f'&pagination_token={pagination_token}'
+                            
+                            members_response = requests.get(url, headers=headers)
+                            
+                            if members_response.status_code == 200:
+                                data = members_response.json()
+                                twitter_members.extend(data.get('data', []))
+                                
+                                # Check if there are more pages
+                                meta = data.get('meta', {})
+                                pagination_token = meta.get('next_token')
+                                if not pagination_token:
+                                    break
+                            else:
+                                break
+                        
+                        if twitter_members:
+                            twitter_usernames = {member['username'].lower() for member in twitter_members}
+                            
+                            # Debug: Log Twitter member count for this list
+                            if list_id == '1953095562393211244':  # Academics list
+                                sync_results['errors'].append({
+                                    'debug': f'Academics list has {len(twitter_members)} members from Twitter API',
+                                    'first_few_members': [m['username'] for m in twitter_members[:5]]
+                                })
+                            
+                            # Get current local members
+                            local_members = conn.execute('''
+                                SELECT a.username, lm.account_id
+                                FROM list_membership lm
+                                JOIN twitter_account a ON lm.account_id = a.id
+                                WHERE lm.list_id = ?
+                            ''', (local_list_id,)).fetchall()
+                            
+                            local_usernames = {member['username'].lower() for member in local_members}
+                            
+                            # Find members to add (in Twitter but not local)
+                            to_add = twitter_usernames - local_usernames
+                            missing_accounts = []
+                            
+                            for username in to_add:
+                                # Find account by username
+                                account_to_add = conn.execute(
+                                    'SELECT id FROM twitter_account WHERE LOWER(username) = ?',
+                                    (username,)
+                                ).fetchone()
+                                
+                                if account_to_add:
+                                    try:
+                                        conn.execute(
+                                            'INSERT OR IGNORE INTO list_membership (list_id, account_id) VALUES (?, ?)',
+                                            (local_list_id, account_to_add['id'])
+                                        )
+                                        sync_results['new_memberships'] += 1
+                                    except:
+                                        pass  # Ignore duplicates
+                                else:
+                                    missing_accounts.append(username)
+                            
+                            # Log missing accounts for debugging
+                            if missing_accounts:
+                                sync_results['errors'].append({
+                                    'list_id': list_id,
+                                    'list_name': name,
+                                    'missing_accounts': missing_accounts[:10],  # First 10 for brevity
+                                    'total_missing': len(missing_accounts)
+                                })
+                            
+                            # Find members to remove (in local but not Twitter)
+                            to_remove = local_usernames - twitter_usernames
+                            for username in to_remove:
+                                account_to_remove = next((m for m in local_members if m['username'].lower() == username), None)
+                                if account_to_remove:
+                                    conn.execute(
+                                        'DELETE FROM list_membership WHERE list_id = ? AND account_id = ?',
+                                        (local_list_id, account_to_remove['account_id'])
+                                    )
+                                    sync_results['removed_memberships'] += 1
+                            
+                            sync_results['total_memberships'] += len(twitter_members)
+                        
+            except Exception as e:
+                sync_results['errors'].append({
+                    'account_id': account_id,
+                    'error': str(e)
+                })
+        
+        conn.commit()
         conn.close()
         
         return jsonify({
@@ -641,14 +823,6 @@ def sync_twitter_lists():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@lists_bp.route('/api/v1/lists/sync/test', methods=['GET'])
-@require_api_key
-def test_sync_logic():
-    """Test list sync logic"""
-    return jsonify({
-        'message': 'List sync test endpoint',
-        'status': 'ready'
-    })
 
 @lists_bp.route('/api/v1/lists/move-members', methods=['POST'])
 @require_api_key

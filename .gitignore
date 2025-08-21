@@ -134,9 +134,18 @@ kill_*.ps1
 *_backup*
 *.old
 batch_report_*.json
+latest-report.json
+*.backup_*
 
 # Deployment and migration scripts
 verify_migration.py
+test_account_deletion_fixes.py
+migrate_account_deletion_fix.py
+update_postman_collection.py
+
+# Analysis and documentation files (generated)
+PRODUCTION_IMPACT_ANALYSIS.md
+PRODUCTION_DEPLOYMENT_GUIDE.md
 
 # Markdown files
 markdowns/
@@ -145,6 +154,10 @@ markdowns/
 .claude/
 
 package/
+
+# AWS automation documentation and testing
+aws-automation/README.md
+aws-automation/test_lambda.py
 
 CLAUDE.md
 ecs-task-definition-workflowy-production.json

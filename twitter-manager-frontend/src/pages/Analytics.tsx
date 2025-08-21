@@ -52,9 +52,22 @@ export const Analytics: React.FC = () => {
   ];
 
   useEffect(() => {
-    loadAnalyticsData();
-    loadDOKAnalytics();
+    loadData();
   }, [dateRange]);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      // Load analytics data first
+      await loadAnalyticsData();
+      // Then load DOK data and merge it
+      await loadDOKAnalytics();
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadDOKAnalytics = async () => {
     try {
@@ -163,9 +176,27 @@ export const Analytics: React.FC = () => {
     const dok4PerDay = Math.floor(dok4Total / days);
     const totalPerDay = Math.floor(totalChanges / days);
     
-    return dateInterval.map((date) => {
-      // Add some variation to make the chart more realistic
-      const variation = 0.8 + (Math.random() * 0.4); // 0.8 to 1.2 multiplier
+    return dateInterval.map((date, index) => {
+      // Create realistic variation based on day of week and index (no random values)
+      // Weekdays typically have more activity than weekends
+      const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const isMonday = dayOfWeek === 1; // Mondays often have catch-up activity
+      
+      // Create deterministic variation based on patterns
+      let variation = 1.0;
+      if (isWeekend) {
+        variation = 0.6; // Lower weekend activity
+      } else if (isMonday) {
+        variation = 1.3; // Higher Monday activity
+      } else {
+        // Vary by position in week cycle (Tuesday-Friday)
+        variation = 0.9 + (dayOfWeek * 0.05); // 0.9 to 1.15
+      }
+      
+      // Add slight trend variation across time period (recent days slightly higher)
+      const trendMultiplier = 1.0 + (index / dateInterval.length) * 0.2; // 0.0 to 0.2 increase
+      variation *= trendMultiplier;
       
       return {
         date: format(date, 'MMM dd'),
@@ -185,8 +216,6 @@ export const Analytics: React.FC = () => {
 
   const loadAnalyticsData = async () => {
     try {
-      setLoading(true);
-      
       const days = dateRangeOptions.find(opt => opt.label === dateRange)?.value || 7;
       
       const [accounts, lists, tweets, threads] = await Promise.all([
@@ -215,8 +244,7 @@ export const Analytics: React.FC = () => {
     } catch (error) {
       toast.error('Failed to load analytics data');
       console.error('Analytics error:', error);
-    } finally {
-      setLoading(false);
+      throw error;
     }
   };
 
@@ -241,7 +269,7 @@ export const Analytics: React.FC = () => {
         tweets: dayTweets.length,
         threads: dayThreads.length,
         posted: dayTweets.filter(t => t.status === 'posted').length,
-        // DOK fields will be merged later from DOK analytics data
+        // DOK fields initialized to 0 - will be updated when DOK data loads
         dok3_changes: 0,
         dok4_changes: 0,
         total_dok_changes: 0
@@ -288,6 +316,32 @@ export const Analytics: React.FC = () => {
       ? ((thisWeekPosted - lastWeekPosted) / lastWeekPosted) * 100
       : 0;
 
+    // Calculate pending tweets change (this week vs last week)
+    const thisWeekPending = tweets.filter(t => 
+      t.status === 'pending' && t.created_at && parseISO(t.created_at) >= subDays(new Date(), 7)
+    ).length;
+    const lastWeekPending = tweets.filter(t => 
+      t.status === 'pending' && t.created_at && 
+      parseISO(t.created_at) >= subDays(new Date(), 14) &&
+      parseISO(t.created_at) < subDays(new Date(), 7)
+    ).length;
+    const pendingChange = lastWeekPending > 0 
+      ? ((thisWeekPending - lastWeekPending) / lastWeekPending) * 100
+      : 0;
+
+    // Calculate failed tweets change (this week vs last week)
+    const thisWeekFailed = tweets.filter(t => 
+      t.status === 'failed' && t.created_at && parseISO(t.created_at) >= subDays(new Date(), 7)
+    ).length;
+    const lastWeekFailed = tweets.filter(t => 
+      t.status === 'failed' && t.created_at && 
+      parseISO(t.created_at) >= subDays(new Date(), 14) &&
+      parseISO(t.created_at) < subDays(new Date(), 7)
+    ).length;
+    const failedChange = lastWeekFailed > 0 
+      ? ((thisWeekFailed - lastWeekFailed) / lastWeekFailed) * 100
+      : 0;
+
     const performanceMetrics = {
       totalActivity,
       successRate: totalTweets > 0 ? Math.round((postedTweets / totalTweets) * 100) : 0,
@@ -296,22 +350,45 @@ export const Analytics: React.FC = () => {
       postedCount: postedTweets,
       postedChange: Math.round(postedChange),
       pendingCount: pendingTweets,
-      pendingChange: Math.round(Math.random() * 20 - 10), // Placeholder
+      pendingChange: Math.round(pendingChange),
       failedCount: failedTweets,
-      failedChange: Math.round(Math.random() * 20 - 10), // Placeholder
+      failedChange: Math.round(failedChange),
       totalLists: listsData.lists ? listsData.lists.length : 0,
       avgPerDay: Math.round(totalActivity / days)
     };
+
+    // Calculate tweet and thread weekly changes
+    const thisWeekTweets = tweets.filter(t => 
+      t.created_at && parseISO(t.created_at) >= subDays(new Date(), 7)
+    ).length;
+    const lastWeekTweets = tweets.filter(t => 
+      t.created_at && parseISO(t.created_at) >= subDays(new Date(), 14) &&
+      parseISO(t.created_at) < subDays(new Date(), 7)
+    ).length;
+    const tweetsChange = lastWeekTweets > 0 
+      ? ((thisWeekTweets - lastWeekTweets) / lastWeekTweets) * 100
+      : 0;
+
+    const thisWeekThreads = threads.filter(t => 
+      t.created_at && parseISO(t.created_at) >= subDays(new Date(), 7)
+    ).length;
+    const lastWeekThreads = threads.filter(t => 
+      t.created_at && parseISO(t.created_at) >= subDays(new Date(), 14) &&
+      parseISO(t.created_at) < subDays(new Date(), 7)
+    ).length;
+    const threadsChange = lastWeekThreads > 0 
+      ? ((thisWeekThreads - lastWeekThreads) / lastWeekThreads) * 100
+      : 0;
 
     const weeklyComparison = {
       activity: { current: thisWeekActivity, change: Math.round(weeklyChange) },
       tweets: { 
         current: totalTweets,  // Show total tweets, not just this week
-        change: 15 // Placeholder
+        change: Math.round(tweetsChange)
       },
       threads: {
         current: totalThreads,  // Show total threads, not just this week
-        change: -5 // Placeholder
+        change: Math.round(threadsChange)
       }
     };
 

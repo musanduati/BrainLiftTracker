@@ -167,6 +167,8 @@ export const ListActivityRankings: React.FC = () => {
                 const percentage = totalActivity > 0 
                   ? Math.round((list.totalActivity / totalActivity) * 100) 
                   : 0;
+                // Ensure minimum 3% width for visual consistency, even for 0% activity
+                const displayWidth = Math.max(percentage, list.totalActivity === 0 ? 3 : percentage);
                 const barGradient = getBarGradient(list.id);
                 const barShadow = getBarShadow(list.id);
                 
@@ -187,9 +189,16 @@ export const ListActivityRankings: React.FC = () => {
                           ({list.activeMembers}/{list.memberCount} active)
                         </span>
                       </div>
-                      <span className="text-sm font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                        {percentage}%
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                          {percentage}%
+                        </span>
+                        {list.totalActivity === 0 && (
+                          <span className="text-xs text-muted-foreground/60 italic">
+                            inactive
+                          </span>
+                        )}
+                      </div>
                     </div>
                     
                     {/* Enhanced Progress Bar */}
@@ -198,9 +207,10 @@ export const ListActivityRankings: React.FC = () => {
                       <div
                         className="absolute top-0 left-0 h-full rounded-full transition-all duration-700 ease-out"
                         style={{
-                          width: `${percentage}%`,
+                          width: `${displayWidth}%`,
                           background: barGradient,
                           boxShadow: `0 2px 10px ${barShadow}, inset 0 1px 0 rgba(255,255,255,0.3)`,
+                          opacity: list.totalActivity === 0 ? 0.6 : 1, // Slightly transparent for 0% lists
                         }}
                       >
                         {/* Shimmer effect */}
