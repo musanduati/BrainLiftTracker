@@ -204,17 +204,19 @@ def get_threads():
         # Get unique threads with their tweet count
         threads = conn.execute('''
             SELECT 
-                thread_id,
-                twitter_account_id,
+                t.thread_id,
+                t.twitter_account_id,
                 COUNT(*) as tweet_count,
-                MIN(created_at) as created_at,
-                SUM(CASE WHEN status = 'posted' THEN 1 ELSE 0 END) as posted_count,
-                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count
-            FROM tweet
-            WHERE thread_id IS NOT NULL
-            GROUP BY thread_id, twitter_account_id
-            ORDER BY created_at DESC
+                MIN(t.created_at) as created_at,
+                SUM(CASE WHEN t.status = 'posted' THEN 1 ELSE 0 END) as posted_count,
+                SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+                SUM(CASE WHEN t.status = 'failed' THEN 1 ELSE 0 END) as failed_count
+            FROM tweet t
+            JOIN twitter_account a ON t.twitter_account_id = a.id
+            WHERE t.thread_id IS NOT NULL
+            AND a.username NOT IN ('BrainLift WF-X Integration', 'klair_three')
+            GROUP BY t.thread_id, t.twitter_account_id
+            ORDER BY t.created_at DESC
         ''').fetchall()
         
         result = []

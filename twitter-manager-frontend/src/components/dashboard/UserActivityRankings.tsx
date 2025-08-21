@@ -167,6 +167,11 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
           };
         })
         .filter((user: any) => {
+          // Filter out test accounts
+          const testAccountNames = ['BrainLift WF-X Integration', 'klair_three'];
+          if (testAccountNames.includes(user.username)) {
+            return false;
+          }
           // Only include brainlifts with posts AND that have authorized accounts
           return user.totalActivity > 0 && user.account && user.account.authorized;
         })

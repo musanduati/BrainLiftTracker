@@ -60,6 +60,10 @@ def get_accounts():
     
     accounts = conn.execute(query, params).fetchall()
     
+    # Filter out test accounts
+    test_account_names = ['BrainLift WF-X Integration', 'klair_three']
+    accounts = [acc for acc in accounts if acc['username'] not in test_account_names]
+    
     result = []
     for account in accounts:
         # Check token health
@@ -1160,6 +1164,10 @@ def get_accounts_by_lists():
         ORDER BY tl.name
     ''').fetchall()
     
+    # Filter out test lists
+    test_list_names = ['Test List SB']
+    lists_with_members = [lst for lst in lists_with_members if lst['name'] not in test_list_names]
+    
     # Build lists with their members
     lists = []
     for list_row in lists_with_members:
@@ -1181,6 +1189,10 @@ def get_accounts_by_lists():
             WHERE lm.list_id = ?
             GROUP BY ta.id, ta.username, ta.display_name, ta.profile_picture, ta.account_type, ta.created_at
         ''', (list_row['id'],)).fetchall()
+        
+        # Filter out test accounts
+        test_account_names = ['BrainLift WF-X Integration', 'klair_three']
+        members = [member for member in members if member['username'] not in test_account_names]
         
         # Format members
         formatted_members = []
@@ -1230,6 +1242,10 @@ def get_accounts_by_lists():
         )
         GROUP BY ta.id, ta.username, ta.display_name, ta.profile_picture, ta.account_type, ta.created_at
     ''').fetchall()
+    
+    # Filter out test accounts from unassigned
+    test_account_names = ['BrainLift WF-X Integration', 'klair_three']  
+    unassigned_accounts = [acc for acc in unassigned_accounts if acc['username'] not in test_account_names]
     
     # Format unassigned accounts with camelCase
     formatted_unassigned = []

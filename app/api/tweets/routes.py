@@ -75,6 +75,7 @@ def get_tweets():
         FROM tweet t
         JOIN twitter_account a ON t.twitter_account_id = a.id
         WHERE 1=1
+        AND a.username NOT IN ('BrainLift WF-X Integration', 'klair_three')
     '''
     params = []
     
