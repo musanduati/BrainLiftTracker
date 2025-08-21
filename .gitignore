@@ -158,3 +158,7 @@ package/
 # AWS automation documentation and testing
 aws-automation/README.md
 aws-automation/test_lambda.py
+
+CLAUDE.md
+ecs-task-definition-workflowy-production.json
+ecs-task-definition-workflowy-test.json

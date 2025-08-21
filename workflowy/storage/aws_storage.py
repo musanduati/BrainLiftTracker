@@ -7,7 +7,7 @@ import os
 from dotenv import load_dotenv
 from workflowy.config.logger import structured_logger
 from workflowy.storage.project_utils import normalize_project_id
-from workflowy.storage.schemas import validate_project_item, validate_state_item, get_table_names
+from workflowy.storage.schemas import validate_project_item, validate_state_item
 
 load_dotenv()
 
@@ -25,32 +25,13 @@ class AWSStorageV2:
         # Get from environment variables
         self.bucket_name = os.environ.get('WORKFLOWY_BUCKET', 'workflowy-content-test')
         
-        # Get table names for current environment
-        table_names = get_table_names(environment)
-        
         # New project-based tables
-        self.urls_config_table_name = os.environ.get('URLS_CONFIG_TABLE_V2', table_names['urls_config'])
-        self.state_table_name = os.environ.get('STATE_TABLE_V2', table_names['state'])
-        
+        self.urls_config_table_name = os.environ.get('URLS_CONFIG_TABLE_V2', "workflowy-urls-config-v2-test")
+        self.state_table_name = os.environ.get('STATE_TABLE_V2', "workflowy-state-v2-test")
+
         # Initialize table connections
         self.urls_config_table = self.dynamodb.Table(self.urls_config_table_name)
         self.state_table = self.dynamodb.Table(self.state_table_name)
-        
-        # Legacy table connections (for migration)
-        self.legacy_urls_table_name = os.environ.get('URLS_CONFIG_TABLE', table_names['legacy_urls_config'])
-        self.legacy_mapping_table_name = os.environ.get('USER_MAPPING_TABLE', table_names['legacy_user_mapping'])
-        self.legacy_state_table_name = os.environ.get('STATE_TABLE', table_names['legacy_state'])
-        
-        # Only connect to legacy tables if they exist (for migration)
-        try:
-            self.legacy_urls_table = self.dynamodb.Table(self.legacy_urls_table_name)
-            self.legacy_mapping_table = self.dynamodb.Table(self.legacy_mapping_table_name)
-            self.legacy_state_table = self.dynamodb.Table(self.legacy_state_table_name)
-        except Exception as e:
-            structured_logger.warning_operation("AWSStorageV2-init", f"Legacy tables not available: {e}")
-            self.legacy_urls_table = None
-            self.legacy_mapping_table = None
-            self.legacy_state_table = None
 
     # ============================================================================
     # Project Management Methods
