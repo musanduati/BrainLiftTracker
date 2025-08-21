@@ -2,45 +2,45 @@
  * Shared color utilities for mapping lists to consistent colors
  */
 
-// Vibrant gradient colors for lists (same as ListActivityRankings)
+// Enhanced vibrant gradient colors for lists - more visually appealing
 export const LIST_GRADIENTS = [
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', // Purple to Pink
-  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', // Pink to Red
-  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', // Blue to Cyan
-  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', // Green to Teal
-  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', // Pink to Yellow
-  'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', // Cyan to Purple
-  'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', // Light Blue to Pink
-  'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)', // Coral to Pink
-  'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)', // Pink to Blue
-  'linear-gradient(135deg, #fdcbf1 0%, #e6dee9 100%)', // Light Pink to Gray
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', // Purple to Violet - keep as is (good for Academics)
+  'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)', // Bright Red to Orange
+  'linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%)', // Teal to Sea Green  
+  'linear-gradient(135deg, #45b7d1 0%, #96c93d 100%)', // Sky Blue to Lime
+  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', // Hot Pink to Coral
+  'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)', // Peach to Light Orange
+  'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', // Mint to Blush
+  'linear-gradient(135deg, #d299c2 0%, #fef9d7 100%)', // Mauve to Cream
+  'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)', // Cyan to Blue
+  'linear-gradient(135deg, #fdcbf1 0%, #e6dee9 100%)', // Pink to Lavender
 ];
 
-// Solid colors extracted from gradients (for simple progress bars)
+// Solid colors extracted from enhanced gradients (for simple progress bars)
 export const LIST_SOLID_COLORS = [
   '#764ba2', // Purple
-  '#f5576c', // Red
-  '#00f2fe', // Cyan
-  '#38f9d7', // Teal
-  '#fee140', // Yellow
-  '#330867', // Dark Purple
-  '#fed6e3', // Light Pink
-  '#fecfef', // Pink
-  '#a6c1ee', // Light Blue
-  '#e6dee9', // Light Gray
+  '#ee5a24', // Orange Red
+  '#44a08d', // Sea Green
+  '#96c93d', // Lime Green
+  '#f5576c', // Hot Coral
+  '#fcb69f', // Peach
+  '#fed6e3', // Blush Pink
+  '#fef9d7', // Cream
+  '#66a6ff', // Sky Blue
+  '#e6dee9', // Lavender
 ];
 
-// Shadow colors for enhanced visual effects
+// Enhanced shadow colors for better visual effects
 export const LIST_SHADOWS = [
-  'rgba(102, 126, 234, 0.4)', // Purple
-  'rgba(245, 87, 108, 0.4)',  // Red
-  'rgba(79, 172, 254, 0.4)',  // Blue
-  'rgba(67, 233, 123, 0.4)',  // Green
-  'rgba(254, 225, 64, 0.4)',  // Yellow
-  'rgba(51, 8, 103, 0.4)',    // Dark Purple
-  'rgba(168, 237, 234, 0.4)', // Light Blue
-  'rgba(255, 154, 158, 0.4)', // Coral
-  'rgba(251, 194, 235, 0.4)', // Pink
+  'rgba(102, 126, 234, 0.5)', // Purple - slightly stronger
+  'rgba(255, 107, 107, 0.5)', // Bright Red
+  'rgba(78, 205, 196, 0.5)',  // Teal
+  'rgba(69, 183, 209, 0.5)',  // Sky Blue
+  'rgba(240, 147, 251, 0.5)', // Hot Pink
+  'rgba(252, 182, 159, 0.5)', // Peach
+  'rgba(168, 237, 234, 0.4)', // Mint
+  'rgba(210, 153, 194, 0.5)', // Mauve
+  'rgba(137, 247, 254, 0.5)', // Cyan
   'rgba(253, 203, 241, 0.4)', // Light Pink
 ];
 
