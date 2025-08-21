@@ -52,9 +52,22 @@ export const Analytics: React.FC = () => {
   ];
 
   useEffect(() => {
-    loadAnalyticsData();
-    loadDOKAnalytics();
+    loadData();
   }, [dateRange]);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      // Load analytics data first
+      await loadAnalyticsData();
+      // Then load DOK data and merge it
+      await loadDOKAnalytics();
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadDOKAnalytics = async () => {
     try {
@@ -185,8 +198,6 @@ export const Analytics: React.FC = () => {
 
   const loadAnalyticsData = async () => {
     try {
-      setLoading(true);
-      
       const days = dateRangeOptions.find(opt => opt.label === dateRange)?.value || 7;
       
       const [accounts, lists, tweets, threads] = await Promise.all([
@@ -215,8 +226,7 @@ export const Analytics: React.FC = () => {
     } catch (error) {
       toast.error('Failed to load analytics data');
       console.error('Analytics error:', error);
-    } finally {
-      setLoading(false);
+      throw error;
     }
   };
 
@@ -241,7 +251,7 @@ export const Analytics: React.FC = () => {
         tweets: dayTweets.length,
         threads: dayThreads.length,
         posted: dayTweets.filter(t => t.status === 'posted').length,
-        // DOK fields will be merged later from DOK analytics data
+        // DOK fields initialized to 0 - will be updated when DOK data loads
         dok3_changes: 0,
         dok4_changes: 0,
         total_dok_changes: 0
