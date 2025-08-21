@@ -783,14 +783,6 @@ def sync_twitter_lists():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@lists_bp.route('/api/v1/lists/sync/test', methods=['GET'])
-@require_api_key
-def test_sync_logic():
-    """Test list sync logic"""
-    return jsonify({
-        'message': 'List sync test endpoint',
-        'status': 'ready'
-    })
 
 @lists_bp.route('/api/v1/lists/move-members', methods=['POST'])
 @require_api_key
