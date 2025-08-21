@@ -1248,7 +1248,14 @@ def post_all_pending_threads_internal(max_threads=10, delay_between_threads=5):
         }
     
     except Exception as e:
-        return {'error': str(e), 'posted': 0, 'failed': 0, 'threads_processed': 0}
+        return {
+            'error': str(e),
+            'message': 'Internal function failed',
+            'posted': 0,
+            'failed': 0,
+            'threads_processed': 0,
+            'results': []
+        }
 
 def retry_all_failed_threads_internal(max_threads=10, delay_between_threads=5):
     """Internal function to retry failed threads (used by automation)"""
