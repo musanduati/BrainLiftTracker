@@ -135,6 +135,10 @@ def get_lists():
         
         lists = cursor.fetchall()
         
+        # Filter out test lists
+        test_list_names = ['Test List SB']
+        lists = [lst for lst in lists if lst['name'] not in test_list_names]
+        
         # Get member counts
         result = []
         for lst in lists:
