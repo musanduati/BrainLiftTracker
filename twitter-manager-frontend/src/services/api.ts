@@ -183,8 +183,14 @@ class ApiClient {
     await this.client.delete(`/accounts/${accountId}/saved-followers/${followerId}`);
   }
 
-  async deleteAccount(id: number): Promise<void> {
-    await this.client.delete(`/accounts/${id}`);
+  async deleteAccount(id: number): Promise<{ message: string; deleted_data: any }> {
+    const { data } = await this.client.delete(`/accounts/${id}`);
+    return data;
+  }
+
+  async softDeleteAccount(id: number): Promise<{ message: string; affected_data: any }> {
+    const { data } = await this.client.post(`/accounts/${id}/soft-delete`);
+    return data;
   }
 
   async refreshToken(id: number): Promise<TwitterAccount> {

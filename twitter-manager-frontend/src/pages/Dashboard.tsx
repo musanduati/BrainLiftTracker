@@ -62,14 +62,14 @@ export const Dashboard: React.FC = () => {
         });
       }
       
-      // Filter accounts to only show those with posts
+      // Filter accounts to only show those with posts AND are not deleted
       const accountsWithContent = accountsData.filter(account => 
-        activeUsernames.has(account.username)
+        account.authorized && activeUsernames.has(account.username)
       );
       
-      // Filter accounts without posts (inactive)
+      // Filter accounts without posts (inactive) AND are not deleted
       const accountsWithoutContent = accountsData.filter(account => 
-        !activeUsernames.has(account.username)
+        account.authorized && !activeUsernames.has(account.username)
       );
 
       setAccounts(accountsWithContent);

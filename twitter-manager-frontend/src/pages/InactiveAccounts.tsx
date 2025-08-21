@@ -37,8 +37,11 @@ export const InactiveAccounts: React.FC = () => {
         apiClient.getThreads()
       ]);
 
-      // Filter accounts without tweets or threads (inactive)
+      // Filter accounts without tweets or threads (inactive) AND are not deleted
       const accountsWithoutContent = accountsData.filter(account => {
+        // Filter out deleted accounts
+        if (!account.authorized) return false;
+        
         const hasTweets = tweetsData.some((tweet: any) => tweet.username === account.username);
         const hasThreads = threadsData.some((thread: any) => thread.account_username === account.username);
         return !hasTweets && !hasThreads;

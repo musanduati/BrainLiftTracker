@@ -162,10 +162,14 @@ export const UserActivityRankings: React.FC<UserActivityRankingsProps> = ({ onDa
             pendingCount: stats.pending,
             failedCount: stats.failed,
             rank: 0,
-            listId: usernameToListId.get(stats.username)
+            listId: usernameToListId.get(stats.username),
+            account: account // Keep reference to check authorization
           };
         })
-        .filter((user: any) => user.totalActivity > 0) // Only include brainlifts with posts
+        .filter((user: any) => {
+          // Only include brainlifts with posts AND that have authorized accounts
+          return user.totalActivity > 0 && user.account && user.account.authorized;
+        })
         .sort((a: any, b: any) => b.totalActivity - a.totalActivity); // Sort by activity
       
       // Add rank numbers
