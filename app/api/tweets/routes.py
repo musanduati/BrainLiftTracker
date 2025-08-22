@@ -572,31 +572,61 @@ def cleanup_tweets():
     """Clean up old tweets"""
     data = request.get_json() or {}
     days_old = data.get('days_old', 30)
-    status = data.get('status', 'posted')
+    
+    # Handle both 'status' (single) and 'statuses' (array) parameters
+    statuses = data.get('statuses', [])
+    if not statuses:
+        status = data.get('status', 'posted')
+        statuses = [status]
+    
+    account_id = data.get('account_id')
     
     conn = get_db()
     
+    # Build query conditions
+    conditions = []
+    params = []
+    
+    # Status condition
+    if len(statuses) == 1:
+        conditions.append('status = ?')
+        params.append(statuses[0])
+    else:
+        status_placeholders = ','.join(['?' for _ in statuses])
+        conditions.append(f'status IN ({status_placeholders})')
+        params.extend(statuses)
+    
+    # Date condition
+    conditions.append("datetime(created_at) < datetime('now', '-' || ? || ' days')")
+    params.append(days_old)
+    
+    # Account condition
+    if account_id:
+        conditions.append('twitter_account_id = ?')
+        params.append(account_id)
+    
+    where_clause = ' AND '.join(conditions)
+    
     # Count tweets to delete
-    count = conn.execute('''
-        SELECT COUNT(*) as count 
-        FROM tweet 
-        WHERE status = ? 
-        AND created_at < datetime('now', ? || ' days')
-    ''', (status, -days_old)).fetchone()['count']
+    count_query = f'SELECT COUNT(*) as count FROM tweet WHERE {where_clause}'
+    count = conn.execute(count_query, params).fetchone()['count']
     
     # Delete old tweets
-    conn.execute('''
-        DELETE FROM tweet 
-        WHERE status = ? 
-        AND created_at < datetime('now', ? || ' days')
-    ''', (status, -days_old))
+    delete_query = f'DELETE FROM tweet WHERE {where_clause}'
+    conn.execute(delete_query, params)
     
     conn.commit()
     conn.close()
     
+    status_text = ', '.join(statuses) if len(statuses) > 1 else statuses[0]
+    account_text = f' from account {account_id}' if account_id else ''
+    
     return jsonify({
-        'message': f'Deleted {count} {status} tweets older than {days_old} days',
-        'count': count
+        'message': f'Deleted {count} {status_text} tweets older than {days_old} days{account_text}',
+        'count': count,
+        'statuses': statuses,
+        'days_old': days_old,
+        'account_id': account_id
     })
 
 @tweets_bp.route('/api/v1/tweets/<int:tweet_id>', methods=['DELETE'])
