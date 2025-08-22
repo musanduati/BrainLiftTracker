@@ -326,10 +326,14 @@ class LMService:
             if len(query_lines) >= 2:
                 # Handle both "Node to find:" and "Node type to find:" formats
                 first_line = query_lines[0]
+                is_multiple_node_query = False
+                
                 if "Node to find:" in first_line:
                     node_to_find = first_line.replace("Node to find:", "").strip()
+                    is_multiple_node_query = False
                 elif "Node type to find:" in first_line:
                     node_to_find = first_line.replace("Node type to find:", "").strip()
+                    is_multiple_node_query = True
                 else:
                     structured_logger.warning_operation("_fallback_to_pattern_matching", f"Unknown query format: {first_line}")
                     return ""
@@ -351,10 +355,18 @@ class LMService:
                     structured_logger.error_operation("_fallback_to_pattern_matching", f"Failed to parse nodes string: {repr(nodes_str)}, error: {e}")
                     return ""
                 
-                # Use the existing fallback logic (single node)
-                result = _fallback_node_matching(node_to_find, nodes)
-                structured_logger.info_operation("_fallback_to_pattern_matching", f"Fallback pattern matching returned: {result}")
-                return result or ""
+                # Use appropriate fallback based on query type
+                if is_multiple_node_query:
+                    # Multiple node query - use _fallback_find_all_matching_nodes
+                    node_ids = _fallback_find_all_matching_nodes(node_to_find, nodes)
+                    result = ",".join(node_ids) if node_ids else ""
+                    structured_logger.info_operation("_fallback_to_pattern_matching", f"Multiple-node fallback returned {len(node_ids)} nodes: {result}")
+                    return result
+                else:
+                    # Single node query - use existing logic
+                    result = _fallback_node_matching(node_to_find, nodes)
+                    structured_logger.info_operation("_fallback_to_pattern_matching", f"Single-node fallback returned: {result}")
+                    return result or ""
                 
         except Exception as e:
             structured_logger.error_operation("_fallback_to_pattern_matching", f"Fallback pattern matching failed: {e}")
