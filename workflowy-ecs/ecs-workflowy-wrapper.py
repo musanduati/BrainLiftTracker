@@ -58,6 +58,7 @@ structured_logger.info_operation("ecs_workflowy_processor", "🔐 Loading secret
 api_secrets = load_api_secrets()
 
 from workflowy.lambda_handler import process_and_post_v2
+from workflowy.core.parallel_processor import process_projects_in_batches
 
 class ECSWorkflowyProcessor:
     def __init__(self):
@@ -76,6 +77,9 @@ class ECSWorkflowyProcessor:
                                         execution_env="AWS_ECS_FARGATE",
                                         request_id=self.request_id,
                                         secrets_loaded=len(api_secrets))
+        
+        # Log configuration
+        self.log_configuration()
         
     async def run_workflowy_processing(self):
         structured_logger.info_operation("ecs_processor", f"🚀 Starting Workflowy processor in ECS Fargate (environment: {self.environment})")
@@ -99,6 +103,19 @@ class ECSWorkflowyProcessor:
         except Exception as e:
             structured_logger.error_operation("run_workflowy_processing", f"❌ ECS task failed")
             raise
+
+    def log_configuration(self):
+        """Log the current parallel processing configuration."""
+        enable_parallel = os.getenv('WORKFLOWY_ENABLE_PARALLEL_PROCESSING', 'false').lower() == 'true'
+        
+        structured_logger.info_operation("ecs_config", f"🔧 Parallel processing enabled: {enable_parallel}")
+        
+        if enable_parallel:
+            batch_size = int(os.getenv('WORKFLOWY_BATCH_SIZE', '10'))
+            delay_between_batches = float(os.getenv('WORKFLOWY_DELAY_BETWEEN_BATCHES', '1.0'))
+            
+            structured_logger.info_operation("ecs_config", f"📦 Batch size: {batch_size}")
+            structured_logger.info_operation("ecs_config", f"⏱️  Delay between batches: {delay_between_batches}s")
 
 def main():
     """Main entry point"""
