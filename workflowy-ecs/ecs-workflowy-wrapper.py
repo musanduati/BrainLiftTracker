@@ -113,7 +113,7 @@ def main():
         structured_logger.info_operation("ecs_main", f"✅ Workflowy processing completed successfully in {duration_minutes:.2f} minutes ({duration:.2f} seconds)")
         exit(0)
     except Exception as e:
-        structured_logger.error_operation("ecs_main", e, f"❌ Workflowy processing failed")
+        structured_logger.error_operation("ecs_main", f"❌ Workflowy processing failed. Error: {e}")
         exit(1)
 
 if __name__ == "__main__":
