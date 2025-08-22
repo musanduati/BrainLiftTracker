@@ -1,0 +1,60 @@
+{
+  "family": "workflowy-processor-test",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "2048",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskExecutionRole-workflowy",
+  "taskRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskRole-workflowy",
+  "containerDefinitions": [
+    {
+      "name": "workflowy-processor",
+      "image": "{{ACCOUNT_ID}}.dkr.ecr.us-east-1.amazonaws.com/workflowy-processor:latest",
+      "essential": true,
+      "environment": [
+        {
+          "name": "ENVIRONMENT",
+          "value": "test"
+        },
+        {
+          "name": "AWS_DEFAULT_REGION",
+          "value": "us-east-1"
+        },
+        {
+          "name": "PYTHONUNBUFFERED",
+          "value": "1"
+        },
+        {
+          "name": "WORKFLOWY_BUCKET",
+          "value": "workflowy-content-test"
+        },
+        {
+          "name": "URLS_CONFIG_TABLE_V2",
+          "value": "workflowy-urls-config-v2-test"
+        },
+        {
+          "name": "STATE_TABLE_V2",
+          "value": "workflowy-state-v2-test"
+        },
+        {
+          "name": "SKIP_MIGRATION_TWEETS",
+          "value": "false"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "BRAINLIFT_TRACKER",
+          "valueFrom": "{{SECRET_ARN}}"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/workflowy-processor",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs-test"
+        }
+      }
+    }
+  ]
+}

@@ -84,10 +84,14 @@ class ThreadManager:
             
             tweet_data["tweet_id"] = tweet_id
             tweet_data["status"] = "created"
+
+            structured_logger.info_operation("process_single_tweet", f"   ✅ Tweet ID: {tweet_id} created successfully")
+            structured_logger.info_operation("process_single_tweet", f"   NOTE: Not posting tweet to Twitter")
             
+            '''
             # Post tweet
             success = await self.twitter_api.post_tweet(session, tweet_id)
-            
+
             if success:
                 tweet_data["status"] = "posted"
                 tweet_data["posted_at"] = datetime.now().isoformat()
@@ -95,8 +99,9 @@ class ThreadManager:
             else:
                 tweet_data["status"] = "created_not_posted"
                 structured_logger.warning_operation("process_single_tweet", f"   ⚠️ Tweet created but posting failed")
+            '''
             
-            return success
+            return True
             
         except Exception as e:
             structured_logger.error_operation("process_single_tweet", f"❌ Error processing single tweet: {e}")
@@ -139,6 +144,10 @@ class ThreadManager:
                     tweet["thread_id"] = thread_id
                     tweet["status"] = "created"
                 
+                structured_logger.info_operation("process_single_thread_for_project", f"   ✅ Thread ID: {thread_id} with {len(thread_tweets)} tweets created successfully")
+                structured_logger.info_operation("process_single_thread_for_project", f"   NOTE: Not posting thread to Twitter")
+                
+                '''
                 # Post thread
                 success = await self.twitter_api.post_thread(session, thread_id)
                 
@@ -154,8 +163,9 @@ class ThreadManager:
                     structured_logger.info_operation("process_single_thread_for_project", f"   ✅ Thread with {len(thread_tweets)} tweets posted successfully")
                 else:
                     structured_logger.warning_operation("process_single_thread_for_project", f"   ⚠️ Thread created but posting failed")
-                
-                return success
+                '''
+
+                return True
             else:
                 # Single tweet
                 return await self.process_single_tweet(session, thread_tweets[0], account_id)
