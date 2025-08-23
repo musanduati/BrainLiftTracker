@@ -1382,9 +1382,12 @@ def get_all_account_names():
 def bulk_update_account_names():
     """Bulk update display names for multiple Twitter accounts - requires OAuth 1.0a credentials"""
     
-    # Check if OAuth 1.0a credentials are available
-    from app.core.config import Config
-    if not Config.TWITTER_API_KEY or not Config.TWITTER_API_SECRET:
+    # Check if OAuth 1.0a credentials are available in environment
+    import os
+    twitter_api_key = os.environ.get('TWITTER_API_KEY')
+    twitter_api_secret = os.environ.get('TWITTER_API_SECRET')
+    
+    if not twitter_api_key or not twitter_api_secret:
         return jsonify({
             'error': 'OAuth 1.0a credentials required',
             'message': 'Profile updates require X API v1.1 which only supports OAuth 1.0a authentication.',

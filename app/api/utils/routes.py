@@ -376,3 +376,51 @@ def debug_group_concat():
             'error': str(e),
             'message': 'GROUP_CONCAT may not be available in SQLite'
         }), 500
+
+@utils_bp.route('/api/v1/db-constraints', methods=['GET'])
+@require_api_key
+def check_database_constraints():
+    """Check foreign key constraints - for verifying CASCADE migration"""
+    conn = get_db()
+    constraints = {}
+    
+    tables_to_check = ['tweet', 'thread', 'follower', 'list_account_membership']
+    
+    for table in tables_to_check:
+        try:
+            result = conn.execute(f'PRAGMA foreign_key_list({table})').fetchall()
+            constraints[table] = []
+            
+            for fk in result:
+                # fk format: (id, seq, table, from, to, on_update, on_delete, match)
+                constraints[table].append({
+                    'references_table': fk[2],
+                    'from_column': fk[3], 
+                    'to_column': fk[4],
+                    'on_update': fk[5],
+                    'on_delete': fk[6]
+                })
+        except Exception as e:
+            constraints[table] = f'Error: {str(e)}'
+    
+    conn.close()
+    
+    # Check if CASCADE migration is complete
+    cascade_status = {
+        'migration_complete': True,
+        'issues': []
+    }
+    
+    # Check tweet table should have CASCADE
+    if 'tweet' in constraints and isinstance(constraints['tweet'], list):
+        tweet_fks = constraints['tweet']
+        has_cascade = any(fk['on_delete'] == 'CASCADE' for fk in tweet_fks if fk['references_table'] == 'twitter_account')
+        if not has_cascade:
+            cascade_status['migration_complete'] = False
+            cascade_status['issues'].append('tweet table missing CASCADE constraint')
+    
+    return jsonify({
+        'foreign_key_constraints': constraints,
+        'cascade_migration_status': cascade_status,
+        'environment': 'lightsail' if 'LIGHTSAIL' in str(conn) else 'local'
+    })
