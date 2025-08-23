@@ -80,7 +80,7 @@ async def process_and_post_v2(environment: str = 'test'):
     projects = storage.get_all_projects()
     
     if not projects:
-        structured_logger.error_operation("process_and_post_v2", Exception("No active projects found"), "❌ No active projects found in DynamoDB!")
+        structured_logger.error_operation("process_and_post_v2", "❌ No active projects found in DynamoDB!")
         return {
             'processing_results': [{
                 'status': 'error',
@@ -143,7 +143,7 @@ async def process_and_post_v2(environment: str = 'test'):
                 posting_results.append(project_results)
                     
             except Exception as e:
-                structured_logger.error_operation("process_and_post_v2", e, f"❌ Error posting tweets for project {project_id}", project_id=project_id)
+                structured_logger.error_operation("process_and_post_v2", f"❌ Error posting tweets for project {project_id}. Error: {e}", project_id=project_id)
                 posting_results.append({
                     'project_id': project_id,
                     'status': 'error',
@@ -236,7 +236,7 @@ async def process_single_project_posting_v2(poster: TweetPosterV2, project_id: s
                                                    project_id=project_id, tweet_count=len(thread_tweets))
                 else:
                     failed_count += len(thread_tweets)
-                    structured_logger.error_operation("process_single_project_posting_v2", Exception("Failed to create thread"), f"❌ Failed to create thread with {len(thread_tweets)} tweets",
+                    structured_logger.error_operation("process_single_project_posting_v2", f"❌ Failed to create thread with {len(thread_tweets)} tweets.",
                                                     project_id=project_id, tweet_count=len(thread_tweets))
                 
                 # Delay between threads
@@ -245,7 +245,7 @@ async def process_single_project_posting_v2(poster: TweetPosterV2, project_id: s
                     
             except Exception as e:
                 failed_count += len(thread_tweets)
-                structured_logger.error_operation("process_single_project_posting_v2", e, "❌ Error creating thread",
+                structured_logger.error_operation("process_single_project_posting_v2", f"❌ Error creating thread with {len(thread_tweets)} tweets. Error: {e}",
                                                 project_id=project_id, tweet_count=len(thread_tweets))
         
         # Save updated tweets back to S3

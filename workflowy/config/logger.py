@@ -159,10 +159,9 @@ class StructuredLogger:
         """Log info-level operation"""
         self._log_operation(logging.INFO, operation, message, **kwargs)
     
-    def error_operation(self, operation: str, error: Exception, message: str, **kwargs):
+    def error_operation(self, operation: str, message: str, **kwargs):
         """Log error-level operation with exception details"""
-        # error_message = f"{message}: {str(error)}"
-        self._log_operation(logging.ERROR, operation, message, error, **kwargs)
+        self._log_operation(logging.ERROR, operation, message, **kwargs)
     
     def warning_operation(self, operation: str, message: str, **kwargs):
         """Log warning-level operation"""
