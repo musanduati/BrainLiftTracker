@@ -190,8 +190,14 @@ def post_tweet(tweet_id):
         conn.close()
         return jsonify({'error': 'Tweet already posted'}), 400
     
+    # Close connection before API call to prevent database locks
+    conn.close()
+    
     # Post to Twitter
     success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+    
+    # Reopen connection for database update
+    conn = get_db()
     
     if success:
         # Update tweet status
@@ -260,6 +266,9 @@ def post_pending_tweets():
         'rate_limited': []
     }
     
+    # Close connection before processing tweets to prevent locks
+    conn.close()
+    
     for tweet in pending_tweets:
         # Check rate limit
         delay = get_rate_limit_delay(tweet['twitter_account_id'])
@@ -273,6 +282,9 @@ def post_pending_tweets():
         
         # Post tweet
         success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+        
+        # Reopen connection for database update
+        conn = get_db()
         
         if success:
             # Update tweet status
@@ -302,9 +314,9 @@ def post_pending_tweets():
                 'account': tweet['username'],
                 'error': result
             })
-    
-    conn.commit()
-    conn.close()
+        
+        conn.commit()
+        conn.close()
     
     return jsonify({
         'summary': {
@@ -447,8 +459,14 @@ def retry_failed_tweet(tweet_id):
     )
     conn.commit()
     
+    # Close connection before API call to prevent database locks
+    conn.close()
+    
     # Try posting again
     success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+    
+    # Reopen connection for database update
+    conn = get_db()
     
     if success:
         conn.execute('''
