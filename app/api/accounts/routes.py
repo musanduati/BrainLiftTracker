@@ -1317,6 +1317,97 @@ def cleanup_inactive_accounts():
         'deleted': deleted
     })
 
+@accounts_bp.route('/api/v1/accounts/names', methods=['GET'])
+@require_api_key
+def get_all_account_names():
+    """Get all account names (usernames and display names)"""
+    conn = get_db()
+    
+    # Get filter parameters
+    status = request.args.get('status')
+    account_type = request.args.get('type')
+    
+    # Build query
+    query = '''
+        SELECT 
+            id,
+            username,
+            display_name,
+            status,
+            account_type,
+            created_at,
+            updated_at
+        FROM twitter_account
+        WHERE 1=1
+    '''
+    
+    params = []
+    if status:
+        query += ' AND status = ?'
+        params.append(status)
+    
+    if account_type:
+        query += ' AND account_type = ?'
+        params.append(account_type)
+    
+    query += ' ORDER BY username'
+    
+    accounts = conn.execute(query, params).fetchall()
+    
+    # Filter out test accounts
+    test_account_names = ['BrainLift WF-X Integration', 'klair_three']
+    accounts = [acc for acc in accounts if acc['username'] not in test_account_names]
+    
+    result = []
+    for account in accounts:
+        result.append({
+            'id': account['id'],
+            'username': account['username'],
+            'display_name': account['display_name'],
+            'status': account['status'],
+            'account_type': account['account_type'] or 'managed',
+            'created_at': account['created_at'],
+            'updated_at': account['updated_at']
+        })
+    
+    conn.close()
+    
+    return jsonify({
+        'accounts': result,
+        'count': len(result)
+    })
+
+@accounts_bp.route('/api/v1/accounts/bulk-update-names', methods=['POST'])
+@require_api_key
+def bulk_update_account_names():
+    """Bulk update display names for multiple Twitter accounts - requires OAuth 1.0a credentials"""
+    
+    # Check if OAuth 1.0a credentials are available
+    from app.core.config import Config
+    if not Config.TWITTER_API_KEY or not Config.TWITTER_API_SECRET:
+        return jsonify({
+            'error': 'OAuth 1.0a credentials required',
+            'message': 'Profile updates require X API v1.1 which only supports OAuth 1.0a authentication.',
+            'details': {
+                'current_auth': 'OAuth 2.0 (works for v2 API only)',
+                'required_auth': 'OAuth 1.0a (needed for v1.1 profile updates)',
+                'solution': 'Add TWITTER_API_KEY and TWITTER_API_SECRET to your .env file'
+            },
+            'instructions': [
+                '1. Go to X Developer Portal → Your App → Settings',
+                '2. Enable OAuth 1.0a authentication',
+                '3. Get API Key and API Secret Key',
+                '4. Add to .env: TWITTER_API_KEY=your_api_key',
+                '5. Add to .env: TWITTER_API_SECRET=your_api_secret'
+            ]
+        }), 501  # 501 Not Implemented
+    
+    return jsonify({
+        'error': 'Feature temporarily disabled',
+        'message': 'OAuth 1.0a implementation is in progress. This endpoint will be available once hybrid authentication is implemented.',
+        'status': 'coming_soon'
+    }), 501
+
 @accounts_bp.route('/api/v1/accounts/<int:account_id>/followers/<int:follower_id>', methods=['DELETE'])
 @require_api_key
 def delete_follower(account_id, follower_id):
