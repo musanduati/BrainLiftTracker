@@ -2659,7 +2659,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"batch_size\": 10,\n    \"offset\": 0\n}",
+									"raw": "{\n    \"max_tweets\": 10,\n    \"delay_between_tweets\": 2\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2707,7 +2707,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"batch_size\": 10,\n    \"offset\": 0\n}",
+									"raw": "{\n    \"max_tweets\": 10,\n    \"delay_between_tweets\": 2\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -3070,7 +3070,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"batch_size\": 10,\n    \"offset\": 0,\n    \"account_id\": null\n}",
+							"raw": "{\n    \"max_tweets\": 10,\n    \"delay_between_tweets\": 2,\n    \"account_id\": null\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -3108,7 +3108,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"batch_size\": 10,\n    \"offset\": 0\n}",
+									"raw": "{\n    \"max_tweets\": 10,\n    \"delay_between_tweets\": 2\n}",
 									"options": {
 										"raw": {
 											"language": "json"
