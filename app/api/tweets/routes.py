@@ -541,13 +541,21 @@ def retry_all_failed_tweets():
             })
             continue
         
-        # Reset to pending and try posting
+        # Reset to pending and commit immediately to avoid locks
         conn.execute(
             'UPDATE tweet SET status = "pending" WHERE id = ?',
             (tweet['id'],)
         )
+        conn.commit()
         
+        # Close connection before making API call to prevent database locks
+        conn.close()
+        
+        # Make API call with fresh connection
         success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+        
+        # Reopen connection for database updates
+        conn = get_db()
         
         if success:
             conn.execute('''
@@ -575,12 +583,15 @@ def retry_all_failed_tweets():
                 'error': result
             })
         
+        conn.commit()
+        
         # Add delay between tweets to respect rate limits
         if delay_between_tweets > 0 and i < len(failed_tweets) - 1:
             time.sleep(delay_between_tweets)
     
-    conn.commit()
-    conn.close()
+    # Final connection cleanup (conn is already managed per iteration)
+    if 'conn' in locals() and conn:
+        conn.close()
     
     return jsonify({
         'message': f'Processed {len(failed_tweets)} failed tweets',
