@@ -21,6 +21,50 @@ from batch_automation_enhanced import WorkingEnhancedBatchAutomation
 from email_service import AutomationEmailService
 from s3_session_manager import S3SessionManager
 
+def load_brainlift_tracker_secrets():
+    """Load credentials from Secrets Manager secret and save to environment variables"""
+    try:
+        # Get the JSON string that ECS injected from Secrets Manager
+        secrets_json = os.getenv('BRAINLIFT_TRACKER')
+        if not secrets_json:
+            print("⚠️ No secrets found in BRAINLIFT_TRACKER environment variable")
+            return {}
+ 
+        secrets = json.loads(secrets_json)
+        print(f"✅ Loaded {len(secrets)} secrets from Secrets Manager")
+        
+        secrets_loaded = 0
+        
+        # Map the secret keys to the environment variables the app expects
+        secret_mappings = {
+            'GMAIL_USERNAME': 'GMAIL_USERNAME',
+            'GMAIL_APP_PASSWORD': 'GMAIL_APP_PASSWORD',
+            'API_BASE': 'API_BASE',
+            'API_KEY': 'API_KEY'
+        }
+        
+        for secret_key, env_var in secret_mappings.items():
+            if secret_key in secrets:
+                os.environ[env_var] = secrets[secret_key]
+                print(f"✅ {env_var} loaded from secrets")
+                secrets_loaded += 1
+            else:
+                print(f"⚠️ {secret_key} not found in secrets")
+        
+        print(f"🔐 Total secrets loaded: {secrets_loaded}")
+        return secrets
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ Failed to parse secrets JSON: {e}")
+        print(f"Raw value: {secrets_json[:100]}...")
+        return {}
+    except Exception as e:
+        print(f"❌ Failed to load secrets from Secrets Manager: {e}")
+        return {}
+
+print("🔐 Loading secrets before module imports...")
+twitter_secrets = load_brainlift_tracker_secrets()
+
 class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
     def __init__(self):
         # Initialize AWS clients
@@ -37,6 +81,11 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
         )
         
         self.batch_id = f"fargate-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+        
+        # Log secrets loading status
+        print(f"🔐 Secrets loaded: {len(twitter_secrets)} items")
+        gmail_configured = bool(os.environ.get('GMAIL_USERNAME') and os.environ.get('GMAIL_APP_PASSWORD'))
+        print(f"📧 Gmail credentials: {'✅ Configured' if gmail_configured else '❌ Not configured'}")
         
         # Initialize email service
         self.email_service = AutomationEmailService()

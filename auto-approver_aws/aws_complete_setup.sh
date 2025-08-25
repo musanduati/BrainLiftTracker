@@ -44,6 +44,7 @@ show_help() {
     echo "  --setup, -s      Run full AWS infrastructure setup"
     echo "  --test, -t       Run test task only (requires existing setup)"
     echo "  --verify, -v     Verify existing setup (default behavior)"
+    echo "  --generate-tasks, -g      Generate task definition files from templates"
     echo "  --help, -h       Show this help message"
     echo
     echo "Default behavior: Verify existing AWS setup"
@@ -53,6 +54,7 @@ show_help() {
     echo "  $0 --setup          # Run complete infrastructure setup"
     echo "  $0 --test           # Run test task to verify functionality"
     echo "  $0 --verify         # Explicitly verify setup"
+    echo "  $0 --generate-tasks      # Generate task definition files"
 }
 
 # Error handling
@@ -349,7 +351,37 @@ EOF
         --policy-arn arn:aws:iam::$ACCOUNT_ID:policy/TwitterAutomationS3Policy \
         2>/dev/null || log_warning "Policy may already be attached"
 
-    log_success "IAM Roles created successfully"
+    # Create Secrets Manager policy for brainlift-tracker access
+    log_info "Creating Secrets Manager policy for brainlift-tracker access..."
+    cat > twitter-automation-secrets-policy.json << EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "secretsmanager:GetSecretValue"
+            ],
+            "Resource": [
+                "arn:aws:secretsmanager:us-east-1:$ACCOUNT_ID:secret:brainlift-tracker*"
+            ]
+        }
+    ]
+}
+EOF
+
+    # Create and attach Secrets Manager policy to execution role
+    aws iam create-policy \
+        --policy-name TwitterAutomationSecretsPolicy \
+        --policy-document file://twitter-automation-secrets-policy.json \
+        2>/dev/null || log_warning "Secrets policy may already exist"
+
+    aws iam attach-role-policy \
+        --role-name ecsTaskExecutionRole-twitter \
+        --policy-arn arn:aws:iam::$ACCOUNT_ID:policy/TwitterAutomationSecretsPolicy \
+        2>/dev/null || log_warning "Secrets policy may already be attached"
+
+    log_success "IAM Roles and Secrets Manager access created successfully"
 }
 
 # Step 2: Setup VPC, Subnets, and Security Groups
@@ -662,10 +694,6 @@ run_test_task() {
     fi
     source .env.aws
 
-    # Register test task definition (in case it wasn't registered)
-    aws ecs register-task-definition \
-        --cli-input-json file://ecs-task-definition-test.json \
-        --region us-east-1 > /dev/null 2>&1 || log_warning "Test task definition may already exist"
 
     # Run test task
     log_info "🧪 Starting TEST ECS task..."
@@ -681,43 +709,21 @@ run_test_task() {
     log_info "🧪 Test task started: $TASK_ARN"
 
     # Monitor the task
-    for i in {1..8}; do
+    for i in {1..15}; do
         STATUS=$(aws ecs describe-tasks \
             --cluster twitter-automation \
             --tasks $TASK_ARN \
             --query "tasks[0].lastStatus" --output text)
         
-        log_info "[$i/8] Test task status: $STATUS"
+        log_info "[$i/15] Test task status: $STATUS"
         
         if [ "$STATUS" = "STOPPED" ]; then
             log_success "Test task completed!"
             break
         fi
         
-        sleep 30
+        sleep 15
     done
-
-    # Check logs
-    log_info "📋 Checking CloudWatch logs..."
-    sleep 30
-
-    LOG_STREAM=$(aws logs describe-log-streams \
-        --log-group-name /ecs/twitter-automation \
-        --order-by LastEventTime \
-        --descending \
-        --max-items 1 \
-        --query "logStreams[0].logStreamName" --output text)
-
-    if [ "$LOG_STREAM" != "None" ] && [ "$LOG_STREAM" != "" ]; then
-        log_info "📖 Recent log events:"
-        aws logs get-log-events \
-            --log-group-name /ecs/twitter-automation \
-            --log-stream-name $LOG_STREAM \
-            --start-from-head \
-            --limit 30 \
-            --query "events[*].message" \
-            --output text
-    fi
 
     log_success "Test run completed"
 }
@@ -765,6 +771,88 @@ cleanup_temp_files() {
     rm -f eventbridge-target.json
 }
 
+# Generate task definitions from templates
+generate_task_definitions() {
+    log_step "Generating ECS Task Definition Files"
+    
+    # For task generation, .env.aws MUST exist
+    if [ ! -f .env.aws ]; then
+        log_error ".env.aws file not found!"
+        log_error "Task definition generation requires existing environment configuration."
+        echo
+        log_info "Please run one of the following first:"
+        log_info "• ./aws_complete_setup.sh --setup    (creates full infrastructure + .env.aws)"
+        log_info "• ./aws_complete_setup.sh --verify   (if infrastructure exists, creates .env.aws)"
+        return 1
+    fi
+    
+    # Load and validate required variables
+    source .env.aws
+    
+    if [ -z "$ACCOUNT_ID" ]; then
+        log_error "Invalid .env.aws file - missing ACCOUNT_ID"
+        log_info "Delete .env.aws and run: ./aws_complete_setup.sh --setup"
+        return 1
+    fi
+    
+    # Auto-detect SECRET_ARN if needed
+    if [ -z "$SECRET_ARN" ]; then
+        SECRET_NAME="brainlift-tracker"
+        if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region us-east-1 >/dev/null 2>&1; then
+            SECRET_ARN=$(aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region us-east-1 --query 'ARN' --output text)
+            log_info "Auto-detected SECRET_ARN: $SECRET_ARN"
+        else
+            log_warning "No secrets manager secret found. Using placeholder."
+            SECRET_ARN="arn:aws:secretsmanager:us-east-1:$ACCOUNT_ID:secret:twitter-automation-secrets"
+        fi
+    fi
+    
+    # Check if template files exist
+    local test_template="ecs-task-definition-twitter-test.template.json"
+    local prod_template="ecs-task-definition-twitter-production.template.json"
+    
+    if [ ! -f "$test_template" ]; then
+        log_error "Template file not found: $test_template"
+        log_info "Create template files first. See documentation for template structure."
+        return 1
+    fi
+    
+    if [ ! -f "$prod_template" ]; then
+        log_error "Template file not found: $prod_template"
+        return 1
+    fi
+    
+    # Generate task definition files
+    log_info "Generating task definitions with:"
+    log_info "   Account ID: $ACCOUNT_ID"
+    log_info "   Secret ARN: $SECRET_ARN"
+    
+    # Generate test task definition
+    sed "s/{{ACCOUNT_ID}}/$ACCOUNT_ID/g; s|{{SECRET_ARN}}|$SECRET_ARN|g" \
+        "$test_template" > "ecs-task-definition-twitter-test.json"
+    
+    # Generate production task definition
+    sed "s/{{ACCOUNT_ID}}/$ACCOUNT_ID/g; s|{{SECRET_ARN}}|$SECRET_ARN|g" \
+        "$prod_template" > "ecs-task-definition-twitter-production.json"
+    
+    # Verify generated files
+    if [ -f "ecs-task-definition-twitter-test.json" ] && [ -f "ecs-task-definition-twitter-production.json" ]; then
+        log_success "Task definition files generated successfully:"
+        log_info "   - ecs-task-definition-twitter-test.json"
+        log_info "   - ecs-task-definition-twitter-production.json"
+        echo
+        log_warning "⚠️  These files contain sensitive information (Account ID, ARNs)"
+        log_warning "⚠️  Ensure they are in .gitignore and not committed to version control"
+        echo
+        log_info "Next steps:"
+        log_info "• Register task definitions: ./register-task-definitions.sh"
+        log_info "• Or register manually: aws ecs register-task-definition --cli-input-json file://ecs-task-definition-twitter-test.json"
+    else
+        log_error "Failed to generate task definition files"
+        return 1
+    fi
+}
+
 # Main execution function
 main() {
     # Trap to handle cleanup on exit
@@ -780,6 +868,10 @@ main() {
             ;;
         --verify|-v|"")
             verify_setup
+            ;;
+        --generate-tasks|-g)
+            check_aws_credentials
+            generate_task_definitions
             ;;
         --help|-h)
             show_help

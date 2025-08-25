@@ -1,0 +1,56 @@
+{
+    "family": "twitter-automation-production",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "2048",
+    "memory": "4096",
+    "executionRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskExecutionRole-twitter",
+    "taskRoleArn": "arn:aws:iam::{{ACCOUNT_ID}}:role/ecsTaskRole-twitter",
+    "containerDefinitions": [
+      {
+        "name": "twitter-automation",
+        "image": "{{ACCOUNT_ID}}.dkr.ecr.us-east-1.amazonaws.com/twitter-automation:prod-latest",
+        "essential": true,
+        "environment": [
+          {
+            "name": "S3_BUCKET_NAME",
+            "value": "twitter-automation-results"
+          },
+          {
+            "name": "AWS_DEFAULT_REGION",
+            "value": "us-east-1"
+          },
+          {
+            "name": "PYTHONUNBUFFERED",
+            "value": "1"
+          },
+          {
+            "name": "TEST_MODE",
+            "value": "false"
+          },
+          {
+            "name": "ENVIRONMENT",
+            "value": "prod"
+          },
+          {
+            "name": "SES_TO_EMAILS",
+            "value": "sanket.ghia@trilogy.com"
+          }
+        ],
+        "secrets": [
+          {
+            "name": "BRAINLIFT_TRACKER",
+            "valueFrom": "{{SECRET_ARN}}"
+          }
+        ],
+        "logConfiguration": {
+          "logDriver": "awslogs",
+          "options": {
+            "awslogs-group": "/ecs/twitter-automation",
+            "awslogs-region": "us-east-1",
+            "awslogs-stream-prefix": "ecs-production"
+          }
+        }
+      }
+    ]
+}

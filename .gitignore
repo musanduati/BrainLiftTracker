@@ -160,5 +160,9 @@ aws-automation/README.md
 aws-automation/test_lambda.py
 
 CLAUDE.md
+
+# Generated task definition files (contain sensitive account info)
 ecs-task-definition-workflowy-production.json
 ecs-task-definition-workflowy-test.json
+ecs-task-definition-twitter-test.json
+ecs-task-definition-twitter-production.json
