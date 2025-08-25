@@ -32,11 +32,11 @@ fi
 # Environment-specific tagging
 case $ENVIRONMENT in
     test)
-        IMAGE_TAG="test-$(date +%Y%m%d-%H%M%S)"
+        IMAGE_TAG="test-$(date -u +%Y%m%d-%H%M%S)"
         LATEST_TAG="test-latest"
         ;;
     prod|production)
-        IMAGE_TAG="prod-$(date +%Y%m%d-%H%M%S)"  
+        IMAGE_TAG="prod-$(date -u +%Y%m%d-%H%M%S)"  
         LATEST_TAG="prod-latest"
         ;;
     *)
