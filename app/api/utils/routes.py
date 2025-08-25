@@ -376,3 +376,164 @@ def debug_group_concat():
             'error': str(e),
             'message': 'GROUP_CONCAT may not be available in SQLite'
         }), 500
+
+@utils_bp.route('/api/v1/db-constraints', methods=['GET'])
+@require_api_key
+def check_database_constraints():
+    """Check foreign key constraints - for verifying CASCADE migration"""
+    conn = get_db()
+    constraints = {}
+    
+    tables_to_check = ['tweet', 'thread', 'follower', 'list_account_membership']
+    
+    for table in tables_to_check:
+        try:
+            result = conn.execute(f'PRAGMA foreign_key_list({table})').fetchall()
+            constraints[table] = []
+            
+            for fk in result:
+                # fk format: (id, seq, table, from, to, on_update, on_delete, match)
+                constraints[table].append({
+                    'references_table': fk[2],
+                    'from_column': fk[3], 
+                    'to_column': fk[4],
+                    'on_update': fk[5],
+                    'on_delete': fk[6]
+                })
+        except Exception as e:
+            constraints[table] = f'Error: {str(e)}'
+    
+    conn.close()
+    
+    # Check if CASCADE migration is complete
+    cascade_status = {
+        'migration_complete': True,
+        'issues': []
+    }
+    
+    # Check tweet table should have CASCADE
+    if 'tweet' in constraints and isinstance(constraints['tweet'], list):
+        tweet_fks = constraints['tweet']
+        has_cascade = any(fk['on_delete'] == 'CASCADE' for fk in tweet_fks if fk['references_table'] == 'twitter_account')
+        if not has_cascade:
+            cascade_status['migration_complete'] = False
+            cascade_status['issues'].append('tweet table missing CASCADE constraint')
+    
+    return jsonify({
+        'foreign_key_constraints': constraints,
+        'cascade_migration_status': cascade_status,
+        'environment': 'lightsail' if 'LIGHTSAIL' in str(conn) else 'local'
+    })
+
+@utils_bp.route('/api/v1/cleanup/orphaned-tweets', methods=['POST'])
+@require_api_key
+def cleanup_orphaned_tweets():
+    """Clean up tweets from deleted accounts"""
+    import shutil
+    import os
+    
+    data = request.get_json() or {}
+    dry_run = data.get('dry_run', True)
+    
+    # Database path - production path
+    db_path = '/home/ubuntu/twitter-manager/instance/twitter_manager.db'
+    if not os.path.exists(db_path):
+        # Fallback to local path for development
+        db_path = os.path.join('instance', 'twitter_manager.db')
+    
+    if not os.path.exists(db_path):
+        return jsonify({'error': 'Database not found'}), 404
+    
+    conn = get_db()
+    
+    try:
+        # Analyze orphaned data first
+        analysis = {}
+        
+        # Find deleted accounts
+        deleted_accounts = conn.execute("""
+            SELECT id, username, status, created_at
+            FROM twitter_account 
+            WHERE status = 'deleted'
+            ORDER BY username
+        """).fetchall()
+        
+        # Find orphaned tweets
+        orphaned_tweets = conn.execute("""
+            SELECT 
+                t.id,
+                t.twitter_account_id,
+                t.status,
+                t.thread_id,
+                a.username
+            FROM tweet t
+            JOIN twitter_account a ON t.twitter_account_id = a.id
+            WHERE a.status = 'deleted'
+        """).fetchall()
+        
+        analysis = {
+            'deleted_accounts_count': len(deleted_accounts),
+            'orphaned_tweets_count': len(orphaned_tweets),
+            'orphaned_by_status': {}
+        }
+        
+        # Group by tweet status
+        for tweet in orphaned_tweets:
+            status = tweet['status']
+            analysis['orphaned_by_status'][status] = analysis['orphaned_by_status'].get(status, 0) + 1
+        
+        if analysis['orphaned_tweets_count'] == 0:
+            conn.close()
+            return jsonify({
+                'message': 'No orphaned tweets found',
+                'analysis': analysis,
+                'dry_run': dry_run,
+                'cleanup_performed': False
+            })
+        
+        result = {
+            'analysis': analysis,
+            'dry_run': dry_run,
+            'cleanup_performed': False,
+            'tweets_deleted': 0,
+            'backup_path': None
+        }
+        
+        if not dry_run:
+            # Create backup
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_path = f"{db_path}.cleanup_backup_{timestamp}"
+            shutil.copy2(db_path, backup_path)
+            result['backup_path'] = backup_path
+            
+            # Delete orphaned tweets
+            cursor = conn.execute("""
+                DELETE FROM tweet 
+                WHERE twitter_account_id IN (
+                    SELECT id FROM twitter_account WHERE status = 'deleted'
+                )
+            """)
+            result['tweets_deleted'] = cursor.rowcount
+            result['cleanup_performed'] = True
+            
+            conn.commit()
+            
+            # Verify cleanup
+            remaining = conn.execute("""
+                SELECT COUNT(*) as count
+                FROM tweet t
+                JOIN twitter_account a ON t.twitter_account_id = a.id
+                WHERE a.status = 'deleted'
+            """).fetchone()
+            
+            result['remaining_orphaned_tweets'] = remaining['count']
+        else:
+            result['message'] = f"DRY RUN: Would delete {analysis['orphaned_tweets_count']} orphaned tweets"
+        
+        conn.close()
+        return jsonify(result)
+        
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': str(e)}), 500

@@ -2123,6 +2123,200 @@
 							"body": "{\n    \"error\": \"Account not found\"\n}"
 						}
 					]
+				},
+				{
+					"name": "Get Account Names",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/names?status=active",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"names"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "active",
+									"description": "Filter by account status (optional)"
+								},
+								{
+									"key": "type",
+									"value": "managed",
+									"description": "Filter by account type (optional)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get all account names (usernames and display names) with optional filtering"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/names",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"names"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"accounts\": [\n    {\n      \"id\": 1,\n      \"username\": \"example_user\",\n      \"display_name\": \"Example User\",\n      \"status\": \"active\",\n      \"account_type\": \"managed\",\n      \"created_at\": \"2024-01-01T00:00:00.000000\",\n      \"updated_at\": \"2024-01-01T12:00:00.000000\"\n    }\n  ],\n  \"count\": 1\n}"
+						}
+					]
+				},
+				{
+					"name": "Bulk Update Account Names",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"updates\": [\n    {\n      \"account_id\": 1,\n      \"name\": \"Marketing Lead\"\n    },\n    {\n      \"account_id\": 2,\n      \"name\": \"Tech Expert\"\n    },\n    {\n      \"account_id\": 3,\n      \"name\": \"Content Creator\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/accounts/bulk-update-names",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"bulk-update-names"
+							]
+						},
+						"description": "Bulk update display names for multiple Twitter accounts via X API. Each account gets a unique name.\n\nRequired format:\n\n\nValidation:\n- Each update must have account_id and name\n- All names must be unique\n- Names cannot be empty"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"New Display Name\",\n  \"account_ids\": [\n    1,\n    2\n  ]\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/bulk-update-names",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"bulk-update-names"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"message\": \"Bulk update completed: 2 updated, 0 failed, 0 skipped\",\n  \"summary\": {\n    \"updated\": 2,\n    \"failed\": 0,\n    \"skipped\": 0\n  },\n  \"results\": {\n    \"updated\": [\n      {\n        \"account_id\": 1,\n        \"username\": \"user1\",\n        \"old_name\": \"Old Name 1\",\n        \"new_name\": \"New Display Name\"\n      },\n      {\n        \"account_id\": 2,\n        \"username\": \"user2\",\n        \"old_name\": \"Old Name 2\",\n        \"new_name\": \"New Display Name\"\n      }\n    ],\n    \"failed\": [],\n    \"skipped\": []\n  }\n}"
+						},
+						{
+							"name": "Partial Success with Errors",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"updates\": [\n    {\n      \"account_id\": 1,\n      \"name\": \"Valid Name\"\n    },\n    {\n      \"account_id\": 999,\n      \"name\": \"Invalid Account\"\n    }\n  ]\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/bulk-update-names",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"bulk-update-names"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"message\": \"Bulk update completed: 1 updated, 1 failed, 0 skipped\",\n  \"summary\": {\n    \"updated\": 1,\n    \"failed\": 1,\n    \"skipped\": 0\n  },\n  \"results\": {\n    \"updated\": [\n      {\n        \"account_id\": 1,\n        \"username\": \"user1\",\n        \"old_name\": \"Old Name\",\n        \"new_name\": \"Valid Name\"\n      }\n    ],\n    \"failed\": [\n      {\n        \"account_id\": 999,\n        \"error\": \"Account not found\",\n        \"username\": null\n      }\n    ],\n    \"skipped\": []\n  }\n}"
+						}
+					]
 				}
 			]
 		},
@@ -2465,7 +2659,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"batch_size\": 10,\n    \"offset\": 0\n}",
+									"raw": "{\n    \"max_tweets\": 10,\n    \"delay_between_tweets\": 2\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2513,7 +2707,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"batch_size\": 10,\n    \"offset\": 0\n}",
+									"raw": "{\n    \"max_tweets\": 10,\n    \"delay_between_tweets\": 2\n}",
 									"options": {
 										"raw": {
 											"language": "json"
@@ -2876,7 +3070,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"batch_size\": 10,\n    \"offset\": 0,\n    \"account_id\": null\n}",
+							"raw": "{\n    \"max_tweets\": 10,\n    \"delay_between_tweets\": 2,\n    \"account_id\": null\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -2914,7 +3108,7 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n    \"batch_size\": 10,\n    \"offset\": 0\n}",
+									"raw": "{\n    \"max_tweets\": 10,\n    \"delay_between_tweets\": 2\n}",
 									"options": {
 										"raw": {
 											"language": "json"

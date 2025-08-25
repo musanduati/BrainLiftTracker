@@ -77,7 +77,8 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
             csv_files = [
                 '/app/auto-approver/accounts_academics.csv',
                 '/app/auto-approver/accounts_superbuilders.csv',
-                '/app/auto-approver/accounts_finops.csv'
+                '/app/auto-approver/accounts_finops.csv',
+                '/app/auto-approver/accounts_klair.csv'
             ]
             print("🚀 RUNNING IN PRODUCTION MODE - Processing all accounts")
         

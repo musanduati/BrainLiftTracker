@@ -190,8 +190,14 @@ def post_tweet(tweet_id):
         conn.close()
         return jsonify({'error': 'Tweet already posted'}), 400
     
+    # Close connection before API call to prevent database locks
+    conn.close()
+    
     # Post to Twitter
     success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+    
+    # Reopen connection for database update
+    conn = get_db()
     
     if success:
         # Update tweet status
@@ -260,6 +266,9 @@ def post_pending_tweets():
         'rate_limited': []
     }
     
+    # Close connection before processing tweets to prevent locks
+    conn.close()
+    
     for tweet in pending_tweets:
         # Check rate limit
         delay = get_rate_limit_delay(tweet['twitter_account_id'])
@@ -273,6 +282,9 @@ def post_pending_tweets():
         
         # Post tweet
         success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+        
+        # Reopen connection for database update
+        conn = get_db()
         
         if success:
             # Update tweet status
@@ -302,9 +314,9 @@ def post_pending_tweets():
                 'account': tweet['username'],
                 'error': result
             })
-    
-    conn.commit()
-    conn.close()
+        
+        conn.commit()
+        conn.close()
     
     return jsonify({
         'summary': {
@@ -447,8 +459,14 @@ def retry_failed_tweet(tweet_id):
     )
     conn.commit()
     
+    # Close connection before API call to prevent database locks
+    conn.close()
+    
     # Try posting again
     success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+    
+    # Reopen connection for database update
+    conn = get_db()
     
     if success:
         conn.execute('''
@@ -481,31 +499,81 @@ def retry_failed_tweet(tweet_id):
 @tweets_bp.route('/api/v1/tweets/retry-failed', methods=['POST'])
 @require_api_key
 def retry_all_failed_tweets():
-    """Retry all failed tweets"""
+    """Retry failed tweets with batching and rate limiting"""
+    import time
+    
+    data = request.get_json() or {}
+    max_tweets = data.get('max_tweets', 10)  # Limit to prevent timeout
+    delay_between_tweets = data.get('delay_between_tweets', 2)  # Rate limiting
+    account_id = data.get('account_id')  # Optional: filter by account
+    
     conn = get_db()
     
-    # Get all failed tweets
-    failed_tweets = conn.execute('''
+    # Build query to get failed tweets
+    query = '''
         SELECT t.*, a.username 
         FROM tweet t
         JOIN twitter_account a ON t.twitter_account_id = a.id
         WHERE t.status = 'failed'
-        ORDER BY t.created_at ASC
-    ''').fetchall()
+        AND a.status = 'active'
+    '''
+    params = []
+    
+    if account_id:
+        query += ' AND t.twitter_account_id = ?'
+        params.append(account_id)
+    
+    query += ' ORDER BY t.created_at ASC LIMIT ?'
+    params.append(max_tweets)
+    
+    failed_tweets = conn.execute(query, params).fetchall()
+    
+    if not failed_tweets:
+        conn.close()
+        return jsonify({
+            'message': 'No failed tweets found to retry',
+            'summary': {
+                'total_attempted': 0,
+                'posted': 0,
+                'still_failed': 0,
+                'skipped_inactive_accounts': 0
+            }
+        })
     
     results = {
         'posted': [],
-        'still_failed': []
+        'still_failed': [],
+        'skipped_rate_limit': []
     }
     
-    for tweet in failed_tweets:
-        # Reset to pending and try posting
+    for i, tweet in enumerate(failed_tweets):
+        # Check rate limit for this account
+        from app.utils.rate_limit import get_rate_limit_status
+        rate_status = get_rate_limit_status(tweet['twitter_account_id'])
+        
+        if rate_status['tweets_posted'] >= rate_status['limit']:
+            results['skipped_rate_limit'].append({
+                'tweet_id': tweet['id'],
+                'account': tweet['username'],
+                'reason': f"Rate limit exceeded ({rate_status['tweets_posted']}/{rate_status['limit']})"
+            })
+            continue
+        
+        # Reset to pending and commit immediately to avoid locks
         conn.execute(
             'UPDATE tweet SET status = "pending" WHERE id = ?',
             (tweet['id'],)
         )
+        conn.commit()
         
+        # Close connection before making API call to prevent database locks
+        conn.close()
+        
+        # Make API call with fresh connection
         success, result = post_to_twitter(tweet['twitter_account_id'], tweet['content'])
+        
+        # Reopen connection for database updates
+        conn = get_db()
         
         if success:
             conn.execute('''
@@ -532,17 +600,31 @@ def retry_all_failed_tweets():
                 'account': tweet['username'],
                 'error': result
             })
+        
+        conn.commit()
+        
+        # Add delay between tweets to respect rate limits
+        if delay_between_tweets > 0 and i < len(failed_tweets) - 1:
+            time.sleep(delay_between_tweets)
     
-    conn.commit()
-    conn.close()
+    # Final connection cleanup (conn is already managed per iteration)
+    if 'conn' in locals() and conn:
+        conn.close()
     
     return jsonify({
+        'message': f'Processed {len(failed_tweets)} failed tweets',
         'summary': {
             'total_attempted': len(failed_tweets),
             'posted': len(results['posted']),
-            'still_failed': len(results['still_failed'])
+            'still_failed': len(results['still_failed']),
+            'skipped_rate_limit': len(results['skipped_rate_limit'])
         },
-        'details': results
+        'details': results,
+        'config': {
+            'max_tweets': max_tweets,
+            'delay_between_tweets': delay_between_tweets,
+            'account_filter': account_id
+        }
     })
 
 @tweets_bp.route('/api/v1/tweets/reset-failed', methods=['POST'])
