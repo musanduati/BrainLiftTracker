@@ -42,11 +42,11 @@
         },
         {
           "name": "WORKFLOWY_ENABLE_PARALLEL_PROCESSING",
-          "value": "false"
+          "value": "true"
         },
         {
           "name": "WORKFLOWY_BATCH_SIZE",
-          "value": "10"
+          "value": "15"
         },
         {
           "name": "WORKFLOWY_DELAY_BETWEEN_BATCHES",
