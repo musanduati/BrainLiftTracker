@@ -58,7 +58,6 @@ structured_logger.info_operation("ecs_workflowy_processor", "🔐 Loading secret
 api_secrets = load_api_secrets()
 
 from workflowy.lambda_handler import process_and_post_v2
-from workflowy.core.parallel_processor import process_projects_in_batches
 
 class ECSWorkflowyProcessor:
     def __init__(self):

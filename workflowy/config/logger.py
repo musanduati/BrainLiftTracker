@@ -2,15 +2,14 @@ import logging
 import json
 import os
 import sys
-import contextvars  # ✅ ADD THIS IMPORT
+import contextvars
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional
 
 
 class LogContext:
     """Task-local context for correlation tracking (supports asyncio)"""
     
-    # ✅ REPLACE threading.local() with contextvars (task-local for asyncio)
     _request_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('request_id', default=None)
     _project_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('project_id', default=None)
     _project_name: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('project_name', default=None)
