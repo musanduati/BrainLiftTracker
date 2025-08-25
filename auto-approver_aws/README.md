@@ -7,12 +7,14 @@ This is an **AWS-based Twitter automation system** that processes Twitter follow
 ### Key Features
 
 - **🤖 Automated Follow Request Approval**: Processes pending Twitter follow requests automatically
-- **☁️ AWS Cloud-Native**: Runs on ECS Fargate with no server management required
+- **☁️ AWS Cloud-Native**: Runs on ECS Fargate with no server management required  
 - **📅 Daily Scheduling**: Automatically executes daily at 9 AM UTC via EventBridge
-- **🔄 Sequential Processing**: Processes accounts one by one (no parallelism to prevent from getting locked out from Twitter side of things)
+- **🔄 Sequential Processing**: Processes accounts one by one (no parallelism to prevent Twitter lockouts)
 - **💾 Result Storage**: Saves detailed results and metrics to S3
 - **📊 Monitoring**: CloudWatch logging and monitoring
 - **🧪 Test Mode**: Separate test environment with single account processing
+- **🏷️ Environment Isolation**: Test and production images are completely isolated
+- **🔐 Secure Secrets Management**: Uses AWS Secrets Manager with template-based configuration
 - **💰 Cost-Effective**: Costs are incurred only when it runs
 
 ---
@@ -28,10 +30,11 @@ EventBridge (daily trigger) → ECS Fargate Task → Sequential Account Processi
 ### AWS Resources Used
 
 - **ECS Fargate**: Serverless container execution
-- **ECR**: Docker image repository
+- **ECR**: Docker image repository  
 - **EventBridge**: Daily scheduling
 - **CloudWatch**: Logging and monitoring
 - **S3**: Results storage
+- **Secrets Manager**: Secure credential storage
 - **IAM**: Security roles and policies
 - **VPC**: Networking (default VPC)
 
@@ -56,21 +59,38 @@ cd auto-approver_aws/
 
 This creates all AWS resources needed for the automation.
 
-### 2. Build and Deploy
+### 2. Generate Task Definitions
 
 ```bash
-# Build and push Docker image
-./build_push_docker_img.sh
+# Generate task definition files from templates
+./aws_complete_setup.sh --generate-tasks
 ```
 
-### 3. Test the System
+### 3. Build and Deploy
+
+```bash
+# Build and push test Docker image (default, safe)
+./build_push_twitter_automation_img.sh test
+
+# Or build production image (when ready)
+./build_push_twitter_automation_img.sh prod
+```
+
+### 4. Register Task Definitions
+
+```bash
+# Register both test and production task definitions
+./register-task-definitions.sh
+```
+
+### 5. Test the System
 
 ```bash
 # Run a test with single account
 ./aws_complete_setup.sh --test
 ```
 
-### 4. Verify Setup
+### 6. Verify Setup
 
 ```bash
 # Check all AWS resources
@@ -79,17 +99,55 @@ This creates all AWS resources needed for the automation.
 
 ---
 
+## Improved Practices
+
+### Environment-Specific Image Management
+
+The system now uses **environment-specific tagging** for better isolation:
+
+- **Test Environment**: `test-latest`, `test-YYYYMMDD-HHMMSS`
+- **Production Environment**: `prod-latest`, `prod-YYYYMMDD-HHMMSS`
+
+```bash
+# Examples
+./build_push_twitter_automation_img.sh test     # Safe default
+./build_push_twitter_automation_img.sh prod     # Production deployment
+```
+
+### Template-Based Task Definitions
+
+Task definitions use **templates with placeholders** to avoid hardcoding sensitive information:
+
+- `ecs-task-definition-twitter-test.template.json` → `ecs-task-definition-twitter-test.json`
+- `ecs-task-definition-twitter-production.template.json` → `ecs-task-definition-twitter-production.json`
+
+**Security**: Generated files are in `.gitignore` and never committed to version control.
+
+### Centralized Secrets Management
+
+All credentials are managed through **AWS Secrets Manager**:
+
+- **Secret Name**: `brainlift-tracker` (shared with workflowy system)
+- **Environment Variable**: `BRAINLIFT_TRACKER`
+- **Auto-loaded**: Credentials automatically available as environment variables
+
+---
+
 ## File Structure
 
 ```
 auto-approver_aws/
-├── aws_complete_setup.sh          # 🎯 Main setup and management script
-├── build_push_docker_img.sh       # 🐳 Docker build and push script
-├── aws_wrapper.py                 # 🐍 AWS integration wrapper
-├── dockerfile                     # 🐳 Container definition
-├── requirements_aws.txt           # 📦 Python dependencies
-├── .env.aws                       # 🔧 Environment variables (auto-generated)
-└── ecs-task-definition-*.json     # 📋 ECS task definitions (auto-generated)
+├── aws_complete_setup.sh                          # 🎯 Main setup and management script
+├── build_push_twitter_automation_img.sh           # 🐳 Environment-aware Docker build script
+├── register-task-definitions.sh                   # 📋 Task definition registration
+├── aws_wrapper.py                                 # 🐍 AWS integration wrapper with secrets loading
+├── dockerfile                                     # 🐳 Container definition
+├── requirements_aws.txt                           # 📦 Python dependencies
+├── .env.aws                                       # 🔧 Environment variables (auto-generated)
+├── ecs-task-definition-twitter-test.template.json      # 📋 Test task template
+├── ecs-task-definition-twitter-production.template.json # 📋 Production task template
+├── ecs-task-definition-twitter-test.json               # 📋 Generated test task (git-ignored)
+└── ecs-task-definition-twitter-production.json         # 📋 Generated production task (git-ignored)
 ```
 
 ---
@@ -100,7 +158,7 @@ auto-approver_aws/
 
 The system reads accounts from CSV files in `../auto-approver/`:
 
-- **Production**: `academics_accounts.csv`, `superbuilders_accounts.csv`
+- **Production**: `accounts_academics.csv`, `accounts_superbuilders.csv`, `accounts_finops.csv`, `accounts_klair.csv`
 - **Testing**: `accounts_test.csv`
 
 **CSV Format:**
@@ -112,7 +170,7 @@ username,password,email,max_approvals,delay_seconds
 ### Test vs Production Mode
 
 - **Test Mode**: `TEST_MODE=true` → Uses `accounts_test.csv` (1-2 accounts)
-- **Production Mode**: `TEST_MODE=false` → Uses all production CSV files (currently 169 accounts)
+- **Production Mode**: `TEST_MODE=false` → Uses all production CSV files
 
 ---
 
@@ -123,6 +181,18 @@ username,password,email,max_approvals,delay_seconds
 The system **runs automatically** every day at **9:00 AM UTC**. No manual intervention required.
 
 ### Manual Operations
+
+#### Build and Deploy New Version
+```bash
+# Test version (safe default)
+./build_push_twitter_automation_img.sh test
+./register-task-definitions.sh
+./aws_complete_setup.sh --test
+
+# Production version (after testing)
+./build_push_twitter_automation_img.sh prod
+./register-task-definitions.sh
+```
 
 #### Run Test Task
 ```bash
@@ -155,9 +225,16 @@ aws logs get-log-events \
 ```bash
 # 1. Update CSV files in ../auto-approver/
 # 2. Rebuild Docker image
-./build_push_docker_img.sh
+./build_push_twitter_automation_img.sh test
 # 3. Test changes
 ./aws_complete_setup.sh --test
+```
+
+#### Regenerate Task Definitions
+```bash
+# After infrastructure changes
+./aws_complete_setup.sh --generate-tasks
+./register-task-definitions.sh
 ```
 
 ---
@@ -172,11 +249,16 @@ Results are saved to: `s3://twitter-automation-results/results/YYYY/MM/DD/`
 {
   "batch_id": "fargate-20241208-090000",
   "timestamp": "2024-12-08T09:00:00Z",
+  "execution_environment": "AWS_ECS_FARGATE_PRODUCTION",
   "summary": {
     "total_accounts": 169,
     "successful_accounts": 165,
     "total_approvals": 1247,
-    "success_rate": 97.6
+    "success_rate": 97.6,
+    "by_source_file": {
+      "accounts_academics.csv": {"accounts": 131, "successful": 128, "approvals": 982},
+      "accounts_superbuilders.csv": {"accounts": 38, "successful": 37, "approvals": 265}
+    }
   }
 }
 ```
@@ -185,6 +267,44 @@ Results are saved to: `s3://twitter-automation-results/results/YYYY/MM/DD/`
 - **CloudWatch**: `/ecs/twitter-automation`
 - **Retention**: 7 days
 - **Streams**: `ecs-production/*` and `ecs-test/*`
+
+---
+
+## Secrets Management
+
+### Required Secrets in `brainlift-tracker`
+
+The system expects these keys in the AWS Secrets Manager secret:
+
+```json
+{
+  "GMAIL_USERNAME": "brainlift.monitor@trilogy.com",
+  "GMAIL_APP_PASSWORD": "your-gmail-app-password",
+  "API_BASE": "http://98.86.153.32/api/v1",
+  "API_KEY": "your-api-key"
+}
+```
+
+### Update Secrets
+
+```bash
+# View current secrets
+aws secretsmanager get-secret-value \
+    --secret-id brainlift-tracker \
+    --region us-east-1 \
+    --query SecretString --output text
+
+# Update secrets
+aws secretsmanager update-secret \
+    --secret-id brainlift-tracker \
+    --region us-east-1 \
+    --secret-string '{
+        "GMAIL_USERNAME": "brainlift.monitor@trilogy.com",
+        "GMAIL_APP_PASSWORD": "your-new-password",
+        "API_BASE": "http://98.86.153.32/api/v1",
+        "API_KEY": "your-api-key"
+    }'
+```
 
 ---
 
@@ -197,12 +317,14 @@ Results are saved to: `s3://twitter-automation-results/results/YYYY/MM/DD/`
 | **ECS Fargate** | 2 vCPU, 4GB × 2hrs/day × 30 days | **$12.10** |
 | **S3 Storage** | ~1GB results/logs | **$0.23** |
 | **CloudWatch** | Log storage + dashboard | **$2.00** |
+| **Secrets Manager** | 1 secret | **$0.40** |
 | **Data Transfer** | Minimal | **$1.00** |
 | **ECR** | Docker image storage | **$0.50** |
-| **Total** |  | **~$15.83/month** |
+| **Total** |  | **~$16.23/month** |
 
 ### Cost Optimization
 - **No idle costs**: Only pay when tasks are running
+- **Environment isolation**: Test and prod images stored separately
 - **Automatic scaling**: Resources allocated only during execution
 - **Log retention**: 7 days to control storage costs
 
@@ -211,18 +333,19 @@ Results are saved to: `s3://twitter-automation-results/results/YYYY/MM/DD/`
 ## Security
 
 ### IAM Roles
-- **ECS Task Execution Role**: Container management
+- **ECS Task Execution Role**: Container management + Secrets Manager access
 - **ECS Task Role**: S3 access for results
 - **EventBridge Role**: Task scheduling
+
+### Secrets Management
+- **Centralized**: All credentials in AWS Secrets Manager
+- **Auto-loaded**: Secrets automatically injected as environment variables
+- **Shared**: Uses same `brainlift-tracker` secret as workflowy system
 
 ### Network Security
 - **VPC**: Runs in default VPC
 - **Security Groups**: Outbound HTTPS/HTTP only
 - **No inbound access**: Containers are not accessible from internet
-
-### Credential Management
-- **No hardcoded credentials**: Uses IAM roles
-- **Account credentials**: Stored in CSV files (should be encrypted at rest)
 
 ---
 
@@ -234,10 +357,31 @@ Results are saved to: `s3://twitter-automation-results/results/YYYY/MM/DD/`
 ```bash
 # Clear Docker cache and rebuild
 docker system prune -f
-./build_push_docker_img.sh
+./build_push_twitter_automation_img.sh test
 ```
 
-#### 2. Task Fails to Start
+#### 2. Task Definition Generation Fails
+```bash
+# Check template files exist
+ls -la ecs-task-definition-twitter-*.template.json
+
+# Regenerate with proper setup
+./aws_complete_setup.sh --generate-tasks
+```
+
+#### 3. Secrets Not Loading
+```bash
+# Check secret exists and has required keys
+aws secretsmanager get-secret-value \
+    --secret-id brainlift-tracker \
+    --region us-east-1
+
+# Verify IAM permissions
+aws iam list-attached-role-policies \
+    --role-name ecsTaskExecutionRole-twitter
+```
+
+#### 4. Task Fails to Start
 ```bash
 # Check task definition
 aws ecs describe-task-definition --task-definition twitter-automation-test
@@ -246,36 +390,29 @@ aws ecs describe-task-definition --task-definition twitter-automation-test
 aws ecs describe-tasks --cluster twitter-automation --include TAGS
 ```
 
-#### 3. No Follow Requests Approved
-- Check if accounts are in allowed usernames list
-- Verify account credentials are correct
-- Check CloudWatch logs for authentication errors
-
-#### 4. ChromeDriver Issues
-The Docker image includes a fixed ChromeDriver version. If Chrome updates:
-```bash
-# Update dockerfile with new ChromeDriver version
-# Rebuild image
-./build_push_docker_img.sh
-```
+#### 5. Gmail Credentials Not Working
+- Verify Gmail App Password is correct (not regular password)
+- Check that GMAIL_USERNAME and GMAIL_APP_PASSWORD are in brainlift-tracker secret
+- Ensure secrets are being loaded in container logs
 
 ### Debug Commands
 
-#### Check Task Status
+#### Check Image Tags
 ```bash
-# List recent tasks
-aws ecs list-tasks --cluster twitter-automation
-
-# Get task details
-aws ecs describe-tasks --cluster twitter-automation --tasks TASK_ARN
+# List all images in ECR
+aws ecr describe-images \
+    --repository-name twitter-automation \
+    --region us-east-1 \
+    --query 'imageDetails[*].imageTags' \
+    --output table
 ```
 
 #### Manual Task Execution
 ```bash
-# Run production task manually
+# Run test task manually
 aws ecs run-task \
     --cluster twitter-automation \
-    --task-definition twitter-automation-production \
+    --task-definition twitter-automation-test \
     --launch-type FARGATE \
     --network-configuration "awsvpcConfiguration={subnets=[subnet-xxx],securityGroups=[sg-xxx],assignPublicIp=ENABLED}"
 ```
@@ -287,15 +424,17 @@ aws ecs run-task \
 ### Adding New Features
 1. Modify `aws_wrapper.py` or automation scripts
 2. Update `dockerfile` if needed
-3. Rebuild image: `./build_push_docker_img.sh`
+3. Build test image: `./build_push_twitter_automation_img.sh test`
 4. Test: `./aws_complete_setup.sh --test`
+5. Build prod image: `./build_push_twitter_automation_img.sh prod`
 
 ### Environment Variables
 ```bash
-# Key environment variables (set in task definition)
+# Key environment variables (set in task definition templates)
 TEST_MODE=true|false          # Toggle test vs production
 S3_BUCKET_NAME=bucket-name    # Results storage
 AWS_DEFAULT_REGION=us-east-1  # AWS region
+ENVIRONMENT=test|prod         # Current environment
 ```
 
 ---
@@ -304,9 +443,10 @@ AWS_DEFAULT_REGION=us-east-1  # AWS region
 
 ### AWS Console Links
 - **ECS Cluster**: https://console.aws.amazon.com/ecs/home?region=us-east-1#/clusters/twitter-automation
-- **CloudWatch Logs**: https://479395885256-ig44dkdu.us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/$252Fecs$252Ftwitter-automation
-- **EventBridge Rules**: https://479395885256-ig44dkdu.us-east-1.console.aws.amazon.com/events/home?region=us-east-1#/eventbus/default/rules/twitter-automation-daily
+- **CloudWatch Logs**: https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logsV2:log-groups/log-group/$252Fecs$252Ftwitter-automation
+- **EventBridge Rules**: https://console.aws.amazon.com/events/home?region=us-east-1#/eventbus/default/rules/twitter-automation-daily
 - **S3 Bucket**: https://console.aws.amazon.com/s3/buckets/twitter-automation-results
+- **Secrets Manager**: https://console.aws.amazon.com/secretsmanager/home?region=us-east-1#!/secret?name=brainlift-tracker
 
 ### Emergency Procedures
 
@@ -318,29 +458,52 @@ aws events disable-rule --name twitter-automation-daily --region us-east-1
 
 #### Restart Automation
 ```bash
-# Re-enable EventBridge rule
+# Re-enable EventBridge rule  
 aws events enable-rule --name twitter-automation-daily --region us-east-1
 ```
 
-#### Complete Cleanup
+#### Rollback to Previous Image
 ```bash
-# WARNING: This removes all AWS resources
-# Use aws_complete_setup.sh --setup to recreate
-aws ecs delete-cluster --cluster twitter-automation
-aws events delete-rule --name twitter-automation-daily --region us-east-1
-aws s3 rb s3://twitter-automation-results --force
+# List available tags
+aws ecr describe-images --repository-name twitter-automation --region us-east-1
+
+# Update task definition to use specific tag
+# Edit generated task definition and re-register
 ```
 
 ---
 
-**🎯 System Status**: Ready for daily production use
+## What's New
+
+### ✅ Aligned with Workflowy-ECS Practices
+
+- **Environment-specific image tagging**: Test and production isolation
+- **Template-based task definitions**: No more hardcoded secrets in git
+- **Centralized secrets management**: Uses shared `brainlift-tracker` secret
+- **Safety defaults**: Always defaults to test environment
+- **Better validation**: Comprehensive checks for required files and variables
+
+### 🔄 Migration from Old System
+
+If upgrading from the old system:
+
+1. **Remove old files**: Delete any hardcoded task definition JSON files
+2. **Regenerate**: Run `./aws_complete_setup.sh --generate-tasks`
+3. **Rebuild images**: Use `./build_push_twitter_automation_img.sh test`
+4. **Update secrets**: Ensure `brainlift-tracker` has all required keys
+
+---
+
+**🎯 System Status**: Ready for daily production use with improved practices
 
 **📅 Next Run**: Every day at 9:00 AM UTC
 
-**📊 Accounts**: 169 total (131 academics + 38 superbuilders)
+**📊 Accounts**: 169+ total across multiple CSV files
 
 **⏱️ Duration**: ~2 hours per run
 
 **💰 Cost**: ~$16/month
 
-This comprehensive README.md provides everything needed to understand, deploy, operate, and maintain the AWS Twitter automation system.
+**🔒 Security**: AWS Secrets Manager + IAM roles
+
+This comprehensive README.md provides everything needed to understand, deploy, operate, and maintain the improved AWS Twitter automation system.
