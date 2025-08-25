@@ -1,0 +1,11 @@
+username,password,email,max_approvals,delay_seconds
+dash_comps_bl,Kl41rM0n1t0r!,brainlift.monitor+dashboard.components@trilogy.com,50,3
+fin_data_llm_bl,Kl41rM0n1t0r!,brainlift.monitor+finance.mcp@trilogy.com,50,3
+var_analysis_bl,Kl41rM0n1t0r!,brainlift.monitor+variance.analysis@trilogy.com,50,3
+financetrace_bl,Kl41rM0n1t0r!,brainlift.monitor+financial.traceability@trilogy.com,50,3
+llm_fin_mem_bl,Kl41rM0n1t0r!,brainlift.monitor+financial.memorynudging@trilogy.com,50,3
+ambientai1_bl,Kl41rM0n1t0r!,brainlift.monitor+finance.ambientai@trilogy.com,50,3
+budgeting_bl,Kl41rM0n1t0r!,brainlift.monitor+finance.budgeting@trilogy.com,50,3
+rampmonitor_bl,Kl41rM0n1t0r!,brainlift.monitor+ramp.transactions@trilogy.com,50,3
+numericaldta_bl,Kl41rM0n1t0r!,brainlift.monitor+ai.insightsdata@trilogy.com,50,3
+eliminatespr_bl,Kl41rM0n1t0r!,brainlift.monitor+aisolutions.nospreadsheets@trilogy.com,50,3
