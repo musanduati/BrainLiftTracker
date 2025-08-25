@@ -48,7 +48,7 @@ class TwitterSeleniumAutomation:
         self.email = os.getenv('TWITTER_EMAIL')  # Sometimes required for verification
         
         # API Configuration for saving followers
-        self.api_base_url = os.getenv('API_BASE_URL', 'http://localhost:5555')
+        self.api_base_url = os.getenv('API_BASE', 'http://localhost:5555')
         self.api_key = os.getenv('API_KEY')
         
         # Gmail Configuration for automated 2FA code retrieval
