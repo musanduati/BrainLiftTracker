@@ -2,66 +2,70 @@ import logging
 import json
 import os
 import sys
-import threading
+import contextvars
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional
 
 
 class LogContext:
-    """Thread-local context for correlation tracking"""
-    _local = threading.local()
+    """Task-local context for correlation tracking (supports asyncio)"""
+    
+    _request_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('request_id', default=None)
+    _project_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('project_id', default=None)
+    _project_name: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('project_name', default=None)
+    _operation: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar('operation', default=None)
     
     @classmethod
     def set_request_id(cls, request_id: str):
-        """Set correlation ID for current request"""
-        cls._local.request_id = request_id
+        """Set correlation ID for current asyncio task"""
+        cls._request_id.set(request_id)
     
     @classmethod
     def get_request_id(cls) -> Optional[str]:
-        """Get current correlation ID"""
-        return getattr(cls._local, 'request_id', None)
+        """Get current correlation ID for this asyncio task"""
+        return cls._request_id.get()
     
     @classmethod
     def set_project_id(cls, project_id: str):
-        """Set project ID for current operation"""
-        cls._local.project_id = project_id
+        """Set project ID for current asyncio task"""
+        cls._project_id.set(project_id)
     
     @classmethod
     def get_project_id(cls) -> Optional[str]:
-        """Get current project ID"""
-        return getattr(cls._local, 'project_id', None)
+        """Get current project ID for this asyncio task"""
+        return cls._project_id.get()
     
     @classmethod
     def set_project_name(cls, project_name: str):
-        """Set project name for current operation"""
-        cls._local.project_name = project_name
+        """Set project name for current asyncio task"""
+        cls._project_name.set(project_name)
     
     @classmethod
     def get_project_name(cls) -> Optional[str]:
-        """Get current project name"""
-        return getattr(cls._local, 'project_name', None)
+        """Get current project name for this asyncio task"""
+        return cls._project_name.get()
     
     @classmethod
     def set_operation(cls, operation: str):
-        """Set current operation type"""
-        cls._local.operation = operation
+        """Set current operation type for this asyncio task"""
+        cls._operation.set(operation)
     
     @classmethod
     def get_operation(cls) -> Optional[str]:
-        """Get current operation type"""
-        return getattr(cls._local, 'operation', None)
+        """Get current operation type for this asyncio task"""
+        return cls._operation.get()
     
     @classmethod
     def set_project_context(cls, project_id: str, project_name: str):
-        """Set both project ID and name"""
+        """Set both project ID and name for current asyncio task"""
         cls.set_project_id(project_id)
         cls.set_project_name(project_name)
     
     @classmethod
     def clear_project_context(cls):
-        """Clear project context"""
-        cls._local.project_id = None
-        cls._local.project_name = None
+        """Clear project context for current asyncio task"""
+        cls._project_id.set(None)
+        cls._project_name.set(None)
 
 
 class JSONFormatter(logging.Formatter):

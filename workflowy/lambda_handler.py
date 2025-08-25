@@ -12,6 +12,7 @@ from workflowy.core.tweet_poster import TweetPosterV2
 from workflowy.storage.aws_storage import AWSStorageV2
 from workflowy.core.bulk_processor import is_bulk_url_request_v2, handle_bulk_url_processing_v2
 from workflowy.config.logger import logger, structured_logger, LogContext
+from workflowy.core.parallel_processor import process_projects_in_batches
 
 
 def lambda_handler(event, context):
@@ -89,22 +90,42 @@ async def process_and_post_v2(environment: str = 'test'):
             'posting_results': []
         }
     
-    # Step 2: Process Workflowy content for all projects
-    structured_logger.info_operation("process_and_post_v2", "📊 STEP 2: Processing Workflowy content...")
-    processing_results = []
+    # Step 2: Process Workflowy content (OPTIMIZED or ORIGINAL based on config)
+    enable_parallel = os.getenv('WORKFLOWY_ENABLE_PARALLEL_PROCESSING', 'false').lower() == 'true'
     
-    async with WorkflowyTesterV2(environment) as tester:
-        for i, project in enumerate(projects, 1):
-            project_id = project['project_id']
-            project_name = project['name']
-            
-            # Set project context for this processing
-            LogContext.set_project_context(project_id, project_name)
-            structured_logger.info_operation("process_and_post_v2", f"🔄 PROCESSING PROJECT {i}/{len(projects)}: {project_name} ({project_id})",
-                                           project_index=i, total_projects=len(projects), project_name=project_name, project_id=project_id)
-            
-            result = await tester.process_single_project(project_id)
-            processing_results.append(result)
+    if enable_parallel:
+        structured_logger.info_operation("process_and_post_v2", "📊 STEP 2: Processing Workflowy content (PARALLEL MODE)...")
+        batch_size = int(os.getenv('WORKFLOWY_BATCH_SIZE', '10'))
+        delay_between_batches = float(os.getenv('WORKFLOWY_DELAY_BETWEEN_BATCHES', '1.0'))
+        
+        structured_logger.info_operation("process_and_post_v2", f"🔧 Parallel config: batch_size={batch_size}, delay={delay_between_batches}s")
+        
+        processing_results = await process_projects_in_batches(
+            projects, environment, batch_size, delay_between_batches
+        )
+    else:
+        structured_logger.info_operation("process_and_post_v2", "📊 STEP 2: Processing Workflowy content (SEQUENTIAL MODE)...")
+        # Keep original sequential processing as fallback
+        processing_results = []
+        
+        async with WorkflowyTesterV2(environment) as tester:
+            for i, project in enumerate(projects, 1):
+                project_id = project['project_id']
+                project_name = project['name']
+                
+                try:
+                    # Set project context for this processing
+                    LogContext.set_project_context(project_id, project_name)
+                    structured_logger.info_operation("process_and_post_v2", f"🔄 PROCESSING PROJECT {i}/{len(projects)}: {project_name} ({project_id})",
+                                                   project_index=i, total_projects=len(projects), project_name=project_name, project_id=project_id)
+                    
+                    result = await tester.process_single_project(project_id)
+                    processing_results.append(result)
+                    
+                finally:
+                    # Clear context after each project (consistent with parallel mode)
+                    LogContext.set_project_id(None)
+                    LogContext.set_project_name(None)
     
     # Clear project context
     LogContext.set_project_id(None)
@@ -119,7 +140,7 @@ async def process_and_post_v2(environment: str = 'test'):
     for result in processing_results:
         if result['status'] == 'success' and result.get('total_change_tweets', 0) > 0:
             projects_with_content.append(result['project_id'])
-    
+
     structured_logger.info_operation("process_and_post_v2", f"Number of projects with Tweet content: {len(projects_with_content)}", 
                                    projects_with_content_count=len(projects_with_content))
     structured_logger.info_operation("process_and_post_v2", f"Projects with content: {projects_with_content}", 

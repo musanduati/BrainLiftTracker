@@ -9,7 +9,7 @@
   "containerDefinitions": [
     {
       "name": "workflowy-processor",
-      "image": "{{ACCOUNT_ID}}.dkr.ecr.us-east-1.amazonaws.com/workflowy-processor:latest",
+      "image": "{{ACCOUNT_ID}}.dkr.ecr.us-east-1.amazonaws.com/workflowy-processor:prod-latest",
       "essential": true,
       "environment": [
         {
@@ -39,6 +39,18 @@
         {
           "name": "SKIP_MIGRATION_TWEETS",
           "value": "false"
+        },
+        {
+          "name": "WORKFLOWY_ENABLE_PARALLEL_PROCESSING",
+          "value": "true"
+        },
+        {
+          "name": "WORKFLOWY_BATCH_SIZE",
+          "value": "15"
+        },
+        {
+          "name": "WORKFLOWY_DELAY_BETWEEN_BATCHES",
+          "value": "1.0"
         }
       ],
       "secrets": [
