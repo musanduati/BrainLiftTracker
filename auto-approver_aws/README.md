@@ -8,7 +8,7 @@ This is an **AWS-based Twitter automation system** that processes Twitter follow
 
 - **🤖 Automated Follow Request Approval**: Processes pending Twitter follow requests automatically
 - **☁️ AWS Cloud-Native**: Runs on ECS Fargate with no server management required  
-- **📅 Daily Scheduling**: Automatically executes daily at 9 AM UTC via EventBridge
+- **📅 Daily Scheduling**: Automatically executes thrice a day via EventBridge
 - **🔄 Sequential Processing**: Processes accounts one by one (no parallelism to prevent Twitter lockouts)
 - **💾 Result Storage**: Saves detailed results and metrics to S3
 - **📊 Monitoring**: CloudWatch logging and monitoring
@@ -103,7 +103,7 @@ This creates all AWS resources needed for the automation.
 
 ### Environment-Specific Image Management
 
-The system now uses **environment-specific tagging** for better isolation:
+The system uses **environment-specific tagging** for better isolation:
 
 - **Test Environment**: `test-latest`, `test-YYYYMMDD-HHMMSS`
 - **Production Environment**: `prod-latest`, `prod-YYYYMMDD-HHMMSS`
@@ -178,7 +178,7 @@ username,password,email,max_approvals,delay_seconds
 
 ### Daily Operation
 
-The system **runs automatically** every day at **9:00 AM UTC**. No manual intervention required.
+The system **runs automatically** thrice a day 00:00 AM, 08:00 AM, and 04:00 PM UTC. No manual intervention required.
 
 ### Manual Operations
 
@@ -280,30 +280,9 @@ The system expects these keys in the AWS Secrets Manager secret:
 {
   "GMAIL_USERNAME": "brainlift.monitor@trilogy.com",
   "GMAIL_APP_PASSWORD": "your-gmail-app-password",
-  "API_BASE": "http://98.86.153.32/api/v1",
+  "API_BASE": "http://IP_ADDRESS/api/v1",
   "API_KEY": "your-api-key"
 }
-```
-
-### Update Secrets
-
-```bash
-# View current secrets
-aws secretsmanager get-secret-value \
-    --secret-id brainlift-tracker \
-    --region us-east-1 \
-    --query SecretString --output text
-
-# Update secrets
-aws secretsmanager update-secret \
-    --secret-id brainlift-tracker \
-    --region us-east-1 \
-    --secret-string '{
-        "GMAIL_USERNAME": "brainlift.monitor@trilogy.com",
-        "GMAIL_APP_PASSWORD": "your-new-password",
-        "API_BASE": "http://98.86.153.32/api/v1",
-        "API_KEY": "your-api-key"
-    }'
 ```
 
 ---
@@ -473,30 +452,9 @@ aws ecr describe-images --repository-name twitter-automation --region us-east-1
 
 ---
 
-## What's New
-
-### ✅ Aligned with Workflowy-ECS Practices
-
-- **Environment-specific image tagging**: Test and production isolation
-- **Template-based task definitions**: No more hardcoded secrets in git
-- **Centralized secrets management**: Uses shared `brainlift-tracker` secret
-- **Safety defaults**: Always defaults to test environment
-- **Better validation**: Comprehensive checks for required files and variables
-
-### 🔄 Migration from Old System
-
-If upgrading from the old system:
-
-1. **Remove old files**: Delete any hardcoded task definition JSON files
-2. **Regenerate**: Run `./aws_complete_setup.sh --generate-tasks`
-3. **Rebuild images**: Use `./build_push_twitter_automation_img.sh test`
-4. **Update secrets**: Ensure `brainlift-tracker` has all required keys
-
----
-
 **🎯 System Status**: Ready for daily production use with improved practices
 
-**📅 Next Run**: Every day at 9:00 AM UTC
+**📅 Next Run**:  Thrice a day
 
 **📊 Accounts**: 169+ total across multiple CSV files
 
