@@ -140,11 +140,6 @@ async def process_and_post_v2(environment: str = 'test'):
     for result in processing_results:
         if result['status'] == 'success' and result.get('total_change_tweets', 0) > 0:
             projects_with_content.append(result['project_id'])
-    
-    # TODO: REMOVE
-    structured_logger.info_operation("process_and_post_v2", "TEMPORARY: No projects with content")
-    projects_with_content = []
-    structured_logger.info_operation("process_and_post_v2", "TEMPORARY: No projects with content")
 
     structured_logger.info_operation("process_and_post_v2", f"Number of projects with Tweet content: {len(projects_with_content)}", 
                                    projects_with_content_count=len(projects_with_content))
