@@ -166,3 +166,6 @@ ecs-task-definition-workflowy-production.json
 ecs-task-definition-workflowy-test.json
 ecs-task-definition-twitter-test.json
 ecs-task-definition-twitter-production.json
+
+# Account CSV files (now stored in S3)
+auto-approver/*.csv

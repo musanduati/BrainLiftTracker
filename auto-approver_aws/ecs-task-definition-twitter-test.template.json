@@ -17,6 +17,10 @@
             "value": "twitter-automation-results"
           },
           {
+            "name": "S3_ACCOUNTS_PREFIX",
+            "value": "accounts/staging/"
+          },
+          {
             "name": "AWS_DEFAULT_REGION",
             "value": "us-east-1"
           },
