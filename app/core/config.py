@@ -26,12 +26,24 @@ class Config:
     TWITTER_CLIENT_SECRET = os.environ.get('TWITTER_CLIENT_SECRET')
     TWITTER_CALLBACK_URL = os.environ.get('TWITTER_CALLBACK_URL', 'http://localhost:5555/auth/callback')
     
+    # OAuth 1.0a configuration (for profile updates)
+    TWITTER_API_KEY = os.environ.get('TWITTER_API_KEY')
+    TWITTER_API_SECRET = os.environ.get('TWITTER_API_SECRET') 
+    TWITTER_OAUTH1_CALLBACK_URL = os.environ.get('TWITTER_OAUTH1_CALLBACK_URL', 'http://localhost:5555/auth/oauth1/callback')
+    
     if not TWITTER_CLIENT_ID or not TWITTER_CLIENT_SECRET:
-        print("WARNING: Twitter API credentials not found in environment.")
+        print("WARNING: Twitter OAuth 2.0 credentials not found in environment.")
         print("Please set TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET in .env file.")
     
+    if not TWITTER_API_KEY or not TWITTER_API_SECRET:
+        print("WARNING: Twitter OAuth 1.0a credentials not found in environment.")
+        print("Profile update features will not work. Set TWITTER_API_KEY and TWITTER_API_SECRET in .env file.")
+    
     if 'localhost' in TWITTER_CALLBACK_URL and os.environ.get('FLASK_ENV') == 'production':
-        print("WARNING: Using localhost callback URL in production environment!")
+        print("WARNING: Using localhost OAuth 2.0 callback URL in production environment!")
+        
+    if 'localhost' in TWITTER_OAUTH1_CALLBACK_URL and os.environ.get('FLASK_ENV') == 'production':
+        print("WARNING: Using localhost OAuth 1.0a callback URL in production environment!")
     
     # Mock mode configuration
     MOCK_TWITTER_POSTING = False

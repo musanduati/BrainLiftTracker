@@ -8,7 +8,7 @@ import requests
 
 from app.db.database import get_db
 from app.utils.security import require_api_key, decrypt_token
-from app.services.twitter import refresh_twitter_token, check_token_needs_refresh
+from app.services.twitter import refresh_twitter_token, check_token_needs_refresh, update_twitter_profile_name_oauth1
 
 accounts_bp = Blueprint('accounts', __name__)
 
@@ -1380,7 +1380,19 @@ def get_all_account_names():
 @accounts_bp.route('/api/v1/accounts/bulk-update-names', methods=['POST'])
 @require_api_key
 def bulk_update_account_names():
-    """Bulk update display names for multiple Twitter accounts - requires OAuth 1.0a credentials"""
+    """Bulk update display names for multiple Twitter accounts using OAuth 1.0a app-level authentication
+    
+    This endpoint uses OAuth 1.0a app credentials to update profile names.
+    It does NOT interfere with existing OAuth 2.0 user tokens.
+    
+    Expected request format:
+    {
+        "updates": [
+            {"account_id": 1, "name": "New Display Name 1"},
+            {"account_id": 2, "name": "New Display Name 2"}
+        ]
+    }
+    """
     
     # Check if OAuth 1.0a credentials are available in environment
     import os
@@ -1405,11 +1417,201 @@ def bulk_update_account_names():
             ]
         }), 501  # 501 Not Implemented
     
-    return jsonify({
-        'error': 'Feature temporarily disabled',
-        'message': 'OAuth 1.0a implementation is in progress. This endpoint will be available once hybrid authentication is implemented.',
-        'status': 'coming_soon'
-    }), 501
+    # Parse request data
+    data = request.get_json()
+    if not data or 'updates' not in data:
+        return jsonify({
+            'error': 'Invalid request format',
+            'message': 'Request must contain "updates" array',
+            'expected_format': {
+                'updates': [
+                    {'account_id': 1, 'name': 'New Display Name 1'},
+                    {'account_id': 2, 'name': 'New Display Name 2'}
+                ]
+            }
+        }), 400
+    
+    updates = data['updates']
+    if not isinstance(updates, list) or len(updates) == 0:
+        return jsonify({
+            'error': 'Invalid updates format',
+            'message': 'updates must be a non-empty array'
+        }), 400
+    
+    # Validate all updates first
+    validation_errors = []
+    for i, update in enumerate(updates):
+        if not isinstance(update, dict):
+            validation_errors.append(f"Update {i}: Must be an object")
+            continue
+        
+        if 'account_id' not in update:
+            validation_errors.append(f"Update {i}: Missing account_id")
+        elif not isinstance(update['account_id'], int):
+            validation_errors.append(f"Update {i}: account_id must be an integer")
+        
+        if 'name' not in update:
+            validation_errors.append(f"Update {i}: Missing name")
+        elif not isinstance(update['name'], str):
+            validation_errors.append(f"Update {i}: name must be a string")
+        elif len(update['name'].strip()) == 0:
+            validation_errors.append(f"Update {i}: name cannot be empty")
+        elif len(update['name']) > 50:
+            validation_errors.append(f"Update {i}: name cannot exceed 50 characters")
+    
+    if validation_errors:
+        return jsonify({
+            'error': 'Validation failed',
+            'validation_errors': validation_errors
+        }), 400
+    
+    # Check for duplicate names
+    names = [update['name'].strip() for update in updates]
+    if len(names) != len(set(names)):
+        return jsonify({
+            'error': 'Duplicate names detected',
+            'message': 'All display names must be unique'
+        }), 400
+    
+    # Process updates
+    conn = get_db()
+    results = {
+        'updated': [],
+        'failed': [],
+        'skipped': []
+    }
+    
+    try:
+        for update in updates:
+            account_id = update['account_id']
+            new_name = update['name'].strip()
+            
+            # Get account information (but don't touch OAuth 2.0 tokens)
+            account = conn.execute(
+                'SELECT id, username, display_name, status FROM twitter_account WHERE id = ?',
+                (account_id,)
+            ).fetchone()
+            
+            if not account:
+                results['failed'].append({
+                    'account_id': account_id,
+                    'error': 'Account not found',
+                    'name': new_name
+                })
+                continue
+            
+            # Skip if account is not active
+            if account['status'] != 'active':
+                results['skipped'].append({
+                    'account_id': account_id,
+                    'username': account['username'],
+                    'reason': f'Account status is {account["status"]}, not active',
+                    'name': new_name
+                })
+                continue
+            
+            # Skip if name is already the same
+            if account['display_name'] == new_name:
+                results['skipped'].append({
+                    'account_id': account_id,
+                    'username': account['username'],
+                    'reason': 'Display name is already set to this value',
+                    'name': new_name
+                })
+                continue
+            
+            # Check if account has OAuth 1.0a tokens for Twitter profile updates
+            has_oauth1_tokens = bool(conn.execute(
+                'SELECT oauth1_access_token FROM twitter_account WHERE id = ? AND oauth1_access_token IS NOT NULL',
+                (account_id,)
+            ).fetchone())
+            
+            # Attempt to update profile name using OAuth 1.0a
+            success, message = update_twitter_profile_name_oauth1(
+                username=account['username'],
+                new_name=new_name,
+                account_id=account_id
+            )
+            
+            if success:
+                # Update the database with the new display name
+                conn.execute(
+                    'UPDATE twitter_account SET display_name = ?, updated_at = ? WHERE id = ?',
+                    (new_name, datetime.now(UTC).isoformat(), account_id)
+                )
+                
+                # Determine if this was a full Twitter update or database-only
+                twitter_updated = has_oauth1_tokens and "Twitter profile updated successfully" in message
+                
+                results['updated'].append({
+                    'account_id': account_id,
+                    'username': account['username'],
+                    'old_name': account['display_name'],
+                    'new_name': new_name,
+                    'message': message,
+                    'twitter_profile_updated': twitter_updated,
+                    'database_updated': True,
+                    'has_oauth1_tokens': has_oauth1_tokens
+                })
+            else:
+                results['failed'].append({
+                    'account_id': account_id,
+                    'username': account['username'],
+                    'error': message,
+                    'name': new_name,
+                    'has_oauth1_tokens': has_oauth1_tokens
+                })
+        
+        # Commit database changes
+        conn.commit()
+        
+    except Exception as e:
+        conn.rollback()
+        return jsonify({
+            'error': 'Database error during bulk update',
+            'message': str(e)
+        }), 500
+    finally:
+        conn.close()
+    
+    # Prepare response
+    total_updated = len(results['updated'])
+    total_failed = len(results['failed'])
+    total_skipped = len(results['skipped'])
+    total_processed = len(updates)
+    
+    # Count OAuth 1.0a status for summary
+    twitter_profile_updates = len([r for r in results['updated'] if r.get('twitter_profile_updated', False)])
+    database_only_updates = total_updated - twitter_profile_updates
+    accounts_without_oauth1 = len([r for r in results['updated'] + results['failed'] if not r.get('has_oauth1_tokens', False)])
+    
+    response = {
+        'message': f'Bulk update completed: {total_updated} updated, {total_failed} failed, {total_skipped} skipped',
+        'summary': {
+            'total_processed': total_processed,
+            'updated': total_updated,
+            'failed': total_failed,
+            'skipped': total_skipped,
+            'twitter_profile_updates': twitter_profile_updates,
+            'database_only_updates': database_only_updates,
+            'accounts_without_oauth1_tokens': accounts_without_oauth1
+        },
+        'results': results,
+        'oauth1_info': {
+            'accounts_with_profile_update_capability': total_processed - accounts_without_oauth1,
+            'accounts_needing_oauth1_authorization': accounts_without_oauth1,
+            'enable_profile_updates_endpoint': '/api/v1/accounts/{account_id}/enable-profile-updates'
+        },
+        'timestamp': datetime.now(UTC).isoformat()
+    }
+    
+    # Return appropriate status code
+    if total_failed == 0:
+        return jsonify(response), 200
+    elif total_updated > 0:
+        return jsonify(response), 207  # Multi-Status (partial success)
+    else:
+        return jsonify(response), 400  # All failed
 
 @accounts_bp.route('/api/v1/accounts/<int:account_id>/followers/<int:follower_id>', methods=['DELETE'])
 @require_api_key

@@ -230,6 +230,317 @@
 			]
 		},
 		{
+			"name": "OAuth 1.0a Profile Updates",
+			"item": [
+				{
+					"name": "Check OAuth 1.0a System Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/oauth1/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oauth1",
+								"status"
+							]
+						},
+						"description": "Check if OAuth 1.0a system is configured and ready for profile updates"
+					},
+					"response": [
+						{
+							"name": "OAuth 1.0a Ready",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/oauth1/status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"oauth1",
+										"status"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"oauth1_available\": true,\n  \"api_key_configured\": true,\n  \"api_secret_configured\": true,\n  \"callback_url\": \"http://localhost:5555/auth/oauth1/callback\",\n  \"message\": \"OAuth 1.0a system is ready for profile update authorizations\"\n}"
+						},
+						{
+							"name": "OAuth 1.0a Not Configured",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/oauth1/status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"oauth1",
+										"status"
+									]
+								}
+							},
+							"status": "Not Implemented",
+							"code": 501,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"oauth1_available\": false,\n  \"error\": \"OAuth 1.0a credentials not configured. Set TWITTER_API_KEY and TWITTER_API_SECRET environment variables.\",\n  \"required_env_vars\": [\"TWITTER_API_KEY\", \"TWITTER_API_SECRET\", \"TWITTER_OAUTH1_CALLBACK_URL (optional)\"]\n}"
+						}
+					]
+				},
+				{
+					"name": "Enable Profile Updates for Account",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.environment.set(\"oauth1_auth_url\", response.authorization_url);",
+									"    pm.environment.set(\"oauth1_state\", response.state);",
+									"    console.log(\"OAuth 1.0a Authorization URL: \" + response.authorization_url);",
+									"    console.log(\"State saved: \" + response.state);",
+									"    console.log(\"Visit the URL above in your browser to authorize profile updates\");",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/enable-profile-updates",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"enable-profile-updates"
+							]
+						},
+						"description": "Generate OAuth 1.0a authorization URL for an existing account to enable profile update capabilities. Does not interfere with existing OAuth 2.0 tokens."
+					},
+					"response": [
+						{
+							"name": "Authorization URL Generated",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/123/enable-profile-updates",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"123",
+										"enable-profile-updates"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"message\": \"OAuth 1.0a authorization URL generated\",\n  \"account_id\": 123,\n  \"authorization_url\": \"https://api.twitter.com/oauth/authorize?oauth_token=abc123&state=xyz789\",\n  \"state\": \"xyz789\",\n  \"instructions\": [\n    \"1. Visit the authorization_url in a browser\",\n    \"2. Authorize the application for profile updates\",\n    \"3. You will be redirected back automatically\",\n    \"4. Profile update capability will be enabled for this account\"\n  ],\n  \"note\": \"This does not affect your existing OAuth 2.0 tokens or functionality\"\n}"
+						},
+						{
+							"name": "Account Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/999/enable-profile-updates",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"999",
+										"enable-profile-updates"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"error\": \"Failed to generate OAuth 1.0a authorization URL\",\n  \"details\": \"Account not found\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Check Profile Update Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/profile-update-status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"profile-update-status"
+							]
+						},
+						"description": "Check if an account has OAuth 1.0a tokens for profile updates"
+					},
+					"response": [
+						{
+							"name": "Profile Updates Enabled",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/123/profile-update-status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"123",
+										"profile-update-status"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"account_id\": 123,\n  \"username\": \"example_user\",\n  \"has_oauth1_tokens\": true,\n  \"profile_updates_enabled\": true,\n  \"oauth1_authorized_at\": \"2024-01-15T10:30:00Z\"\n}"
+						},
+						{
+							"name": "Profile Updates Not Enabled",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/456/profile-update-status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"456",
+										"profile-update-status"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"account_id\": 456,\n  \"username\": \"another_user\",\n  \"has_oauth1_tokens\": false,\n  \"profile_updates_enabled\": false\n}"
+						}
+					]
+				}
+			]
+		},
+		{
 			"name": "Thread Management",
 			"item": [
 				{

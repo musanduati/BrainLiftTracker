@@ -128,6 +128,30 @@ def init_database():
             ON follower(account_id)
         ''')
         
+        # Create OAuth 1.0a request tokens table (separate from OAuth 2.0)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS oauth1_request_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                state TEXT UNIQUE NOT NULL,
+                account_id INTEGER NOT NULL,
+                oauth_token TEXT NOT NULL,
+                oauth_token_secret TEXT NOT NULL,
+                created_at DATETIME NOT NULL,
+                FOREIGN KEY (account_id) REFERENCES twitter_account(id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Create indexes for OAuth 1.0a table
+        conn.execute('''
+            CREATE INDEX IF NOT EXISTS idx_oauth1_tokens_state 
+            ON oauth1_request_tokens(state)
+        ''')
+        
+        conn.execute('''
+            CREATE INDEX IF NOT EXISTS idx_oauth1_tokens_account 
+            ON oauth1_request_tokens(account_id)
+        ''')
+        
         # Migrate existing tables - add columns if they don't exist
         _migrate_database(conn)
         
@@ -168,6 +192,10 @@ def _migrate_database(conn):
         ('twitter_list', 'is_managed BOOLEAN DEFAULT 1'),
         ('tweet', 'dok_type VARCHAR(10)'),
         ('tweet', 'change_type VARCHAR(10)'),
+        # OAuth 1.0a tokens for profile updates (separate from OAuth 2.0)
+        ('twitter_account', 'oauth1_access_token TEXT'),
+        ('twitter_account', 'oauth1_access_token_secret TEXT'),
+        ('twitter_account', 'oauth1_authorized_at DATETIME'),
     ]
     
     for table, column_def in migrations:

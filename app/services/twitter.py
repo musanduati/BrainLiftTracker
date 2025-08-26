@@ -2,6 +2,7 @@ import requests
 import base64
 import secrets
 import time
+import os
 from datetime import datetime, timedelta, timezone
 try:
     from datetime import UTC
@@ -13,6 +14,13 @@ from app.db.database import get_db
 from app.utils.security import decrypt_token, encrypt_token, fernet
 from app.utils.rate_limit import check_rate_limit, rate_limit_tracker
 from app.utils.mock_mode import is_mock_mode
+
+# Import OAuth 1.0a for profile updates
+try:
+    from requests_oauthlib import OAuth1
+    OAUTH1_AVAILABLE = True
+except ImportError:
+    OAUTH1_AVAILABLE = False
 
 def check_token_needs_refresh(token_expires_at):
     """Check if a token needs refresh (within 15 minutes of expiry)"""
@@ -424,5 +432,145 @@ def post_to_twitter(account_id, tweet_text, reply_to_tweet_id=None, retry_after_
     except Exception as e:
         conn.close()
         error_msg = f"Exception during posting: {str(e)}"
+        print(error_msg)
+        return False, error_msg
+
+
+def update_twitter_profile_name_oauth1(username, new_name, account_id=None):
+    """Update Twitter profile name using OAuth 1.0a user tokens
+    
+    This function updates Twitter profile names using user-specific OAuth 1.0a tokens.
+    If the account doesn't have OAuth 1.0a tokens, it will only update the database.
+    
+    Args:
+        username: Twitter username (for identification)
+        new_name: New display name to set
+        account_id: Optional account ID (for logging/tracking only)
+    
+    Returns:
+        tuple: (success, result_message)
+    """
+    if not OAUTH1_AVAILABLE:
+        return False, "requests-oauthlib not installed. Please install: pip install requests-oauthlib"
+    
+    # Get OAuth 1.0a app credentials from environment
+    api_key = os.environ.get('TWITTER_API_KEY')
+    api_secret = os.environ.get('TWITTER_API_SECRET')
+    
+    if not api_key or not api_secret:
+        return False, "OAuth 1.0a app credentials not configured. Set TWITTER_API_KEY and TWITTER_API_SECRET environment variables."
+    
+    # Validate inputs
+    if not username or not new_name:
+        return False, "Username and new_name are required"
+    
+    if len(new_name) > 50:
+        return False, "Display name cannot exceed 50 characters"
+    
+    try:
+        # Check if mock mode
+        if is_mock_mode():
+            print(f"Mock mode: Would update @{username} display name to '{new_name}'")
+            return True, f"Mock update successful for @{username}"
+        
+        # Get user's OAuth 1.0a tokens from database
+        conn = get_db()
+        try:
+            account = conn.execute('''
+                SELECT id, username, oauth1_access_token, oauth1_access_token_secret 
+                FROM twitter_account 
+                WHERE username = ?
+            ''', (username.replace('@', ''),)).fetchone()
+            
+            if not account:
+                return False, f"Account @{username} not found in database"
+            
+            # Check if account has OAuth 1.0a tokens
+            if not account['oauth1_access_token'] or not account['oauth1_access_token_secret']:
+                print(f"⚠️  @{username} does not have OAuth 1.0a tokens for profile updates")
+                print(f"   Action: Database-only update (Twitter profile NOT updated)")
+                print(f"   Solution: Use /api/v1/accounts/{account['id']}/enable-profile-updates to authorize OAuth 1.0a")
+                return True, f"Database record updated (Twitter profile NOT updated - no OAuth 1.0a tokens)"
+            
+            # Decrypt OAuth 1.0a tokens
+            oauth1_access_token = decrypt_token(account['oauth1_access_token'])
+            oauth1_access_token_secret = decrypt_token(account['oauth1_access_token_secret'])
+            
+            print(f"🔄 Updating Twitter profile for @{username} using OAuth 1.0a user tokens")
+            
+            # Create OAuth 1.0a session with user tokens
+            from requests_oauthlib import OAuth1Session
+            oauth = OAuth1Session(
+                client_key=api_key,
+                client_secret=api_secret,
+                resource_owner_key=oauth1_access_token,
+                resource_owner_secret=oauth1_access_token_secret
+            )
+            
+            # X API v1.1 endpoint for profile updates
+            url = 'https://api.twitter.com/1.1/account/update_profile.json'
+            
+            # Prepare data - only updating the name field
+            data = {
+                'name': new_name
+            }
+            
+            # Make the API request
+            response = oauth.post(url, data=data)
+            
+            print(f"Twitter API response: Status {response.status_code}")
+            
+            # Handle response
+            if response.status_code == 200:
+                try:
+                    user_data = response.json()
+                    updated_name = user_data.get('name', new_name)
+                    print(f"✅ Successfully updated @{username} Twitter profile name to '{updated_name}'")
+                    return True, f"Twitter profile updated successfully to '{updated_name}'"
+                except:
+                    # Response not JSON, but 200 status indicates success
+                    print(f"✅ Profile update successful (200 response) for @{username}")
+                    return True, f"Twitter profile updated successfully"
+                    
+            elif response.status_code == 401:
+                error_msg = "OAuth 1.0a authentication failed. Tokens may be expired or invalid."
+                print(f"❌ Profile update failed for @{username}: {error_msg}")
+                return False, error_msg
+                
+            elif response.status_code == 403:
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get('errors', [{}])[0].get('message', 'Profile update forbidden')
+                except:
+                    error_msg = "Profile update forbidden - account may be suspended or restricted"
+                print(f"❌ Profile update failed for @{username}: {error_msg}")
+                return False, error_msg
+                
+            elif response.status_code == 404:
+                error_msg = f"User @{username} not found"
+                print(f"❌ Profile update failed: {error_msg}")
+                return False, error_msg
+                
+            elif response.status_code == 429:
+                error_msg = "Rate limit exceeded for profile updates. Please wait and try again."
+                print(f"⏱️ Profile update rate limited for @{username}")
+                return False, error_msg
+                
+            else:
+                # Other error status codes
+                try:
+                    error_data = response.json()
+                    error_msg = str(error_data.get('errors', error_data))
+                except:
+                    error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                
+                print(f"❌ Profile update failed for @{username}: Status {response.status_code}, Error: {error_msg}")
+                return False, f"Twitter API error ({response.status_code}): {error_msg}"
+                
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        error_msg = f"Exception during profile update for @{username}: {str(e)}"
         print(error_msg)
         return False, error_msg

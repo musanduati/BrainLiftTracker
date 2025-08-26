@@ -146,6 +146,8 @@ update_postman_collection.py
 # Analysis and documentation files (generated)
 PRODUCTION_IMPACT_ANALYSIS.md
 PRODUCTION_DEPLOYMENT_GUIDE.md
+BULK_NAME_UPDATES_GUIDE.md
+LOCAL_TESTING_GUIDE.md
 
 # Markdown files
 markdowns/
