@@ -109,7 +109,7 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
         """Discover all CSV files in the configured S3 location"""
         try:
             # Get S3 prefix from environment variable
-            s3_prefix = os.environ.get('S3_ACCOUNTS_PREFIX', 'accounts/production/')
+            s3_prefix = os.environ.get('S3_ACCOUNTS_PREFIX', 'accounts/staging/')
             
             print(f"🔍 Discovering CSV files in s3://{self.bucket_name}/{s3_prefix}")
             
@@ -258,9 +258,6 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
                     csv_files = test_files  # Process ALL test files
                     test_file_names = [Path(f).name for f in csv_files]
                     print(f"🧪 RUNNING IN TEST MODE - Processing {len(csv_files)} test files: {', '.join(test_file_names)}")
-                else:
-                    print("🧪 TEST MODE: No test files found, using first available file")
-                    csv_files = csv_files[:1]
             else:
                 # Production mode: exclude test files
                 csv_files = [f for f in csv_files if 'test' not in Path(f).name.lower()]
@@ -318,7 +315,7 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
 
     def load_accounts(self):
         """Override parent method to load from S3"""
-        self.accounts = self.load_accounts_from_s3()  # Changed from load_accounts_from_csv_files()
+        self.accounts = self.load_accounts_from_s3()
         if not self.accounts:
             raise ValueError("No accounts found in S3 CSV files")
         return self.accounts
