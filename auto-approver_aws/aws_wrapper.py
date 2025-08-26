@@ -105,44 +105,103 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
             if cleaned > 0:
                 print(f"🧹 Cleaned up {cleaned} expired sessions at startup")
     
-    def load_accounts_from_csv_files(self):
-        """Load accounts from CSV files (test or production)"""
-        all_accounts = []
+    def discover_csv_files_in_s3(self):
+        """Discover all CSV files in the configured S3 location"""
+        try:
+            # Get S3 prefix from environment variable
+            s3_prefix = os.environ.get('S3_ACCOUNTS_PREFIX', 'accounts/production/')
+            
+            print(f"🔍 Discovering CSV files in s3://{self.bucket_name}/{s3_prefix}")
+            
+            # List objects in the S3 prefix
+            response = self.s3.list_objects_v2(
+                Bucket=self.bucket_name,
+                Prefix=s3_prefix
+            )
+            
+            csv_files = []
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    key = obj['Key']
+                    # Only include .csv files and exclude directories
+                    if key.endswith('.csv') and not key.endswith('/'):
+                        csv_files.append(key)
+                        print(f"   Found: {key}")
+            
+            print(f"✅ Discovered {len(csv_files)} CSV files in S3")
+            return csv_files
+            
+        except Exception as e:
+            print(f"❌ Error discovering CSV files in S3: {e}")
+            return []
+
+    def download_and_validate_csv_from_s3(self, s3_key):
+        """Download CSV from S3, validate headers/required fields, return temp file path"""
+        import tempfile
         
-        # Check if we're in test mode
-        test_mode = os.environ.get('TEST_MODE', 'false').lower() == 'true'
-        
-        print(f"🔍 TEST_MODE environment variable: {os.environ.get('TEST_MODE', 'not set')}")
-        print(f"🔍 Detected test_mode: {test_mode}")
-        
-        if test_mode:
-            # Test mode: use only the test file
-            csv_files = [
-                '/app/auto-approver/accounts_test.csv'
-            ]
-            print("🧪 RUNNING IN TEST MODE - Processing 1 test account")
-        else:
-            # Production mode: Use all Production files
-            csv_files = [
-                '/app/auto-approver/accounts_academics.csv',
-                '/app/auto-approver/accounts_superbuilders.csv',
-                '/app/auto-approver/accounts_finops.csv',
-                '/app/auto-approver/accounts_klair.csv'
-            ]
-            print("🚀 RUNNING IN PRODUCTION MODE - Processing all accounts")
-        
-        for csv_file in csv_files:
-            if os.path.exists(csv_file):
-                print(f"Loading accounts from {csv_file}...")
-                accounts = self._load_single_csv(csv_file)
-                all_accounts.extend(accounts)
-                print(f"Loaded {len(accounts)} accounts from {Path(csv_file).name}")
+        try:
+            # Create temporary file
+            temp_file = tempfile.NamedTemporaryFile(mode='w+', suffix='.csv', delete=False)
+            temp_file_path = temp_file.name
+            temp_file.close()
+            
+            # Download from S3
+            print(f"📥 Downloading {s3_key}...")
+            self.s3.download_file(self.bucket_name, s3_key, temp_file_path)
+            
+            # Validate CSV structure
+            if self.validate_csv_structure(temp_file_path):
+                print(f"✅ {Path(s3_key).name} downloaded and validated")
+                return temp_file_path
             else:
-                print(f"Warning: CSV file not found: {csv_file}")
+                # Clean up invalid file
+                os.unlink(temp_file_path)
+                print(f"❌ {Path(s3_key).name} failed validation")
+                return None
+                
+        except Exception as e:
+            print(f"❌ Error downloading {s3_key}: {e}")
+            # Clean up on error
+            try:
+                if 'temp_file_path' in locals():
+                    os.unlink(temp_file_path)
+            except:
+                pass
+            return None
+
+    def validate_csv_structure(self, csv_file_path):
+        """Validate CSV headers and required fields"""
+        required_headers = ['username', 'password', 'email', 'max_approvals', 'delay_seconds']
         
-        print(f"Total accounts loaded: {len(all_accounts)}")
-        return all_accounts
-    
+        try:
+            with open(csv_file_path, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                headers = reader.fieldnames or []
+                
+                # Check if all required headers are present
+                missing_headers = [h for h in required_headers if h not in headers]
+                if missing_headers:
+                    print(f"❌ Missing required headers: {missing_headers}")
+                    return False
+                
+                # Check if file has at least one valid row
+                first_row = next(reader, None)
+                if not first_row:
+                    print(f"❌ CSV file is empty or has no data rows")
+                    return False
+                
+                # Check if first row has required fields
+                if not first_row.get('username', '').strip() or not first_row.get('password', '').strip():
+                    print(f"❌ First data row missing username or password")
+                    return False
+                
+                print(f"✅ CSV validation passed - Headers: {headers}")
+                return True
+                
+        except Exception as e:
+            print(f"❌ Error validating CSV structure: {e}")
+            return False
+
     def _load_single_csv(self, csv_file):
         """Load accounts from a single CSV file"""
         accounts = []
@@ -170,12 +229,98 @@ class AWSBatchWrapper(WorkingEnhancedBatchAutomation):
             print(f"Error reading {csv_file}: {e}")
             
         return accounts
-    
+
+    def load_accounts_from_s3(self):
+        """Load accounts from S3 CSV files (staging or production)"""
+        all_accounts = []
+        temp_files_to_cleanup = []
+        
+        try:
+            # Check if we're in test mode
+            test_mode = os.environ.get('TEST_MODE', 'false').lower() == 'true'
+            s3_prefix = os.environ.get('S3_ACCOUNTS_PREFIX', 'accounts/production/')
+            
+            print(f"🔍 TEST_MODE environment variable: {os.environ.get('TEST_MODE', 'not set')}")
+            print(f"🔍 Detected test_mode: {test_mode}")
+            print(f"🔍 S3_ACCOUNTS_PREFIX: {s3_prefix}")
+            
+            # Discover CSV files in S3
+            csv_files = self.discover_csv_files_in_s3()
+            
+            if not csv_files:
+                print("❌ No CSV files found in S3")
+                return []
+            
+            if test_mode:
+                # Test mode: process all test files for comprehensive testing
+                test_files = [f for f in csv_files if 'test' in Path(f).name.lower()]
+                if test_files:
+                    csv_files = test_files  # Process ALL test files
+                    test_file_names = [Path(f).name for f in csv_files]
+                    print(f"🧪 RUNNING IN TEST MODE - Processing {len(csv_files)} test files: {', '.join(test_file_names)}")
+                else:
+                    print("🧪 TEST MODE: No test files found, using first available file")
+                    csv_files = csv_files[:1]
+            else:
+                # Production mode: exclude test files
+                csv_files = [f for f in csv_files if 'test' not in Path(f).name.lower()]
+                print(f"🚀 RUNNING IN PRODUCTION MODE - Processing {len(csv_files)} files")
+            
+            # Process each CSV file
+            for s3_key in csv_files:
+                print(f"\n📄 Processing {Path(s3_key).name}...")
+                
+                # Download and validate
+                temp_file_path = self.download_and_validate_csv_from_s3(s3_key)
+                if not temp_file_path:
+                    print(f"⏭️ Skipping {Path(s3_key).name} due to download/validation failure")
+                    continue
+                
+                temp_files_to_cleanup.append(temp_file_path)
+                
+                # Load accounts using existing method
+                accounts = self._load_single_csv(temp_file_path)
+                if accounts:
+                    # Update source_file to show S3 origin
+                    for account in accounts:
+                        account['source_file'] = Path(s3_key).name
+                        account['s3_key'] = s3_key
+                    
+                    all_accounts.extend(accounts)
+                    print(f"✅ Loaded {len(accounts)} accounts from {Path(s3_key).name}")
+                else:
+                    print(f"⚠️ No valid accounts found in {Path(s3_key).name}")
+            
+            print(f"\n🎯 Total accounts loaded from S3: {len(all_accounts)}")
+            
+            # Summary by file
+            files_processed = {}
+            for account in all_accounts:
+                file_name = account.get('source_file', 'unknown')
+                files_processed[file_name] = files_processed.get(file_name, 0) + 1
+            
+            for file_name, count in files_processed.items():
+                print(f"   📄 {file_name}: {count} accounts")
+            
+            return all_accounts
+            
+        except Exception as e:
+            print(f"❌ Error loading accounts from S3: {e}")
+            return []
+        
+        finally:
+            # Clean up temporary files
+            for temp_file in temp_files_to_cleanup:
+                try:
+                    os.unlink(temp_file)
+                except Exception as e:
+                    print(f"⚠️ Could not clean up temp file {temp_file}: {e}")
+
     def load_accounts(self):
-        """Override parent method to load from CSV files"""
-        self.accounts = self.load_accounts_from_csv_files()
+        """Override parent method to load from S3"""
+        self.accounts = self.load_accounts_from_s3()  # Changed from load_accounts_from_csv_files()
         if not self.accounts:
-            raise ValueError("No accounts found in CSV files")
+            raise ValueError("No accounts found in S3 CSV files")
         return self.accounts
     
     def save_results_to_s3(self):
