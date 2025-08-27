@@ -6373,6 +6373,46 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "Workflowy Posting",
+			"item": [
+				{
+					"name": "Post Workflowy Content to Twitter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n  {\n    \"brainlift\": \"https://workflowy.com/s/data-driven-finance/0jf8jEE46G8IvHo5\",\n    \"account_id\": \"199\"\n  }\n]",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "https://idpyfvtw432qlxiad6lalwlojy0sqobr.lambda-url.us-east-1.on.aws",
+							"protocol": "https",
+							"host": [
+								"idpyfvtw432qlxiad6lalwlojy0sqobr",
+								"lambda-url",
+								"us-east-1",
+								"on",
+								"aws"
+							]
+						},
+						"description": "Trigger AWS Lambda to scrape Workflowy content and post to Twitter. Processes DOK content and posts tweets automatically."
+					},
+					"response": []
+				}
+			]
 		}
 	],
 	"event": [
