@@ -2628,6 +2628,96 @@
 							"body": "{\n  \"message\": \"Bulk update completed: 1 updated, 1 failed, 0 skipped\",\n  \"summary\": {\n    \"updated\": 1,\n    \"failed\": 1,\n    \"skipped\": 0\n  },\n  \"results\": {\n    \"updated\": [\n      {\n        \"account_id\": 1,\n        \"username\": \"user1\",\n        \"old_name\": \"Old Name\",\n        \"new_name\": \"Valid Name\"\n      }\n    ],\n    \"failed\": [\n      {\n        \"account_id\": 999,\n        \"error\": \"Account not found\",\n        \"username\": null\n      }\n    ],\n    \"skipped\": []\n  }\n}"
 						}
 					]
+				},
+				{
+					"name": "Update Account Workflowy URL",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"workflowy_url\": \"https://workflowy.com/s/your-document-name/share-id\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/accounts/{{account_id}}/workflowy",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"{{account_id}}",
+								"workflowy"
+							]
+						},
+						"description": "Update the Workflowy URL for a specific account. Use empty string to clear the URL."
+					},
+					"response": [
+						{
+							"name": "Successfully Updated",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"workflowy_url\": \"https://workflowy.com/s/example-doc/abc123\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/{{account_id}}/workflowy",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"{{account_id}}",
+										"workflowy"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"message\": \"Workflowy URL updated successfully\",\n  \"account_id\": 6,\n  \"workflowy_url\": \"https://workflowy.com/s/example-doc/abc123\"\n}"
+						}
+					]
 				}
 			]
 		},
