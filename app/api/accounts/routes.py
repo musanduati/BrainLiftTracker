@@ -44,7 +44,7 @@ def get_accounts():
         FROM twitter_account a
         LEFT JOIN tweet t ON a.id = t.twitter_account_id
         LEFT JOIN follower f ON a.id = f.account_id AND f.status = 'active'
-        WHERE 1=1
+        WHERE a.is_visible = 1
     '''
     
     params = []
@@ -130,7 +130,7 @@ def get_account(account_id):
             COUNT(DISTINCT CASE WHEN t.thread_id IS NOT NULL AND t.status = 'posted' THEN t.thread_id END) as posted_threads
         FROM twitter_account a
         LEFT JOIN tweet t ON a.id = t.twitter_account_id
-        WHERE a.id = ?
+        WHERE a.id = ? AND a.is_visible = 1
         GROUP BY a.id
     ''', (account_id,)).fetchone()
     
@@ -242,6 +242,7 @@ def check_token_health():
             refresh_failure_count,
             status
         FROM twitter_account
+        WHERE is_visible = 1
         ORDER BY username
     ''').fetchall()
     
@@ -941,6 +942,7 @@ def refresh_all_expiring_tokens():
         FROM twitter_account
         WHERE token_expires_at IS NOT NULL
         AND refresh_failure_count < 3
+        AND is_visible = 1
     ''').fetchall()
     
     results = {'refreshed': [], 'failed': [], 'skipped': []}
@@ -1017,7 +1019,7 @@ def check_all_accounts_twitter_status():
     conn = get_db()
     
     accounts = conn.execute(
-        'SELECT id, username, access_token FROM twitter_account'
+        'SELECT id, username, access_token FROM twitter_account WHERE is_visible = 1'
     ).fetchall()
     
     results = []
@@ -1078,7 +1080,7 @@ def sync_account_profiles():
     conn = get_db()
     
     accounts = conn.execute(
-        'SELECT id, username, access_token FROM twitter_account'
+        'SELECT id, username, access_token FROM twitter_account WHERE is_visible = 1'
     ).fetchall()
     
     synced = []
@@ -1653,6 +1655,143 @@ def delete_follower(account_id, follower_id):
                 'account_id': account_id,
                 'account_username': account['username']
             }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@accounts_bp.route('/api/v1/accounts/bulk-hide', methods=['POST'])
+@require_api_key
+def bulk_hide_accounts():
+    """Hide multiple accounts from UI (bulk operation)"""
+    try:
+        data = request.get_json()
+        if not data or 'account_ids' not in data:
+            return jsonify({'error': 'account_ids array is required'}), 400
+        
+        account_ids = data['account_ids']
+        if not isinstance(account_ids, list) or not account_ids:
+            return jsonify({'error': 'account_ids must be a non-empty array'}), 400
+        
+        conn = get_db()
+        
+        # Validate all account IDs exist
+        placeholders = ','.join('?' for _ in account_ids)
+        existing_accounts = conn.execute(
+            f'SELECT id, username FROM twitter_account WHERE id IN ({placeholders})',
+            account_ids
+        ).fetchall()
+        
+        existing_ids = [acc['id'] for acc in existing_accounts]
+        failed_ids = [id for id in account_ids if id not in existing_ids]
+        
+        if existing_ids:
+            # Update visibility to false (hidden)
+            placeholders = ','.join('?' for _ in existing_ids)
+            conn.execute(
+                f'UPDATE twitter_account SET is_visible = 0 WHERE id IN ({placeholders})',
+                existing_ids
+            )
+            conn.commit()
+        
+        conn.close()
+        
+        return jsonify({
+            'message': f'Successfully hid {len(existing_ids)} accounts from UI',
+            'updated_accounts': existing_ids,
+            'failed_accounts': failed_ids,
+            'total_updated': len(existing_ids),
+            'accounts_details': [{'id': acc['id'], 'username': acc['username']} for acc in existing_accounts]
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@accounts_bp.route('/api/v1/accounts/bulk-show', methods=['POST'])
+@require_api_key
+def bulk_show_accounts():
+    """Show multiple accounts in UI (bulk operation)"""
+    try:
+        data = request.get_json()
+        if not data or 'account_ids' not in data:
+            return jsonify({'error': 'account_ids array is required'}), 400
+        
+        account_ids = data['account_ids']
+        if not isinstance(account_ids, list) or not account_ids:
+            return jsonify({'error': 'account_ids must be a non-empty array'}), 400
+        
+        conn = get_db()
+        
+        # Validate all account IDs exist
+        placeholders = ','.join('?' for _ in account_ids)
+        existing_accounts = conn.execute(
+            f'SELECT id, username FROM twitter_account WHERE id IN ({placeholders})',
+            account_ids
+        ).fetchall()
+        
+        existing_ids = [acc['id'] for acc in existing_accounts]
+        failed_ids = [id for id in account_ids if id not in existing_ids]
+        
+        if existing_ids:
+            # Update visibility to true (visible)
+            placeholders = ','.join('?' for _ in existing_ids)
+            conn.execute(
+                f'UPDATE twitter_account SET is_visible = 1 WHERE id IN ({placeholders})',
+                existing_ids
+            )
+            conn.commit()
+        
+        conn.close()
+        
+        return jsonify({
+            'message': f'Successfully made {len(existing_ids)} accounts visible in UI',
+            'updated_accounts': existing_ids,
+            'failed_accounts': failed_ids,
+            'total_updated': len(existing_ids),
+            'accounts_details': [{'id': acc['id'], 'username': acc['username']} for acc in existing_accounts]
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@accounts_bp.route('/api/v1/accounts/visibility-status', methods=['GET'])
+@require_api_key
+def get_visibility_status():
+    """Get visibility status of all accounts"""
+    try:
+        conn = get_db()
+        
+        # Get all accounts with their visibility status
+        accounts = conn.execute('''
+            SELECT id, username, display_name, is_visible
+            FROM twitter_account
+            ORDER BY username
+        ''').fetchall()
+        
+        conn.close()
+        
+        visible_accounts = []
+        hidden_accounts = []
+        
+        for account in accounts:
+            account_data = {
+                'id': account['id'],
+                'username': account['username'],
+                'display_name': account['display_name'],
+                'is_visible': bool(account['is_visible'])
+            }
+            
+            if account['is_visible']:
+                visible_accounts.append(account_data)
+            else:
+                hidden_accounts.append(account_data)
+        
+        return jsonify({
+            'visible_accounts': visible_accounts,
+            'hidden_accounts': hidden_accounts,
+            'total_visible': len(visible_accounts),
+            'total_hidden': len(hidden_accounts),
+            'total_accounts': len(accounts)
         })
         
     except Exception as e:

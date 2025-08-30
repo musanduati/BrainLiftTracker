@@ -196,6 +196,8 @@ def _migrate_database(conn):
         ('twitter_account', 'oauth1_access_token TEXT'),
         ('twitter_account', 'oauth1_access_token_secret TEXT'),
         ('twitter_account', 'oauth1_authorized_at DATETIME'),
+        # Account visibility for UI filtering
+        ('twitter_account', 'is_visible BOOLEAN DEFAULT 1'),
     ]
     
     for table, column_def in migrations:

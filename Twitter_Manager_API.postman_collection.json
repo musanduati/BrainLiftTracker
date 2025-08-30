@@ -2718,6 +2718,242 @@
 							"body": "{\n  \"message\": \"Workflowy URL updated successfully\",\n  \"account_id\": 6,\n  \"workflowy_url\": \"https://workflowy.com/s/example-doc/abc123\"\n}"
 						}
 					]
+				},
+				{
+					"name": "Bulk Hide Accounts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"account_ids\": [1, 2, 3, 4, 5]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/accounts/bulk-hide",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"bulk-hide"
+							]
+						},
+						"description": "Hide multiple accounts from UI display (bulk operation). Accounts remain functional but are excluded from listings and analytics."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"account_ids\": [1, 2, 3]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/bulk-hide",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"bulk-hide"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Successfully hid 3 accounts from UI\",\n    \"updated_accounts\": [1, 2, 3],\n    \"failed_accounts\": [],\n    \"total_updated\": 3,\n    \"accounts_details\": [\n        {\"id\": 1, \"username\": \"user1\"},\n        {\"id\": 2, \"username\": \"user2\"},\n        {\"id\": 3, \"username\": \"user3\"}\n    ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Bulk Show Accounts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"account_ids\": [1, 2, 3, 4, 5]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/accounts/bulk-show",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"bulk-show"
+							]
+						},
+						"description": "Make multiple accounts visible in UI display (bulk operation). Reverses the hide operation."
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"account_ids\": [1, 2, 3]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/accounts/bulk-show",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"bulk-show"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"message\": \"Successfully made 3 accounts visible in UI\",\n    \"updated_accounts\": [1, 2, 3],\n    \"failed_accounts\": [],\n    \"total_updated\": 3,\n    \"accounts_details\": [\n        {\"id\": 1, \"username\": \"user1\"},\n        {\"id\": 2, \"username\": \"user2\"},\n        {\"id\": 3, \"username\": \"user3\"}\n    ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Account Visibility Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/accounts/visibility-status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"accounts",
+								"visibility-status"
+							]
+						},
+						"description": "Get visibility status of all accounts - shows which accounts are visible/hidden in the UI"
+					},
+					"response": [
+						{
+							"name": "Success",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "X-API-Key",
+										"value": "{{api_key}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/accounts/visibility-status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"accounts",
+										"visibility-status"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"visible_accounts\": [\n        {\"id\": 1, \"username\": \"user1\", \"display_name\": \"User One\", \"is_visible\": true},\n        {\"id\": 2, \"username\": \"user2\", \"display_name\": \"User Two\", \"is_visible\": true}\n    ],\n    \"hidden_accounts\": [\n        {\"id\": 3, \"username\": \"user3\", \"display_name\": \"User Three\", \"is_visible\": false}\n    ],\n    \"total_visible\": 2,\n    \"total_hidden\": 1,\n    \"total_accounts\": 3\n}"
+						}
+					]
 				}
 			]
 		},

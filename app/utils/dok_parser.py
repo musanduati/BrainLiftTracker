@@ -166,6 +166,7 @@ def get_all_accounts_dok_summary(conn):
             COUNT(CASE WHEN t.dok_type = 'DOK4' AND t.change_type = 'UPDATED' THEN 1 END) as dok4_updated
         FROM twitter_account ta
         LEFT JOIN tweet t ON ta.id = t.twitter_account_id
+        WHERE ta.is_visible = 1
         GROUP BY ta.id, ta.username, ta.display_name
         HAVING total_tweets > 0
         ORDER BY dok_tweets DESC, total_tweets DESC

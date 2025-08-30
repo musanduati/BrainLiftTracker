@@ -20,8 +20,8 @@ def get_stats():
     conn = get_db()
     
     # Get account stats
-    total_accounts = conn.execute('SELECT COUNT(*) as count FROM twitter_account').fetchone()['count']
-    active_accounts = conn.execute('SELECT COUNT(*) as count FROM twitter_account WHERE status = "active"').fetchone()['count']
+    total_accounts = conn.execute('SELECT COUNT(*) as count FROM twitter_account WHERE is_visible = 1').fetchone()['count']
+    active_accounts = conn.execute('SELECT COUNT(*) as count FROM twitter_account WHERE status = "active" AND is_visible = 1').fetchone()['count']
     
     # Get tweet stats
     total_tweets = conn.execute('SELECT COUNT(*) as count FROM tweet').fetchone()['count']

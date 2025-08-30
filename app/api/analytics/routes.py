@@ -207,6 +207,7 @@ def get_dok_leaderboard():
             LEFT JOIN tweet t ON ta.id = t.twitter_account_id 
                 AND t.dok_type IS NOT NULL 
                 AND t.change_type IS NOT NULL
+            WHERE ta.is_visible = 1
             GROUP BY ta.id, ta.username, ta.display_name
             HAVING total_dok_changes > 0
             ORDER BY total_dok_changes DESC, last_change_date DESC
